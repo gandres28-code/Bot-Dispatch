@@ -10,6 +10,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
 
+// 🧠 MEMORIA TEMPORAL (IMÁGENES)
+const pendingMedia = {};
+
 // 🟢 HEALTH CHECK
 app.get("/", (req, res) => {
   res.send("Bot activo y funcionando ✅");
@@ -24,38 +27,59 @@ app.post("/webhook", async (req, res) => {
     console.log("📩 WEBHOOK RECIBIDO:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    // 🧠 EXTRAER DATOS WHAPI
     const chatId = msg?.chat_id;
     const fromMe = msg?.from_me;
 
+    const employee = msg?.from_name || "Desconocido";
+
+    // 🚫 evitar loops
+    if (fromMe) {
+      console.log("🚫 Mensaje propio ignorado");
+      return res.sendStatus(200);
+    }
+
+    // 📸 SI ES IMAGEN → GUARDAR TEMPORALMENTE
+    if (msg?.type === "image") {
+      const imageUrl =
+        msg?.image?.url ||
+        msg?.media?.url ||
+        msg?.file?.url ||
+        null;
+
+      pendingMedia[chatId] = {
+        image: imageUrl,
+        employee,
+        time: Date.now()
+      };
+
+      console.log("📸 Imagen guardada temporalmente");
+      return res.sendStatus(200);
+    }
+
+    // ✍️ MENSAJE DE TEXTO
     const message =
       msg?.text?.body ||
       msg?.text ||
       msg?.message ||
       "mensaje vacío";
 
-    // 👷 LIMPIADOR AUTOMÁTICO
-    const employee = msg?.from_name || "Desconocido";
-
     console.log("📨 MENSAJE:", message);
     console.log("👷 EMPLEADO:", employee);
 
-    // 🚫 EVITAR LOOP (mensajes del bot)
-    if (fromMe) {
-      console.log("🚫 Ignorado: mensaje propio");
-      return res.sendStatus(200);
-    }
-
-    // 🚫 EVITAR LOOP (grupo operaciones)
-    if (chatId === OPERATIONS_GROUP_ID) {
-      console.log("🚫 Ignorado: grupo operaciones");
-      return res.sendStatus(200);
-    }
-
-    // 🚫 MENSAJES VACÍOS
+    // 🚫 ignorar vacío
     if (!message || message === "mensaje vacío") {
-      console.log("🚫 Mensaje vacío ignorado");
       return res.sendStatus(200);
+    }
+
+    // 🔗 VER SI HAY IMAGEN PENDIENTE
+    const pending = pendingMedia[chatId];
+
+    let image = null;
+
+    if (pending && Date.now() - pending.time < 5 * 60 * 1000) {
+      image = pending.image;
+      delete pendingMedia[chatId];
+      console.log("🔗 Imagen combinada con mensaje");
     }
 
     // 🤖 OPENAI
@@ -67,18 +91,18 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres un sistema de housekeeping hotelero.
+Eres un sistema de housekeeping de hotel.
 
 IMPORTANTE:
-- El empleado ya viene identificado automáticamente.
-- No preguntes el nombre del empleado.
+- El empleado ya viene identificado.
+- Si hay imagen, úsala como evidencia de limpieza.
 
-Extrae del mensaje:
+Extrae:
 - Unidad
 - Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
 - Notas
 
-Devuelve un reporte claro para supervisión.
+Devuelve reporte claro para supervisión.
 `
           },
           {
@@ -86,6 +110,7 @@ Devuelve un reporte claro para supervisión.
             content: `
 Empleado: ${employee}
 Mensaje: ${message}
+Imagen: ${image ? "SI HAY EVIDENCIA VISUAL" : "NO HAY IMAGEN"}
 `
           }
         ]
@@ -100,13 +125,18 @@ Mensaje: ${message}
 
     const ai = response.data.choices[0].message.content;
 
-    // 📦 FORMATO FINAL
-    const finalMessage = `👷 ${employee}\n\n${ai}`;
+    // 📦 MENSAJE FINAL
+    const finalMessage =
+`👷 ${employee}
+
+${ai}
+
+${image ? "📸 Evidencia adjunta" : ""}`;
 
     console.log("🤖 IA RESULTADO:");
     console.log(finalMessage);
 
-    // 📲 ENVIAR A OPERACIONES
+    // 📤 ENVIAR A OPERACIONES
     await axios.post(
       "https://gate.whapi.cloud/messages/text",
       {
