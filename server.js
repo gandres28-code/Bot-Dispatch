@@ -24,15 +24,15 @@ const ALLOWED_GROUPS = [
 const pendingMedia = {};
 const processed = new Set();
 
-// 🧹 LIMPIEZA
+// 🧹 CLEANUP
 setInterval(() => {
 const now = Date.now();
 for (const key in pendingMedia) {
-if (now - pendingMedia[key].time > 1800000) {
+if (now - pendingMedia[key].time > 30 * 60 * 1000) {
 delete pendingMedia[key];
 }
 }
-}, 600000);
+}, 10 * 60 * 1000);
 
 // 🟢 HEALTH
 app.get("/", (req, res) => {
@@ -47,11 +47,8 @@ try {
 const msg = req.body?.messages?.[0];
 if (!msg) return res.sendStatus(200);
 
-// 🚨 IGNORAR ACTION
-if (msg?.type === "action") {
-console.log("⛔ action ignorado");
-return res.sendStatus(200);
-}
+// 🚨 ignorar actions
+if (msg?.type === "action") return res.sendStatus(200);
 
 const chatId = msg?.chat_id;
 
@@ -60,14 +57,14 @@ if (msg?.from_me) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
 
-// 🔑 ANTI DUPLICADOS
-const eventId = msg?.id || (chatId + "_" + msg?.from + "_" + msg?.timestamp);
+// 🔑 anti duplicados
+const eventId = msg?.id || `${chatId}_${msg?.from}_${msg?.timestamp}`;
 if (processed.has(eventId)) return res.sendStatus(200);
 processed.add(eventId);
 
 console.log("📩 EVENTO:", msg?.type);
 
-// 📸 IMAGEN
+// 📸 IMAGE
 if (msg?.type === "image") {
 
 const image = msg?.image?.preview;
@@ -81,7 +78,7 @@ time: Date.now()
 return res.sendStatus(200);
 }
 
-// ✍️ TEXTO
+// ✍️ TEXT
 const message =
 msg?.text?.body ||
 msg?.text ||
@@ -92,22 +89,17 @@ if (!message || message.trim().length < 2) return res.sendStatus(200);
 
 console.log("📨", message);
 
-// 🔗 MATCH IMAGEN
+// 🔗 IMAGE MATCH
 const key = chatId + "_" + msg?.from;
 
 let image = null;
 
-if (
-pendingMedia[key] &&
-Date.now() - pendingMedia[key].time < 1200000
-) {
+if (pendingMedia[key] && Date.now() - pendingMedia[key].time < 20 * 60 * 1000) {
 image = pendingMedia[key].image;
 delete pendingMedia[key];
 }
 
-const hasImage = !!image;
-
-// 🕒 HORA
+// 🕒 TIME
 const time = new Date().toLocaleString("en-US", {
 timeZone: "America/Mexico_City",
 hour: "2-digit",
@@ -115,7 +107,10 @@ minute: "2-digit",
 hour12: true
 });
 
-// 🧠 IA
+// 🤖 OPENAI (solo operaciones)
+let report = "";
+
+try {
 const ai = await axios.post(
 "https://api.openai.com/v1/chat/completions",
 {
@@ -134,14 +129,11 @@ Si es operativo responde:
 Unidad:
 Estado:
 Notas:
-
-Estados válidos:
-ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA, SALIDA, MANTENIMIENTO, TERMINADA, FINALIZADA
 `
 },
 {
 role: "user",
-content: "Empleado: " + employee + "\nMensaje: " + message
+content: `Empleado: ${employee}\nMensaje: ${message}`
 }
 ]
 },
@@ -153,20 +145,24 @@ Authorization: "Bearer " + OPENAI_API_KEY,
 }
 );
 
-// 📋 REPORTE
-const report = ai.data?.choices?.[0]?.message?.content?.trim() || "";
+report = ai.data?.choices?.[0]?.message?.content?.trim() || "";
+} catch (e) {
+console.log("⚠️ OpenAI error:", e.message);
+return res.sendStatus(200);
+}
 
+// 🚫 ignore
 if (report.toUpperCase().includes("NO REPORTABLE")) {
 return res.sendStatus(200);
 }
 
 // 📦 OPERACIONES
 const finalMessage =
-"👷 " + employee +
-"\n🕒 " + time +
-"\n\n" + report;
+`👷 ${employee}
+🕒 ${time}
 
-try {
+${report}`;
+
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
 {
@@ -174,60 +170,34 @@ to: OPERATIONS_GROUP_ID,
 body: finalMessage
 },
 {
-headers: {
-Authorization: "Bearer " + WHAPI_TOKEN
-}
+headers: { Authorization: "Bearer " + WHAPI_TOKEN }
 }
 );
 
-console.log("✅ OPERACIONES enviado");
+// 🔥 INSPECTORES (FIX REAL A/B)
+const upperMsg = message.toUpperCase();
 
-} catch (err) {
-console.log("❌ OPERACIONES ERROR:", err.response?.data || err.message);
-}
+// detectar unidad tipo 235 A y B
+const unitMatch = upperMsg.match(/(\d+)\s*([AB](?:\s*Y\s*[AB])?)?/i);
 
-// 🔎 INSPECTORES (A / B FIX REAL)
-try {
+let unitNumber = unitMatch?.[1];
+let abPart = unitMatch?.[2] || "";
 
-const unitMatch = report.match(/Unidad:\s*([A-Za-z0-9\s]+)/i);
-const stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
-
-let unitRaw = unitMatch?.[1]?.toUpperCase() || "";
-let state = (stateMatch?.[1] || "").toUpperCase();
-
-// 🔥 detectar A / B desde mensaje real
-const abMatch = message.toUpperCase().match(/\b(\d+)\s*([AB](?:\s*Y\s*[AB])?)\b/);
-
-let numberPart = unitRaw.replace(/[A-Z\s]/g, "").trim();
-if (!numberPart) numberPart = unitRaw.replace(/[AB\sY]/g, "").trim();
-
-let abPart = abMatch?.[2] || "";
-
-// 🧠 construir unidad final
-let finalUnit = "";
+// normalizar A/B
+let suffix = "";
 
 if (abPart.includes("A") && abPart.includes("B")) {
-finalUnit = `${numberPart} A y B`;
+suffix = "A y B";
 } else if (abPart.includes("A")) {
-finalUnit = `${numberPart} A`;
+suffix = "A";
 } else if (abPart.includes("B")) {
-finalUnit = `${numberPart} B`;
-} else {
-finalUnit = numberPart || unitRaw;
+suffix = "B";
 }
 
-// 🔥 normalizar estado
-if (
-state.includes("LISTA") ||
-state.includes("TERMINADA") ||
-state.includes("FINALIZADA") ||
-state.includes("DONE")
-) {
-state = "LISTA";
-}
+if (unitNumber && report.toUpperCase().includes("LISTA")) {
 
-// 📤 enviar inspectores
-if (finalUnit && state === "LISTA") {
+let finalUnit = unitNumber;
+if (suffix) finalUnit += " " + suffix;
 
 const inspectionMsg = `${finalUnit} lista para inspeccionar`;
 
@@ -238,23 +208,17 @@ to: INSPECTION_GROUP_ID,
 body: inspectionMsg
 },
 {
-headers: {
-Authorization: "Bearer " + WHAPI_TOKEN
-}
+headers: { Authorization: "Bearer " + WHAPI_TOKEN }
 }
 );
 
-console.log("🔎 INSPECTORES enviado:", inspectionMsg);
-}
-
-} catch (err) {
-console.log("❌ INSPECTORES ERROR:", err.response?.data || err.message);
+console.log("🔎 INSPECTORES:", inspectionMsg);
 }
 
 res.sendStatus(200);
 
 } catch (err) {
-console.log("❌ GENERAL ERROR:", err.response?.data || err.message);
+console.log("❌ ERROR:", err.response?.data || err.message);
 res.sendStatus(200);
 }
 
@@ -262,7 +226,6 @@ res.sendStatus(200);
 
 // 🚀 START
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
 console.log("Servidor hotelero listo");
 });
