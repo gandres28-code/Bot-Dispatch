@@ -1,59 +1,210 @@
-if (image) {
+const express = require("express");
+const axios = require("axios");
 
+const app = express();
+app.use(express.json());
+
+// 🔑 ENV VARIABLES
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
+
+// 🧠 MEMORIA TEMPORAL
+const pendingMedia = {};
+
+// 🧹 LIMPIEZA AUTOMÁTICA (evita basura en memoria)
+setInterval(() => {
+  const now = Date.now();
+  for (const key in pendingMedia) {
+    if (now - pendingMedia[key].time > 30 * 60 * 1000) {
+      delete pendingMedia[key];
+    }
+  }
+}, 10 * 60 * 1000);
+
+// 🟢 HEALTH CHECK
+app.get("/", (req, res) => {
+  res.send("Bot hotelero activo ✅");
+});
+
+// 📩 WEBHOOK PRINCIPAL
+app.post("/webhook", async (req, res) => {
   try {
-    await axios.post(
-      "https://gate.whapi.cloud/messages/image",
+
+    const msg = req.body?.messages?.[0];
+    if (!msg) return res.sendStatus(200);
+
+    const chatId = msg?.chat_id;
+    const employee = msg?.from_name || "Desconocido";
+    const fromMe = msg?.from_me;
+
+    if (fromMe) return res.sendStatus(200);
+
+    const key = `${chatId}_${msg?.from}`;
+
+    console.log("📩 EVENTO:", msg?.type);
+
+    // 📸 SI ES IMAGEN
+    if (msg?.type === "image") {
+
+      const imageBase64 = msg?.image?.preview;
+
+      if (!imageBase64) {
+        console.log("⚠️ Imagen sin preview");
+        return res.sendStatus(200);
+      }
+
+      pendingMedia[key] = {
+        image: imageBase64,
+        time: Date.now()
+      };
+
+      console.log("📸 Imagen guardada:", key);
+      return res.sendStatus(200);
+    }
+
+    // ✍️ TEXTO
+    const message =
+      msg?.text?.body ||
+      msg?.text ||
+      msg?.message ||
+      "";
+
+    if (!message) return res.sendStatus(200);
+
+    console.log("📨 MENSAJE:", message);
+
+    // 🔗 MATCH IMAGEN
+    const pending = pendingMedia[key];
+
+    let image = null;
+    let hasImage = false;
+
+    if (pending && Date.now() - pending.time < 20 * 60 * 1000) {
+      image = pending.image;
+      hasImage = true;
+      delete pendingMedia[key];
+    }
+
+    // 🕒 HORA ACTUAL
+    const now = new Date();
+    const time = now.toLocaleString("en-US", {
+      timeZone: "America/Mexico_City",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    });
+
+    // 🤖 OPENAI
+    const ai = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
       {
-        to: OPERATIONS_GROUP_ID,
-        media: image,
-        caption: finalMessage
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+Eres un sistema de housekeeping hotelero.
+
+Extrae:
+- Unidad
+- Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
+- Notas
+
+NO menciones fotos ni evidencia.
+`
+          },
+          {
+            role: "user",
+            content: `
+Empleado: ${employee}
+Mensaje: ${message}
+`
+          }
+        ]
       },
       {
         headers: {
-          Authorization: `Bearer ${WHAPI_TOKEN}`
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
         }
       }
     );
 
-    console.log("📸 Imagen enviada a OPERACIONES");
+    const report = ai.data.choices[0].message.content;
+
+    // 📦 MENSAJE FINAL
+    let finalMessage = `👷 ${employee}\n🕒 ${time}\n\n${report}`;
+
+    if (hasImage) {
+      finalMessage = `👷 ${employee}\n📸 Foto recibida\n🕒 ${time}\n\n${report}`;
+    }
+
+    // 📤 ENVÍO A OPERACIONES
+    if (hasImage) {
+
+      try {
+        await axios.post(
+          "https://gate.whapi.cloud/messages/image",
+          {
+            to: OPERATIONS_GROUP_ID,
+            media: image,
+            caption: finalMessage
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${WHAPI_TOKEN}`,
+              "Content-Type": "application/json"
+            }
+          }
+        );
+
+        console.log("📸 Foto + reporte enviado");
+
+      } catch (err) {
+
+        console.log("⚠️ fallback texto");
+
+        await axios.post(
+          "https://gate.whapi.cloud/messages/text",
+          {
+            to: OPERATIONS_GROUP_ID,
+            body: finalMessage
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${WHAPI_TOKEN}`
+            }
+          }
+        );
+      }
+
+    } else {
+
+      await axios.post(
+        "https://gate.whapi.cloud/messages/text",
+        {
+          to: OPERATIONS_GROUP_ID,
+          body: finalMessage
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHAPI_TOKEN}`
+          }
+        }
+      );
+    }
+
+    res.sendStatus(200);
 
   } catch (err) {
-
-    console.log("⚠️ Fallback: enviando referencia");
-
-    await axios.post(
-      "https://gate.whapi.cloud/messages/text",
-      {
-        to: OPERATIONS_GROUP_ID,
-        body:
-`👷 ${employee}
-
-${finalMessage}
-
-📌 Evidencia disponible en chat original
-🆔 Message ID: ${msg?.id}
-📍 Chat: ${chatId}`
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHAPI_TOKEN}`
-        }
-      }
-    );
+    console.log("❌ ERROR:", err.response?.data || err.message);
+    res.sendStatus(200);
   }
+});
 
-} else {
-
-  await axios.post(
-    "https://gate.whapi.cloud/messages/text",
-    {
-      to: OPERATIONS_GROUP_ID,
-      body: finalMessage
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${WHAPI_TOKEN}`
-      }
-    }
-  );
-}
+// 🚀 START SERVER
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Servidor hotelero listo en puerto", PORT);
+});
