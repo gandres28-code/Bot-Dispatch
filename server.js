@@ -5,7 +5,7 @@ const app = express();
 
 app.use(express.json());
 
-// 🔑 ENV VARIABLES
+// 🔑 VARIABLES
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
@@ -42,32 +42,54 @@ app.post("/webhook", async (req, res) => {
     console.log("🧩 KEY:", key);
     console.log("📦 TYPE:", msg?.type);
 
-    // 📸 SI ES IMAGEN → GUARDAR
+    // 📸 SI ES IMAGEN
     if (msg?.type === "image") {
 
-      const imageUrl =
-        msg?.image?.url ||
-        msg?.image?.link ||
-        msg?.media?.url ||
-        msg?.file?.url ||
-        msg?.url ||
-        null;
+      const imageId = msg?.image?.id;
 
-      console.log("📸 RAW IMAGE:", JSON.stringify(msg, null, 2));
-      console.log("📸 IMAGE URL:", imageUrl);
+      console.log("📸 IMAGE ID:", imageId);
 
-      if (!imageUrl) {
-        console.log("⚠️ Imagen sin URL válida");
+      if (!imageId) {
+        console.log("⚠️ No image ID recibido");
         return res.sendStatus(200);
       }
 
-      pendingMedia[key] = {
-        image: imageUrl,
-        employee,
-        time: Date.now()
-      };
+      try {
+        // 📥 DESCARGAR IMAGEN REAL DESDE WHAPI
+        const fileRes = await axios.get(
+          `https://gate.whapi.cloud/messages/file/${imageId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${WHAPI_TOKEN}`
+            }
+          }
+        );
 
-      console.log("📸 Imagen guardada:", key);
+        const imageUrl =
+          fileRes.data?.url ||
+          fileRes.data?.link ||
+          fileRes.data?.data?.url;
+
+        console.log("📸 IMAGE URL DESCARGADA:", imageUrl);
+
+        if (!imageUrl) {
+          console.log("⚠️ No se pudo obtener URL de imagen");
+          return res.sendStatus(200);
+        }
+
+        pendingMedia[key] = {
+          image: imageUrl,
+          employee,
+          time: Date.now()
+        };
+
+        console.log("📸 Imagen guardada correctamente:", key);
+
+      } catch (err) {
+        console.log("❌ ERROR DESCARGANDO IMAGEN:");
+        console.log(err.response?.data || err.message);
+      }
+
       return res.sendStatus(200);
     }
 
@@ -84,11 +106,10 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // 🔍 DEBUG MATCHING
+    // 🔍 BUSCAR IMAGEN PENDIENTE
     console.log("🔍 BUSCANDO KEY:", key);
-    console.log("🧠 PENDING KEYS:", Object.keys(pendingMedia));
+    console.log("🧠 PENDING:", Object.keys(pendingMedia));
 
-    // 🔗 BUSCAR IMAGEN PENDIENTE
     const pending = pendingMedia[key];
 
     let image = null;
@@ -96,7 +117,7 @@ app.post("/webhook", async (req, res) => {
     if (pending && Date.now() - pending.time < 20 * 60 * 1000) {
       image = pending.image;
       delete pendingMedia[key];
-      console.log("🔗 Imagen combinada correctamente");
+      console.log("🔗 IMAGEN COMBINADA CON MENSAJE");
     }
 
     // 🤖 OPENAI
@@ -112,7 +133,7 @@ Eres un sistema de housekeeping hotelero.
 
 IMPORTANTE:
 - El empleado ya está identificado.
-- Si hay imagen, es evidencia visual de limpieza.
+- Si hay imagen, es evidencia real de limpieza.
 
 Extrae:
 - Unidad
@@ -127,7 +148,7 @@ Devuelve un reporte claro y profesional.
             content: `
 Empleado: ${employee}
 Mensaje: ${message}
-Evidencia visual: ${image ? "SI" : "NO"}
+Evidencia: ${image ? "SI" : "NO"}
 `
           }
         ]
@@ -173,7 +194,7 @@ ${image ? "📸 Evidencia adjunta" : ""}`;
     res.sendStatus(200);
 
   } catch (error) {
-    console.log("❌ ERROR WEBHOOK:");
+    console.log("❌ ERROR GENERAL:");
     console.log(error.response?.data || error.message);
 
     res.sendStatus(200);
