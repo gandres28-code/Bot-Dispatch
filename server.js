@@ -30,7 +30,11 @@ app.get("/", (req, res) => {
 // 📩 WEBHOOK PRINCIPAL
 app.post("/webhook", async (req, res) => {
   try {
-
+    
+console.log("========== WEBHOOK COMPLETO ==========");
+console.log(JSON.stringify(req.body, null, 2));
+console.log("======================================");
+    
     const msg = req.body?.messages?.[0];
     if (!msg) return res.sendStatus(200);
 
