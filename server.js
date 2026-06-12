@@ -7,21 +7,26 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// 🟢 prueba básica
+// 🟢 Health check
 app.get("/", (req, res) => {
-  res.send("Bot activo ✅");
+  res.send("Bot activo y funcionando ✅");
 });
 
-// 📩 webhook seguro
+// 📩 WEBHOOK WHAPI + OPENAI
 app.post("/webhook", async (req, res) => {
   try {
 
     console.log("📩 WEBHOOK RECIBIDO:");
-    console.log(req.body);
+    console.log(JSON.stringify(req.body, null, 2));
 
-    const message = req.body?.body || "mensaje vacío";
+    // 🔥 FIX REAL PARA WHAPI (EXTRACCIÓN CORRECTA)
+    const message =
+      req.body?.messages?.[0]?.text?.body ||
+      req.body?.messages?.[0]?.text ||
+      req.body?.messages?.[0]?.message ||
+      "mensaje vacío";
 
-    console.log("📨 MENSAJE:", message);
+    console.log("📨 MENSAJE EXTRAÍDO:", message);
 
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -31,15 +36,16 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres un sistema de housekeeping.
+Eres un sistema de operaciones de housekeeping de hotel.
 
-Extrae:
+Tu trabajo es analizar mensajes de WhatsApp y extraer:
+
 - Unidad
-- Persona
-- Estado
+- Empleado
+- Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
+- Notas importantes
 
-Estados:
-ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
+Devuelve un reporte corto, claro y listo para supervisor.
 `
           },
           {
@@ -58,14 +64,17 @@ ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
 
     const ai = response.data.choices[0].message.content;
 
-    console.log("🤖 IA:", ai);
+    console.log("🤖 IA RESPUESTA:");
+    console.log(ai);
 
+    // 🔥 IMPORTANTE: responder siempre OK a Whapi
     res.sendStatus(200);
 
   } catch (error) {
-    console.log("❌ ERROR:");
+    console.log("❌ ERROR WEBHOOK:");
     console.log(error.response?.data || error.message);
 
+    // no romper webhook
     res.sendStatus(200);
   }
 });
@@ -73,5 +82,5 @@ ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Servidor activo en", PORT);
+  console.log("Servidor activo en puerto", PORT);
 });
