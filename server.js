@@ -1,4 +1,3 @@
-```js
 const express = require("express");
 const axios = require("axios");
 
@@ -28,11 +27,9 @@ setInterval(() => {
 const now = Date.now();
 
 for (const key in pendingMedia) {
-
 if (now - pendingMedia[key].time > 1800000) {
 delete pendingMedia[key];
 }
-
 }
 
 }, 600000);
@@ -48,55 +45,39 @@ app.post("/webhook", async (req, res) => {
 try {
 
 const msg = req.body?.messages?.[0];
-
-if (!msg) {
-return res.sendStatus(200);
-}
+if (!msg) return res.sendStatus(200);
 
 const chatId = msg?.chat_id;
 
 // 🚫 SOLO GRUPOS AUTORIZADOS
 if (!ALLOWED_GROUPS.includes(chatId)) {
-
-console.log("⛔ Grupo ignorado");
-
-return res.sendStatus(200);
-
-}
-
-if (msg?.from_me) {
+console.log("⛔ Grupo ignorado:", chatId);
 return res.sendStatus(200);
 }
 
-const employee =
-msg?.from_name ||
-"Desconocido";
+if (msg?.from_me) return res.sendStatus(200);
 
-const key = `${chatId}_${msg?.from}`;
+const employee = msg?.from_name || "Desconocido";
+
+// 🔑 KEY (SIN TEMPLATE STRINGS PARA EVITAR ERRORES RENDER)
+const key = chatId + "_" + msg?.from;
 
 console.log("📩 EVENTO:", msg?.type);
 
-// 📸 FOTO
+// 📸 IMAGEN
 if (msg?.type === "image") {
 
-const image =
-msg?.image?.preview;
+const image = msg?.image?.preview;
 
-if (!image) {
-return res.sendStatus(200);
-}
+if (!image) return res.sendStatus(200);
 
 pendingMedia[key] = {
-
-image,
+image: image,
 time: Date.now()
-
 };
 
-console.log("📸 Foto guardada");
-
+console.log("📸 Imagen guardada");
 return res.sendStatus(200);
-
 }
 
 // ✍️ TEXTO
@@ -106,310 +87,168 @@ msg?.text ||
 msg?.message ||
 "";
 
-if (!message) {
-return res.sendStatus(200);
-}
+if (!message) return res.sendStatus(200);
 
 console.log("📨", message);
 
-// 🔗 MATCH FOTO
+// 🔗 MATCH IMAGEN
 let image = null;
 
 if (
 pendingMedia[key] &&
 Date.now() - pendingMedia[key].time < 1200000
 ) {
-
-image =
-pendingMedia[key].image;
-
+image = pendingMedia[key].image;
 delete pendingMedia[key];
-
 }
 
-const hasImage =
-!!image;
+const hasImage = !!image;
 
 // 🕒 HORA
-const time =
-new Date().toLocaleString(
-"en-US",
-{
-timeZone:
-"America/Mexico_City",
+const time = new Date().toLocaleString("en-US", {
+timeZone: "America/Mexico_City",
 hour: "2-digit",
 minute: "2-digit",
 hour12: true
-}
-);
+});
 
 // 🤖 IA
-const ai =
-await axios.post(
-
+const ai = await axios.post(
 "https://api.openai.com/v1/chat/completions",
-
 {
 model: "gpt-4o-mini",
-
 messages: [
-
 {
 role: "system",
-
 content: `
-
 Eres un sistema hotelero.
 
-Decide si el mensaje merece enviarse al grupo OPERACIONES.
+Decide si el mensaje debe enviarse a OPERACIONES.
 
 ENVIAR SOLO SI:
-- Reportan unidad
-- Problema
-- Entrada
-- Salida
-- Limpieza
-- Inspección
-- Retraso
-- Solicitud
-- Mantenimiento
-- Algo operativo
+- unidad
+- problema
+- limpieza
+- entrada
+- salida
+- mantenimiento
+- inspección
+- solicitud
+- estado operativo
 
 NO ENVIAR:
-- Hola
-- Gracias
-- Conversación casual
-- Confirmaciones
-- Bromas
-- Emojis
+- hola
+- gracias
+- ok
+- emojis
+- conversación casual
 
-Si NO debe enviarse:
-
+Si no es relevante responde EXACTO:
 NO REPORTABLE
 
-Si SÍ:
-
+Si es relevante:
 Unidad:
 Estado:
 Notas:
-
-No expliques.
-
 `
-
 },
-
 {
 role: "user",
-
 content:
-`
-Empleado:
-${employee}
-
-Mensaje:
-${message}
-`
+"Empleado: " + employee + "\nMensaje: " + message
 }
-
 ]
-
 },
-
 {
-
 headers: {
-
-Authorization:
-`Bearer ${OPENAI_API_KEY}`,
-
-"Content-Type":
-"application/json"
-
+Authorization: "Bearer " + OPENAI_API_KEY,
+"Content-Type": "application/json"
 }
-
 }
-
 );
 
 // 📋 REPORTE
-const report =
-ai.data
-.choices[0]
-.message
-.content
-.trim();
+const report = ai.data?.choices?.[0]?.message?.content?.trim() || "";
 
 // 🚫 IGNORAR
-if (
-report
-.toUpperCase()
-.includes(
-"NO REPORTABLE"
-)
-) {
-
-console.log(
-"🛑 Ignorado"
-);
-
+if (report.toUpperCase().includes("NO REPORTABLE")) {
+console.log("🛑 Ignorado");
 return res.sendStatus(200);
-
 }
 
-// 📦 MENSAJE
+// 📦 MENSAJE FINAL
 let finalMessage =
-`👷 ${employee}
-🕒 ${time}
-
-${report}`;
+"👷 " + employee +
+"\n🕒 " + time +
+"\n\n" + report;
 
 if (hasImage) {
-
 finalMessage =
-`👷 ${employee}
-📸 Foto recibida
-🕒 ${time}
-
-${report}`;
-
+"👷 " + employee +
+"\n📸 Foto recibida" +
+"\n🕒 " + time +
+"\n\n" + report;
 }
 
 // 📤 ENVÍO
+const sendUrl = "https://gate.whapi.cloud/messages/text";
+
 if (hasImage) {
-
 try {
-
 await axios.post(
-
 "https://gate.whapi.cloud/messages/image",
-
 {
-
-to:
-OPERATIONS_GROUP_ID,
-
-media:
-image,
-
-caption:
-finalMessage
-
+to: OPERATIONS_GROUP_ID,
+media: image,
+caption: finalMessage
 },
-
 {
-
 headers: {
-
-Authorization:
-`Bearer ${WHAPI_TOKEN}`,
-
-"Content-Type":
-"application/json"
-
+Authorization: "Bearer " + WHAPI_TOKEN
 }
-
 }
-
 );
-
-console.log(
-"📸 Enviado"
-);
-
-}
-
-catch {
-
+} catch (err) {
 await axios.post(
-
-"https://gate.whapi.cloud/messages/text",
-
+sendUrl,
 {
-
-to:
-OPERATIONS_GROUP_ID,
-
-body:
-finalMessage
-
+to: OPERATIONS_GROUP_ID,
+body: finalMessage
 },
-
 {
-
 headers: {
-
-Authorization:
-`Bearer ${WHAPI_TOKEN}`
-
+Authorization: "Bearer " + WHAPI_TOKEN
 }
-
 }
-
 );
-
 }
-
-}
-
-else {
-
+} else {
 await axios.post(
-
-"https://gate.whapi.cloud/messages/text",
-
+sendUrl,
 {
-
-to:
-OPERATIONS_GROUP_ID,
-
-body:
-finalMessage
-
+to: OPERATIONS_GROUP_ID,
+body: finalMessage
 },
-
 {
-
 headers: {
-
-Authorization:
-`Bearer ${WHAPI_TOKEN}`
-
+Authorization: "Bearer " + WHAPI_TOKEN
 }
-
 }
-
 );
-
 }
 
 res.sendStatus(200);
 
-}
-
-catch (err) {
-
-console.log(
-err.response?.data ||
-err.message
-);
-
+} catch (err) {
+console.log(err.response?.data || err.message);
 res.sendStatus(200);
-
 }
 
 });
 
 // 🚀 START
-const PORT =
-process.env.PORT ||
-3000;
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-
-console.log(
-"Servidor hotelero listo"
-);
-
+console.log("Servidor hotelero listo");
 });
-```
