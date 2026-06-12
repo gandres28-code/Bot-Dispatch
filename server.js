@@ -1,104 +1,41 @@
 const express = require("express");
-const axios = require("axios");
 
 const app = express();
 
+// 🔥 IMPORTANTE: permite leer JSON
 app.use(express.json());
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-app.get("/", (req,res)=>{
-  res.send("Bot activo y funcionando ✅");
+app.get("/", (req, res) => {
+  res.send("Bot activo ✅");
 });
 
-
-app.post("/webhook", async (req,res)=>{
-
+app.post("/webhook", (req, res) => {
   try {
 
-    const message =
-      req.body.body ||
-      req.body.text ||
-      "mensaje vacío";
+    console.log("🔥 WEBHOOK RECIBIDO");
+    console.log("BODY:", req.body);
 
+    const message = req.body?.body;
 
-    console.log("📩 Mensaje recibido:", message);
-
-
-    const ai = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model:"gpt-4o-mini",
-        messages:[
-          {
-            role:"system",
-            content:
-            `
-Eres un asistente de operaciones de housekeeping.
-
-Analiza mensajes.
-
-Extrae:
-- Unidad
-- Empleado
-- Estado
-- Problema
-- Hora
-
-Estados posibles:
-ENTRANDO
-LIMPIANDO
-LISTA
-INSPECCIONADA
-PROBLEMA
-SUMINISTROS
-
-Devuelve un reporte corto para supervisor.
-`
-          },
-          {
-            role:"user",
-            content: message
-          }
-        ]
-      },
-      {
-        headers:{
-          Authorization:`Bearer ${OPENAI_API_KEY}`,
-          "Content-Type":"application/json"
-        }
-      }
-    );
-
-
-    const result =
-      ai.data.choices[0].message.content;
-
-
-    console.log("🤖 IA:", result);
-
+    if (!message) {
+      return res.json({
+        error: "No message received"
+      });
+    }
 
     res.json({
-      ok:true,
-      respuesta:result
+      ok: true,
+      received: message
     });
 
-
-  } catch(error){
-
-    console.log(
-      error.response?.data || error.message
-    );
-
-    res.sendStatus(500);
-
+  } catch (err) {
+    console.log("ERROR:", err.message);
+    res.status(500).send("error interno");
   }
-
 });
-
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT,()=>{
- console.log("Servidor activo en",PORT);
+app.listen(PORT, () => {
+  console.log("Servidor activo en", PORT);
 });
