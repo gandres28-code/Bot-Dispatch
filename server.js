@@ -4,7 +4,7 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// 🔑 ENV (SAFE)
+// 🔑 ENV
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN || "";
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID || "";
@@ -55,10 +55,7 @@ return res.sendStatus(200);
 
 const chatId = msg?.chat_id;
 
-if (!ALLOWED_GROUPS.includes(chatId)) {
-return res.sendStatus(200);
-}
-
+if (!ALLOWED_GROUPS.includes(chatId)) return res.sendStatus(200);
 if (msg?.from_me) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
@@ -81,7 +78,6 @@ image,
 time: Date.now()
 };
 
-console.log("📸 imagen guardada");
 return res.sendStatus(200);
 }
 
@@ -119,13 +115,7 @@ minute: "2-digit",
 hour12: true
 });
 
-// 🧠 VALIDACIÓN ENV (CRÍTICO)
-if (!OPENAI_API_KEY || !WHAPI_TOKEN || !OPERATIONS_GROUP_ID) {
-console.log("❌ ENV faltante (revisar Render)");
-return res.sendStatus(200);
-}
-
-// 🤖 IA
+// 🧠 IA
 const ai = await axios.post(
 "https://api.openai.com/v1/chat/completions",
 {
@@ -170,13 +160,12 @@ if (report.toUpperCase().includes("NO REPORTABLE")) {
 return res.sendStatus(200);
 }
 
-// 📦 MENSAJE OPERACIONES
+// 📦 OPERACIONES
 const finalMessage =
 "👷 " + employee +
 "\n🕒 " + time +
 "\n\n" + report;
 
-// 📤 SEND OPERATIONS
 try {
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
@@ -194,30 +183,53 @@ Authorization: "Bearer " + WHAPI_TOKEN
 console.log("✅ OPERACIONES enviado");
 
 } catch (err) {
-console.log("❌ ERROR OPERACIONES:", err.response?.data || err.message);
+console.log("❌ OPERACIONES ERROR:", err.response?.data || err.message);
 }
 
-// 🔎 INSPECTORES (ROBUSTO)
+// 🔎 INSPECTORES (A / B FIX REAL)
 try {
 
-let unitMatch = report.match(/Unidad:\s*([A-Za-z0-9]+)/i);
-let stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
+const unitMatch = report.match(/Unidad:\s*([A-Za-z0-9\s]+)/i);
+const stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
 
-let unit = unitMatch?.[1]?.toUpperCase();
+let unitRaw = unitMatch?.[1]?.toUpperCase() || "";
 let state = (stateMatch?.[1] || "").toUpperCase();
 
-// normalización fuerte
+// 🔥 detectar A / B desde mensaje real
+const abMatch = message.toUpperCase().match(/\b(\d+)\s*([AB](?:\s*Y\s*[AB])?)\b/);
+
+let numberPart = unitRaw.replace(/[A-Z\s]/g, "").trim();
+if (!numberPart) numberPart = unitRaw.replace(/[AB\sY]/g, "").trim();
+
+let abPart = abMatch?.[2] || "";
+
+// 🧠 construir unidad final
+let finalUnit = "";
+
+if (abPart.includes("A") && abPart.includes("B")) {
+finalUnit = `${numberPart} A y B`;
+} else if (abPart.includes("A")) {
+finalUnit = `${numberPart} A`;
+} else if (abPart.includes("B")) {
+finalUnit = `${numberPart} B`;
+} else {
+finalUnit = numberPart || unitRaw;
+}
+
+// 🔥 normalizar estado
 if (
 state.includes("LISTA") ||
 state.includes("TERMINADA") ||
-state.includes("FINALIZADA")
+state.includes("FINALIZADA") ||
+state.includes("DONE")
 ) {
 state = "LISTA";
 }
 
-if (unit && state === "LISTA") {
+// 📤 enviar inspectores
+if (finalUnit && state === "LISTA") {
 
-const inspectionMsg = `${unit} lista para inspeccionar`;
+const inspectionMsg = `${finalUnit} lista para inspeccionar`;
 
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
@@ -236,13 +248,13 @@ console.log("🔎 INSPECTORES enviado:", inspectionMsg);
 }
 
 } catch (err) {
-console.log("❌ ERROR INSPECTORES:", err.response?.data || err.message);
+console.log("❌ INSPECTORES ERROR:", err.response?.data || err.message);
 }
 
 res.sendStatus(200);
 
 } catch (err) {
-console.log("❌ ERROR GENERAL:", err.response?.data || err.message);
+console.log("❌ GENERAL ERROR:", err.response?.data || err.message);
 res.sendStatus(200);
 }
 
