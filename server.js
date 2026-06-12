@@ -9,10 +9,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
 
-// 🧠 MEMORIA
+// 🧠 MEMORIA TEMPORAL
 const pendingMedia = {};
 
-// 🧹 LIMPIEZA AUTOMÁTICA (evita memoria infinita)
+// 🧹 LIMPIEZA AUTOMÁTICA
 setInterval(() => {
   const now = Date.now();
   for (const key in pendingMedia) {
@@ -24,7 +24,7 @@ setInterval(() => {
 
 // 🟢 HEALTH
 app.get("/", (req, res) => {
-  res.send("Bot ultra estable activo ✅");
+  res.send("Bot activo y funcionando 🚀");
 });
 
 // 📩 WEBHOOK
@@ -36,43 +36,58 @@ app.post("/webhook", async (req, res) => {
 
     const chatId = msg?.chat_id;
     const employee = msg?.from_name || "Desconocido";
-    const fromMe = msg?.from_me;
 
-    if (fromMe) return res.sendStatus(200);
+    if (msg?.from_me) return res.sendStatus(200);
 
     const key = `${chatId}_${msg?.from}`;
 
     console.log("📩 EVENTO:", msg?.type);
 
-    // 📸 DETECCIÓN ULTRA ROBUSTA DE IMAGEN
+    // 📸 IMAGEN (HQ FIX REAL)
     if (msg?.type === "image") {
 
-      const image =
-        msg?.image?.preview ||
-        msg?.image?.data ||
-        msg?.image?.url ||
-        msg?.media?.preview ||
-        null;
+      const imageId = msg?.image?.id;
 
-      const imageId =
-        msg?.image?.id ||
-        msg?.media?.id ||
-        null;
+      console.log("📸 IMAGE ID:", imageId);
 
-      console.log("📸 IMAGE DETECTED");
-      console.log("🧠 imageId:", imageId ? "OK" : "NO ID");
-      console.log("🧠 preview:", image ? "OK" : "NO PREVIEW");
+      if (!imageId) return res.sendStatus(200);
 
-      if (!image && !imageId) {
-        return res.sendStatus(200);
+      try {
+
+        // 📥 DESCARGAR IMAGEN REAL (FULL QUALITY)
+        const fileRes = await axios.get(
+          `https://gate.whapi.cloud/messages/file/${imageId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${WHAPI_TOKEN}`
+            }
+          }
+        );
+
+        const imageUrl =
+          fileRes.data?.url ||
+          fileRes.data?.link ||
+          fileRes.data?.data?.url;
+
+        console.log("🖼️ FULL QUALITY IMAGE URL:", imageUrl);
+
+        if (!imageUrl) {
+          console.log("⚠️ No se obtuvo URL HQ");
+          return res.sendStatus(200);
+        }
+
+        pendingMedia[key] = {
+          image: imageUrl,
+          employee,
+          time: Date.now()
+        };
+
+        console.log("📸 Imagen HQ guardada:", key);
+
+      } catch (err) {
+        console.log("❌ ERROR DESCARGANDO IMAGEN HQ:");
+        console.log(err.response?.data || err.message);
       }
-
-      pendingMedia[key] = {
-        image,
-        imageId,
-        employee,
-        time: Date.now()
-      };
 
       return res.sendStatus(200);
     }
@@ -86,9 +101,9 @@ app.post("/webhook", async (req, res) => {
 
     if (!message) return res.sendStatus(200);
 
-    console.log("📨 TEXTO:", message);
+    console.log("📨 MENSAJE:", message);
 
-    // 🔗 MATCH IMAGE
+    // 🔗 MATCH IMAGEN
     const pending = pendingMedia[key];
 
     let image = null;
@@ -96,6 +111,7 @@ app.post("/webhook", async (req, res) => {
     if (pending && Date.now() - pending.time < 20 * 60 * 1000) {
       image = pending.image;
       delete pendingMedia[key];
+      console.log("🔗 IMAGEN HQ ASOCIADA AL TEXTO");
     }
 
     // 🤖 IA
@@ -107,7 +123,7 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres sistema hotelero.
+Eres un sistema de housekeeping hotelero.
 
 Extrae:
 - Unidad
@@ -135,8 +151,44 @@ No menciones imágenes.
 
     const finalMessage = `👷 ${employee}\n\n${report}`;
 
-    // 📤 ENVÍO ULTRA ESTABLE
-    await sendToOperations(finalMessage, image);
+    // 📤 ENVÍO A OPERACIONES
+    if (image) {
+
+      await axios.post(
+        "https://gate.whapi.cloud/messages/image",
+        {
+          to: OPERATIONS_GROUP_ID,
+          media: image, // ✅ HQ IMAGE URL
+          caption: finalMessage
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHAPI_TOKEN}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+
+      console.log("📸 Enviado con imagen HQ");
+
+    } else {
+
+      await axios.post(
+        "https://gate.whapi.cloud/messages/text",
+        {
+          to: OPERATIONS_GROUP_ID,
+          body: finalMessage
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHAPI_TOKEN}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+
+      console.log("📄 Enviado solo texto");
+    }
 
     res.sendStatus(200);
 
@@ -146,71 +198,8 @@ No menciones imágenes.
   }
 });
 
-// 🚀 FUNCIÓN ULTRA ESTABLE DE ENVÍO
-async function sendToOperations(text, image) {
-  const headers = {
-    Authorization: `Bearer ${WHAPI_TOKEN}`,
-    "Content-Type": "application/json"
-  };
-
-  try {
-
-    // 🟢 SI HAY IMAGEN
-    if (image) {
-
-      const payload = {
-        to: OPERATIONS_GROUP_ID,
-        media: image, // fallback universal
-        caption: text
-      };
-
-      await axios.post(
-        "https://gate.whapi.cloud/messages/image",
-        payload,
-        { headers }
-      );
-
-      console.log("📸 Enviado como imagen");
-      return;
-    }
-
-    // 🟡 SOLO TEXTO
-    await axios.post(
-      "https://gate.whapi.cloud/messages/text",
-      {
-        to: OPERATIONS_GROUP_ID,
-        body: text
-      },
-      { headers }
-    );
-
-    console.log("📄 Enviado como texto");
-
-  } catch (err) {
-
-    console.log("⚠️ FALLÓ ENVÍO, intentando fallback...");
-
-    // 🔁 FALLBACK (WHAPI cambia reglas constantemente)
-    try {
-      await axios.post(
-        "https://gate.whapi.cloud/messages/text",
-        {
-          to: OPERATIONS_GROUP_ID,
-          body: text + (image ? "\n📸 Imagen disponible en sistema interno" : "")
-        },
-        { headers }
-      );
-
-      console.log("🟡 Fallback enviado como texto");
-
-    } catch (err2) {
-      console.log("❌ FALLBACK FALLÓ:", err2.response?.data || err2.message);
-    }
-  }
-}
-
 // 🚀 START
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Servidor ultra estable en puerto", PORT);
+  console.log("Servidor HQ listo en puerto", PORT);
 });
