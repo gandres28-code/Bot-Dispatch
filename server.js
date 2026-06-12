@@ -7,24 +7,21 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// 🟢 prueba básica
 app.get("/", (req, res) => {
   res.send("Bot activo ✅");
 });
 
+// 📩 webhook seguro
 app.post("/webhook", async (req, res) => {
   try {
 
-    console.log("📩 WEBHOOK RAW:");
-    console.log(JSON.stringify(req.body, null, 2));
+    console.log("📩 WEBHOOK RECIBIDO:");
+    console.log(req.body);
 
-    const message =
-      req.body?.text?.body ||
-      req.body?.message?.text?.body ||
-      req.body?.body ||
-      req.body?.text ||
-      "mensaje vacío";
+    const message = req.body?.body || "mensaje vacío";
 
-    console.log("📨 MENSAJE EXTRAÍDO:", message);
+    console.log("📨 MENSAJE:", message);
 
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -34,15 +31,15 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres un sistema de housekeeping hotelero.
+Eres un sistema de housekeeping.
 
 Extrae:
 - Unidad
 - Persona
 - Estado
-- Notas
 
-Estados: ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
+Estados:
+ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
 `
           },
           {
@@ -53,7 +50,7 @@ Estados: ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
@@ -61,8 +58,7 @@ Estados: ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
 
     const ai = response.data.choices[0].message.content;
 
-    console.log("🤖 IA:");
-    console.log(ai);
+    console.log("🤖 IA:", ai);
 
     res.sendStatus(200);
 
@@ -72,4 +68,10 @@ Estados: ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
 
     res.sendStatus(200);
   }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("Servidor activo en", PORT);
 });
