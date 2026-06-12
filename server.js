@@ -5,21 +5,24 @@ const app = express();
 
 app.use(express.json());
 
+// 🔑 ENV VARIABLES
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
 
-// 🟢 Health check
+// 🟢 HEALTH CHECK
 app.get("/", (req, res) => {
   res.send("Bot activo y funcionando ✅");
 });
 
-// 📩 WEBHOOK WHAPI + OPENAI
+// 📩 WHAPI WEBHOOK
 app.post("/webhook", async (req, res) => {
   try {
 
     console.log("📩 WEBHOOK RECIBIDO:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    // 🔥 FIX REAL PARA WHAPI (EXTRACCIÓN CORRECTA)
+    // 🧠 EXTRAER MENSAJE REAL DE WHAPI
     const message =
       req.body?.messages?.[0]?.text?.body ||
       req.body?.messages?.[0]?.text ||
@@ -28,6 +31,7 @@ app.post("/webhook", async (req, res) => {
 
     console.log("📨 MENSAJE EXTRAÍDO:", message);
 
+    // 🤖 OPENAI REQUEST
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -38,14 +42,14 @@ app.post("/webhook", async (req, res) => {
             content: `
 Eres un sistema de operaciones de housekeeping de hotel.
 
-Tu trabajo es analizar mensajes de WhatsApp y extraer:
+Analiza el mensaje y extrae:
 
 - Unidad
 - Empleado
 - Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
-- Notas importantes
+- Notas
 
-Devuelve un reporte corto, claro y listo para supervisor.
+Devuelve un reporte corto, claro y profesional para supervisor.
 `
           },
           {
@@ -64,21 +68,39 @@ Devuelve un reporte corto, claro y listo para supervisor.
 
     const ai = response.data.choices[0].message.content;
 
-    console.log("🤖 IA RESPUESTA:");
+    console.log("🤖 IA RESULTADO:");
     console.log(ai);
 
-    // 🔥 IMPORTANTE: responder siempre OK a Whapi
+    // 📲 ENVIAR AL GRUPO OPERACIONES (WHAPI)
+    await axios.post(
+      "https://gate.whapi.cloud/messages/text",
+      {
+        to: OPERATIONS_GROUP_ID,
+        body: ai
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHAPI_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("📤 MENSAJE ENVIADO AL GRUPO OPERACIONES");
+
+    // ⚠️ SIEMPRE RESPONDER 200 A WHAPI
     res.sendStatus(200);
 
   } catch (error) {
-    console.log("❌ ERROR WEBHOOK:");
+    console.log("❌ ERROR EN WEBHOOK:");
     console.log(error.response?.data || error.message);
 
-    // no romper webhook
+    // NO ROMPER WHAPI
     res.sendStatus(200);
   }
 });
 
+// 🚀 START SERVER
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
