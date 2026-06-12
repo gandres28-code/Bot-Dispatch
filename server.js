@@ -9,6 +9,18 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
 
+// 🏨 GRUPOS AUTORIZADOS
+const ALLOWED_GROUPS = [
+
+"120363427834097943@g.us",
+"120363425416827106@g.us",
+"120363408939064520@g.us",
+"120363428515985008@g.us",
+"120363425695848832@g.us",
+
+"120363408317536314@g.us",
+
+];
 // 🧠 MEMORIA TEMPORAL
 const pendingMedia = {};
 
@@ -39,6 +51,16 @@ console.log("======================================");
     if (!msg) return res.sendStatus(200);
 
     const chatId = msg?.chat_id;
+    
+    // 🚫 IGNORAR CHATS QUE NO SON DE LIMPIEZA
+if (!ALLOWED_GROUPS.includes(chatId)) {
+
+console.log("⛔ Grupo ignorado:", chatId);
+
+return res.sendStatus(200);
+
+}
+    
     const employee = msg?.from_name || "Desconocido";
     const fromMe = msg?.from_me;
 
