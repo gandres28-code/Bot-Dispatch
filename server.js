@@ -14,9 +14,17 @@ app.get("/", (req, res) => {
 app.post("/webhook", async (req, res) => {
   try {
 
-    const message = req.body.body;
+    console.log("📩 WEBHOOK RAW:");
+    console.log(JSON.stringify(req.body, null, 2));
 
-    console.log("📩 Mensaje:", message);
+    const message =
+      req.body?.text?.body ||
+      req.body?.message?.text?.body ||
+      req.body?.body ||
+      req.body?.text ||
+      "mensaje vacío";
+
+    console.log("📨 MENSAJE EXTRAÍDO:", message);
 
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -26,24 +34,15 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres un sistema de operaciones de housekeeping.
+Eres un sistema de housekeeping hotelero.
 
 Extrae:
 - Unidad
-- Empleado
+- Persona
 - Estado
-- Problema
-- Acción
+- Notas
 
-Estados:
-ENTRANDO
-LIMPIANDO
-LISTA
-INSPECCIONADA
-PROBLEMA
-SUMINISTROS
-
-Devuelve un reporte limpio para supervisor.
+Estados: ENTRANDO, LIMPIANDO, LISTA, PROBLEMA
 `
           },
           {
@@ -54,7 +53,7 @@ Devuelve un reporte limpio para supervisor.
       },
       {
         headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
@@ -62,22 +61,15 @@ Devuelve un reporte limpio para supervisor.
 
     const ai = response.data.choices[0].message.content;
 
-    console.log("🤖 IA:", ai);
+    console.log("🤖 IA:");
+    console.log(ai);
 
-    res.json({
-      ok: true,
-      input: message,
-      ai: ai
-    });
+    res.sendStatus(200);
 
   } catch (error) {
+    console.log("❌ ERROR:");
     console.log(error.response?.data || error.message);
-    res.sendStatus(500);
+
+    res.sendStatus(200);
   }
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Servidor activo en", PORT);
 });
