@@ -4,11 +4,11 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// 🔑 ENV
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
-const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
-const INSPECTION_GROUP_ID = process.env.INSPECTION_GROUP_ID;
+// 🔑 ENV (SAFE)
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const WHAPI_TOKEN = process.env.WHAPI_TOKEN || "";
+const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID || "";
+const INSPECTION_GROUP_ID = process.env.INSPECTION_GROUP_ID || "";
 
 // 🏨 GRUPOS AUTORIZADOS
 const ALLOWED_GROUPS = [
@@ -27,7 +27,6 @@ const processed = new Set();
 // 🧹 LIMPIEZA
 setInterval(() => {
 const now = Date.now();
-
 for (const key in pendingMedia) {
 if (now - pendingMedia[key].time > 1800000) {
 delete pendingMedia[key];
@@ -48,7 +47,7 @@ try {
 const msg = req.body?.messages?.[0];
 if (!msg) return res.sendStatus(200);
 
-// 🚨 IGNORAR ACTION EVENTS
+// 🚨 IGNORAR ACTION
 if (msg?.type === "action") {
 console.log("⛔ action ignorado");
 return res.sendStatus(200);
@@ -64,12 +63,9 @@ if (msg?.from_me) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
 
-// 🔑 EVENT ID (ANTI DUPLICADOS)
+// 🔑 ANTI DUPLICADOS
 const eventId = msg?.id || (chatId + "_" + msg?.from + "_" + msg?.timestamp);
-
-if (processed.has(eventId)) {
-return res.sendStatus(200);
-}
+if (processed.has(eventId)) return res.sendStatus(200);
 processed.add(eventId);
 
 console.log("📩 EVENTO:", msg?.type);
@@ -78,7 +74,6 @@ console.log("📩 EVENTO:", msg?.type);
 if (msg?.type === "image") {
 
 const image = msg?.image?.preview;
-
 if (!image) return res.sendStatus(200);
 
 pendingMedia[chatId + "_" + msg?.from] = {
@@ -86,6 +81,7 @@ image,
 time: Date.now()
 };
 
+console.log("📸 imagen guardada");
 return res.sendStatus(200);
 }
 
@@ -123,6 +119,12 @@ minute: "2-digit",
 hour12: true
 });
 
+// 🧠 VALIDACIÓN ENV (CRÍTICO)
+if (!OPENAI_API_KEY || !WHAPI_TOKEN || !OPERATIONS_GROUP_ID) {
+console.log("❌ ENV faltante (revisar Render)");
+return res.sendStatus(200);
+}
+
 // 🤖 IA
 const ai = await axios.post(
 "https://api.openai.com/v1/chat/completions",
@@ -134,7 +136,7 @@ role: "system",
 content: `
 Eres un sistema hotelero.
 
-Si el mensaje NO es operativo responde EXACTO:
+Si NO es operativo responde EXACTO:
 NO REPORTABLE
 
 Si es operativo responde:
@@ -164,7 +166,6 @@ Authorization: "Bearer " + OPENAI_API_KEY,
 // 📋 REPORTE
 const report = ai.data?.choices?.[0]?.message?.content?.trim() || "";
 
-// 🚫 IGNORAR
 if (report.toUpperCase().includes("NO REPORTABLE")) {
 return res.sendStatus(200);
 }
@@ -175,7 +176,8 @@ const finalMessage =
 "\n🕒 " + time +
 "\n\n" + report;
 
-// 📤 OPERACIONES
+// 📤 SEND OPERATIONS
+try {
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
 {
@@ -189,21 +191,27 @@ Authorization: "Bearer " + WHAPI_TOKEN
 }
 );
 
-// 🔎 INSPECTORES (robusto)
-const unitMatch = report.match(/Unidad:\s*([A-Za-z0-9]+)/i);
+console.log("✅ OPERACIONES enviado");
+
+} catch (err) {
+console.log("❌ ERROR OPERACIONES:", err.response?.data || err.message);
+}
+
+// 🔎 INSPECTORES (ROBUSTO)
+try {
+
+let unitMatch = report.match(/Unidad:\s*([A-Za-z0-9]+)/i);
 let stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
 
 let unit = unitMatch?.[1]?.toUpperCase();
-let state = stateMatch?.[1]?.toUpperCase() || "";
+let state = (stateMatch?.[1] || "").toUpperCase();
 
 // normalización fuerte
 if (
 state.includes("LISTA") ||
 state.includes("TERMINADA") ||
-state.includes("FINALIZADA") ||
-state.includes("DONE")
+state.includes("FINALIZADA")
 ) {
-unit = unit;
 state = "LISTA";
 }
 
@@ -224,13 +232,17 @@ Authorization: "Bearer " + WHAPI_TOKEN
 }
 );
 
-console.log("🔎 enviado a inspectores:", inspectionMsg);
+console.log("🔎 INSPECTORES enviado:", inspectionMsg);
+}
+
+} catch (err) {
+console.log("❌ ERROR INSPECTORES:", err.response?.data || err.message);
 }
 
 res.sendStatus(200);
 
 } catch (err) {
-console.log(err.response?.data || err.message);
+console.log("❌ ERROR GENERAL:", err.response?.data || err.message);
 res.sendStatus(200);
 }
 
