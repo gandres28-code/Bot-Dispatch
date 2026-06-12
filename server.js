@@ -72,8 +72,7 @@ const employee =
 msg?.from_name ||
 "Desconocido";
 
-const key =
-`${chatId}_${msg?.from}`;
+const key = `${chatId}_${msg?.from}`;
 
 console.log("📩 EVENTO:", msg?.type);
 
