@@ -8,6 +8,7 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
+const INSPECTION_GROUP_ID = process.env.INSPECTION_GROUP_ID;
 
 // 🏨 GRUPOS AUTORIZADOS
 const ALLOWED_GROUPS = [
@@ -31,7 +32,6 @@ if (now - pendingMedia[key].time > 1800000) {
 delete pendingMedia[key];
 }
 }
-
 }, 600000);
 
 // 🟢 HEALTH
@@ -51,7 +51,6 @@ const chatId = msg?.chat_id;
 
 // 🚫 SOLO GRUPOS AUTORIZADOS
 if (!ALLOWED_GROUPS.includes(chatId)) {
-console.log("⛔ Grupo ignorado:", chatId);
 return res.sendStatus(200);
 }
 
@@ -59,7 +58,7 @@ if (msg?.from_me) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
 
-// 🔑 KEY (SIN TEMPLATE STRINGS PARA EVITAR ERRORES RENDER)
+// 🔑 KEY
 const key = chatId + "_" + msg?.from;
 
 console.log("📩 EVENTO:", msg?.type);
@@ -76,7 +75,6 @@ image: image,
 time: Date.now()
 };
 
-console.log("📸 Imagen guardada");
 return res.sendStatus(200);
 }
 
@@ -123,33 +121,17 @@ role: "system",
 content: `
 Eres un sistema hotelero.
 
-Decide si el mensaje debe enviarse a OPERACIONES.
-
-ENVIAR SOLO SI:
-- unidad
-- problema
-- limpieza
-- entrada
-- salida
-- mantenimiento
-- inspección
-- solicitud
-- estado operativo
-
-NO ENVIAR:
-- hola
-- gracias
-- ok
-- emojis
-- conversación casual
-
-Si no es relevante responde EXACTO:
+Si el mensaje NO es operativo responde EXACTO:
 NO REPORTABLE
 
-Si es relevante:
+Si es operativo responde:
+
 Unidad:
 Estado:
 Notas:
+
+Estados válidos:
+ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA, SALIDA, MANTENIMIENTO
 `
 },
 {
@@ -172,11 +154,10 @@ const report = ai.data?.choices?.[0]?.message?.content?.trim() || "";
 
 // 🚫 IGNORAR
 if (report.toUpperCase().includes("NO REPORTABLE")) {
-console.log("🛑 Ignorado");
 return res.sendStatus(200);
 }
 
-// 📦 MENSAJE FINAL
+// 📦 MENSAJE OPERACIONES
 let finalMessage =
 "👷 " + employee +
 "\n🕒 " + time +
@@ -190,27 +171,12 @@ finalMessage =
 "\n\n" + report;
 }
 
-// 📤 ENVÍO
-const sendUrl = "https://gate.whapi.cloud/messages/text";
+// 📤 ENVIAR A OPERACIONES
+async function sendToOps() {
+const url = "https://gate.whapi.cloud/messages/text";
 
-if (hasImage) {
-try {
 await axios.post(
-"https://gate.whapi.cloud/messages/image",
-{
-to: OPERATIONS_GROUP_ID,
-media: image,
-caption: finalMessage
-},
-{
-headers: {
-Authorization: "Bearer " + WHAPI_TOKEN
-}
-}
-);
-} catch (err) {
-await axios.post(
-sendUrl,
+url,
 {
 to: OPERATIONS_GROUP_ID,
 body: finalMessage
@@ -222,12 +188,25 @@ Authorization: "Bearer " + WHAPI_TOKEN
 }
 );
 }
-} else {
+
+// 📤 ENVIAR A INSPECTORES
+async function sendToInspectors() {
+
+const unitMatch = report.match(/Unidad:\s*([A-Za-z0-9]+)/i);
+const stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
+
+const unit = unitMatch?.[1]?.toUpperCase();
+const state = stateMatch?.[1]?.toUpperCase();
+
+if (unit && state === "LISTA") {
+
+const inspectionMsg = `${unit} lista para inspeccionar`;
+
 await axios.post(
-sendUrl,
+"https://gate.whapi.cloud/messages/text",
 {
-to: OPERATIONS_GROUP_ID,
-body: finalMessage
+to: INSPECTION_GROUP_ID,
+body: inspectionMsg
 },
 {
 headers: {
@@ -235,7 +214,13 @@ Authorization: "Bearer " + WHAPI_TOKEN
 }
 }
 );
+
 }
+}
+
+// 🚀 EJECUCIÓN
+await sendToOps();
+await sendToInspectors();
 
 res.sendStatus(200);
 
