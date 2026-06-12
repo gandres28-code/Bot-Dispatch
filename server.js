@@ -24,15 +24,15 @@ const ALLOWED_GROUPS = [
 const pendingMedia = {};
 const processed = new Set();
 
-// 🧹 CLEANUP
+// 🧹 LIMPIEZA
 setInterval(() => {
 const now = Date.now();
 for (const key in pendingMedia) {
-if (now - pendingMedia[key].time > 30 * 60 * 1000) {
+if (now - pendingMedia[key].time > 1800000) {
 delete pendingMedia[key];
 }
 }
-}, 10 * 60 * 1000);
+}, 600000);
 
 // 🟢 HEALTH
 app.get("/", (req, res) => {
@@ -47,8 +47,10 @@ try {
 const msg = req.body?.messages?.[0];
 if (!msg) return res.sendStatus(200);
 
-// 🚨 ignorar actions
-if (msg?.type === "action") return res.sendStatus(200);
+// 🚨 IGNORAR ACTION
+if (msg?.type === "action") {
+return res.sendStatus(200);
+}
 
 const chatId = msg?.chat_id;
 
@@ -58,13 +60,13 @@ if (msg?.from_me) return res.sendStatus(200);
 const employee = msg?.from_name || "Desconocido";
 
 // 🔑 anti duplicados
-const eventId = msg?.id || `${chatId}_${msg?.from}_${msg?.timestamp}`;
+const eventId = msg?.id || (chatId + "_" + msg?.from + "_" + msg?.timestamp);
 if (processed.has(eventId)) return res.sendStatus(200);
 processed.add(eventId);
 
 console.log("📩 EVENTO:", msg?.type);
 
-// 📸 IMAGE
+// 📸 IMAGEN
 if (msg?.type === "image") {
 
 const image = msg?.image?.preview;
@@ -78,7 +80,7 @@ time: Date.now()
 return res.sendStatus(200);
 }
 
-// ✍️ TEXT
+// ✍️ TEXTO
 const message =
 msg?.text?.body ||
 msg?.text ||
@@ -89,17 +91,35 @@ if (!message || message.trim().length < 2) return res.sendStatus(200);
 
 console.log("📨", message);
 
-// 🔗 IMAGE MATCH
+// 🔥 FIX CLAVE: detectar unidad REAL desde texto natural
+const unitMatch = message.toUpperCase().match(/(\d{2,4})\s*([AB])?/);
+
+let unitNumber = unitMatch?.[1] || null;
+let unitLetter = unitMatch?.[2] || "";
+
+// 🔥 detectar problema real
+const isIssue =
+message.toLowerCase().includes("maleta") ||
+message.toLowerCase().includes("sucio") ||
+message.toLowerCase().includes("falta") ||
+message.toLowerCase().includes("problema") ||
+message.toLowerCase().includes("todavía") ||
+message.toLowerCase().includes("hay") ||
+message.toLowerCase().includes("limpieza");
+
+// 🔗 imagen match
 const key = chatId + "_" + msg?.from;
 
 let image = null;
 
-if (pendingMedia[key] && Date.now() - pendingMedia[key].time < 20 * 60 * 1000) {
+if (pendingMedia[key] && Date.now() - pendingMedia[key].time < 1200000) {
 image = pendingMedia[key].image;
 delete pendingMedia[key];
 }
 
-// 🕒 TIME
+const hasImage = !!image;
+
+// 🕒 HORA
 const time = new Date().toLocaleString("en-US", {
 timeZone: "America/Mexico_City",
 hour: "2-digit",
@@ -107,7 +127,7 @@ minute: "2-digit",
 hour12: true
 });
 
-// 🤖 OPENAI (solo operaciones)
+// 🤖 IA (solo estructura, NO decisión crítica)
 let report = "";
 
 try {
@@ -121,19 +141,19 @@ role: "system",
 content: `
 Eres un sistema hotelero.
 
-Si NO es operativo responde EXACTO:
-NO REPORTABLE
+Responde SOLO si es operativo.
 
-Si es operativo responde:
-
+Formato:
 Unidad:
 Estado:
 Notas:
+
+Si no es operativo responde EXACTO: NO REPORTABLE
 `
 },
 {
 role: "user",
-content: `Empleado: ${employee}\nMensaje: ${message}`
+content: "Empleado: " + employee + "\nMensaje: " + message
 }
 ]
 },
@@ -146,23 +166,32 @@ Authorization: "Bearer " + OPENAI_API_KEY,
 );
 
 report = ai.data?.choices?.[0]?.message?.content?.trim() || "";
-} catch (e) {
-console.log("⚠️ OpenAI error:", e.message);
+
+} catch (err) {
+console.log("IA ERROR:", err.message);
+}
+
+// 🚫 SI IA bloquea pero hay señal real, NO lo mates
+const aiBlocked = report.toUpperCase().includes("NO REPORTABLE");
+
+if (aiBlocked && !isIssue && !unitNumber) {
 return res.sendStatus(200);
 }
 
-// 🚫 ignore
-if (report.toUpperCase().includes("NO REPORTABLE")) {
-return res.sendStatus(200);
-}
+// 🧠 construir unidad FINAL
+let finalUnit = unitNumber
+? unitNumber + (unitLetter ? " " + unitLetter : "")
+: "Unidad no especificada";
 
-// 📦 OPERACIONES
+// 📦 MENSAJE OPERACIONES
 const finalMessage =
-`👷 ${employee}
-🕒 ${time}
+"👷 " + employee +
+"\n🕒 " + time +
+"\n🏨 " + finalUnit +
+"\n\n" +
+(aiBlocked ? message : report);
 
-${report}`;
-
+// 📤 OPERACIONES
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
 {
@@ -170,36 +199,21 @@ to: OPERATIONS_GROUP_ID,
 body: finalMessage
 },
 {
-headers: { Authorization: "Bearer " + WHAPI_TOKEN }
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
 }
 );
 
-// 🔥 INSPECTORES (FIX REAL A/B)
-const upperMsg = message.toUpperCase();
+// 🔎 INSPECTORES (LISTA ONLY)
+const isList =
+message.toLowerCase().includes("lista") ||
+message.toLowerCase().includes("terminada") ||
+message.toLowerCase().includes("finalizada");
 
-// detectar unidad tipo 235 A y B
-const unitMatch = upperMsg.match(/(\d+)\s*([AB](?:\s*Y\s*[AB])?)?/i);
+if (isList && unitNumber) {
 
-let unitNumber = unitMatch?.[1];
-let abPart = unitMatch?.[2] || "";
-
-// normalizar A/B
-let suffix = "";
-
-if (abPart.includes("A") && abPart.includes("B")) {
-suffix = "A y B";
-} else if (abPart.includes("A")) {
-suffix = "A";
-} else if (abPart.includes("B")) {
-suffix = "B";
-}
-
-if (unitNumber && report.toUpperCase().includes("LISTA")) {
-
-let finalUnit = unitNumber;
-if (suffix) finalUnit += " " + suffix;
-
-const inspectionMsg = `${finalUnit} lista para inspeccionar`;
+let inspectionMsg = `${unitNumber}${unitLetter ? " " + unitLetter : ""} lista para inspeccionar`;
 
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
@@ -208,17 +222,19 @@ to: INSPECTION_GROUP_ID,
 body: inspectionMsg
 },
 {
-headers: { Authorization: "Bearer " + WHAPI_TOKEN }
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
 }
 );
 
-console.log("🔎 INSPECTORES:", inspectionMsg);
+console.log("🔎 INSPECTORES enviado:", inspectionMsg);
 }
 
 res.sendStatus(200);
 
 } catch (err) {
-console.log("❌ ERROR:", err.response?.data || err.message);
+console.log("ERROR:", err.response?.data || err.message);
 res.sendStatus(200);
 }
 
@@ -226,6 +242,7 @@ res.sendStatus(200);
 
 // 🚀 START
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
 console.log("Servidor hotelero listo");
 });
