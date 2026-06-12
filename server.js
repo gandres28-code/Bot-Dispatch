@@ -10,7 +10,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID;
 
-// 🧠 MEMORIA TEMPORAL (IMÁGENES)
+// 🧠 MEMORIA TEMPORAL DE IMÁGENES
 const pendingMedia = {};
 
 // 🟢 HEALTH CHECK
@@ -18,7 +18,7 @@ app.get("/", (req, res) => {
   res.send("Bot activo y funcionando ✅");
 });
 
-// 📩 WEBHOOK PRINCIPAL
+// 📩 WEBHOOK
 app.post("/webhook", async (req, res) => {
   try {
 
@@ -29,7 +29,6 @@ app.post("/webhook", async (req, res) => {
 
     const chatId = msg?.chat_id;
     const fromMe = msg?.from_me;
-
     const employee = msg?.from_name || "Desconocido";
 
     // 🚫 evitar loops
@@ -38,25 +37,41 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // 📸 SI ES IMAGEN → GUARDAR TEMPORALMENTE
+    const key = `${chatId}_${msg?.from}`;
+
+    console.log("🧩 KEY:", key);
+    console.log("📦 TYPE:", msg?.type);
+
+    // 📸 SI ES IMAGEN → GUARDAR
     if (msg?.type === "image") {
+
       const imageUrl =
         msg?.image?.url ||
+        msg?.image?.link ||
         msg?.media?.url ||
         msg?.file?.url ||
+        msg?.url ||
         null;
 
-      pendingMedia[chatId] = {
+      console.log("📸 RAW IMAGE:", JSON.stringify(msg, null, 2));
+      console.log("📸 IMAGE URL:", imageUrl);
+
+      if (!imageUrl) {
+        console.log("⚠️ Imagen sin URL válida");
+        return res.sendStatus(200);
+      }
+
+      pendingMedia[key] = {
         image: imageUrl,
         employee,
         time: Date.now()
       };
 
-      console.log("📸 Imagen guardada temporalmente");
+      console.log("📸 Imagen guardada:", key);
       return res.sendStatus(200);
     }
 
-    // ✍️ MENSAJE DE TEXTO
+    // ✍️ TEXTO
     const message =
       msg?.text?.body ||
       msg?.text ||
@@ -64,22 +79,24 @@ app.post("/webhook", async (req, res) => {
       "mensaje vacío";
 
     console.log("📨 MENSAJE:", message);
-    console.log("👷 EMPLEADO:", employee);
 
-    // 🚫 ignorar vacío
     if (!message || message === "mensaje vacío") {
       return res.sendStatus(200);
     }
 
-    // 🔗 VER SI HAY IMAGEN PENDIENTE
-    const pending = pendingMedia[chatId];
+    // 🔍 DEBUG MATCHING
+    console.log("🔍 BUSCANDO KEY:", key);
+    console.log("🧠 PENDING KEYS:", Object.keys(pendingMedia));
+
+    // 🔗 BUSCAR IMAGEN PENDIENTE
+    const pending = pendingMedia[key];
 
     let image = null;
 
-    if (pending && Date.now() - pending.time < 5 * 60 * 1000) {
+    if (pending && Date.now() - pending.time < 20 * 60 * 1000) {
       image = pending.image;
-      delete pendingMedia[chatId];
-      console.log("🔗 Imagen combinada con mensaje");
+      delete pendingMedia[key];
+      console.log("🔗 Imagen combinada correctamente");
     }
 
     // 🤖 OPENAI
@@ -91,18 +108,18 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres un sistema de housekeeping de hotel.
+Eres un sistema de housekeeping hotelero.
 
 IMPORTANTE:
-- El empleado ya viene identificado.
-- Si hay imagen, úsala como evidencia de limpieza.
+- El empleado ya está identificado.
+- Si hay imagen, es evidencia visual de limpieza.
 
 Extrae:
 - Unidad
 - Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
 - Notas
 
-Devuelve reporte claro para supervisión.
+Devuelve un reporte claro y profesional.
 `
           },
           {
@@ -110,7 +127,7 @@ Devuelve reporte claro para supervisión.
             content: `
 Empleado: ${employee}
 Mensaje: ${message}
-Imagen: ${image ? "SI HAY EVIDENCIA VISUAL" : "NO HAY IMAGEN"}
+Evidencia visual: ${image ? "SI" : "NO"}
 `
           }
         ]
