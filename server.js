@@ -22,6 +22,7 @@ const ALLOWED_GROUPS = [
 
 // 🧠 MEMORIA
 const pendingMedia = {};
+const processed = new Set();
 
 // 🧹 LIMPIEZA
 setInterval(() => {
@@ -47,9 +48,14 @@ try {
 const msg = req.body?.messages?.[0];
 if (!msg) return res.sendStatus(200);
 
+// 🚨 IGNORAR ACTION EVENTS
+if (msg?.type === "action") {
+console.log("⛔ action ignorado");
+return res.sendStatus(200);
+}
+
 const chatId = msg?.chat_id;
 
-// 🚫 SOLO GRUPOS AUTORIZADOS
 if (!ALLOWED_GROUPS.includes(chatId)) {
 return res.sendStatus(200);
 }
@@ -58,8 +64,13 @@ if (msg?.from_me) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
 
-// 🔑 KEY
-const key = chatId + "_" + msg?.from;
+// 🔑 EVENT ID (ANTI DUPLICADOS)
+const eventId = msg?.id || (chatId + "_" + msg?.from + "_" + msg?.timestamp);
+
+if (processed.has(eventId)) {
+return res.sendStatus(200);
+}
+processed.add(eventId);
 
 console.log("📩 EVENTO:", msg?.type);
 
@@ -70,8 +81,8 @@ const image = msg?.image?.preview;
 
 if (!image) return res.sendStatus(200);
 
-pendingMedia[key] = {
-image: image,
+pendingMedia[chatId + "_" + msg?.from] = {
+image,
 time: Date.now()
 };
 
@@ -85,11 +96,13 @@ msg?.text ||
 msg?.message ||
 "";
 
-if (!message) return res.sendStatus(200);
+if (!message || message.trim().length < 2) return res.sendStatus(200);
 
 console.log("📨", message);
 
 // 🔗 MATCH IMAGEN
+const key = chatId + "_" + msg?.from;
+
 let image = null;
 
 if (
@@ -131,13 +144,12 @@ Estado:
 Notas:
 
 Estados válidos:
-ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA, SALIDA, MANTENIMIENTO
+ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA, SALIDA, MANTENIMIENTO, TERMINADA, FINALIZADA
 `
 },
 {
 role: "user",
-content:
-"Empleado: " + employee + "\nMensaje: " + message
+content: "Empleado: " + employee + "\nMensaje: " + message
 }
 ]
 },
@@ -158,25 +170,14 @@ return res.sendStatus(200);
 }
 
 // 📦 MENSAJE OPERACIONES
-let finalMessage =
+const finalMessage =
 "👷 " + employee +
 "\n🕒 " + time +
 "\n\n" + report;
 
-if (hasImage) {
-finalMessage =
-"👷 " + employee +
-"\n📸 Foto recibida" +
-"\n🕒 " + time +
-"\n\n" + report;
-}
-
-// 📤 ENVIAR A OPERACIONES
-async function sendToOps() {
-const url = "https://gate.whapi.cloud/messages/text";
-
+// 📤 OPERACIONES
 await axios.post(
-url,
+"https://gate.whapi.cloud/messages/text",
 {
 to: OPERATIONS_GROUP_ID,
 body: finalMessage
@@ -187,16 +188,24 @@ Authorization: "Bearer " + WHAPI_TOKEN
 }
 }
 );
-}
 
-// 📤 ENVIAR A INSPECTORES
-async function sendToInspectors() {
-
+// 🔎 INSPECTORES (robusto)
 const unitMatch = report.match(/Unidad:\s*([A-Za-z0-9]+)/i);
-const stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
+let stateMatch = report.match(/Estado:\s*([A-Za-z]+)/i);
 
-const unit = unitMatch?.[1]?.toUpperCase();
-const state = stateMatch?.[1]?.toUpperCase();
+let unit = unitMatch?.[1]?.toUpperCase();
+let state = stateMatch?.[1]?.toUpperCase() || "";
+
+// normalización fuerte
+if (
+state.includes("LISTA") ||
+state.includes("TERMINADA") ||
+state.includes("FINALIZADA") ||
+state.includes("DONE")
+) {
+unit = unit;
+state = "LISTA";
+}
 
 if (unit && state === "LISTA") {
 
@@ -215,12 +224,8 @@ Authorization: "Bearer " + WHAPI_TOKEN
 }
 );
 
+console.log("🔎 enviado a inspectores:", inspectionMsg);
 }
-}
-
-// 🚀 EJECUCIÓN
-await sendToOps();
-await sendToInspectors();
 
 res.sendStatus(200);
 
