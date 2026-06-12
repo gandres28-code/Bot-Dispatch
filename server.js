@@ -7,85 +7,90 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-app.get("/", (req, res) => {
+app.get("/", (req,res)=>{
   res.send("Bot activo y funcionando ✅");
 });
 
 
-app.get("/webhook", (req, res) => {
-  res.send("Webhook listo ✅");
-});
-
-
-app.post("/webhook", async (req, res) => {
+app.post("/webhook", async (req,res)=>{
 
   try {
 
     const message =
-      req.body?.body ||
-      req.body?.text ||
-      req.body?.message ||
-      "Mensaje vacío";
+      req.body.body ||
+      req.body.text ||
+      "mensaje vacío";
 
 
-    console.log("Mensaje recibido:", message);
+    console.log("📩 Mensaje recibido:", message);
 
 
-    const response = await axios.post(
+    const ai = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        model: "gpt-4o-mini",
-        messages: [
+        model:"gpt-4o-mini",
+        messages:[
           {
-            role: "system",
-            content: `
+            role:"system",
+            content:
+            `
 Eres un asistente de operaciones de housekeeping.
 
-Analiza mensajes y extrae:
+Analiza mensajes.
+
+Extrae:
 - Unidad
-- Persona
+- Empleado
 - Estado
 - Problema
-- Solicitud
+- Hora
 
-Estados:
+Estados posibles:
 ENTRANDO
+LIMPIANDO
 LISTA
 INSPECCIONADA
 PROBLEMA
-NECESITA SUMINISTROS
+SUMINISTROS
 
-Responde en formato claro para un supervisor.
+Devuelve un reporte corto para supervisor.
 `
           },
           {
-            role: "user",
+            role:"user",
             content: message
           }
         ]
       },
       {
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
+        headers:{
+          Authorization:`Bearer ${OPENAI_API_KEY}`,
+          "Content-Type":"application/json"
         }
       }
     );
 
 
-    console.log(
-      response.data.choices[0].message.content
-    );
+    const result =
+      ai.data.choices[0].message.content;
 
 
-    res.sendStatus(200);
+    console.log("🤖 IA:", result);
+
+
+    res.json({
+      ok:true,
+      respuesta:result
+    });
 
 
   } catch(error){
 
-    console.log(error.response?.data || error.message);
+    console.log(
+      error.response?.data || error.message
+    );
 
-    res.sendStatus(200);
+    res.sendStatus(500);
 
   }
 
@@ -94,7 +99,6 @@ Responde en formato claro para un supervisor.
 
 const PORT = process.env.PORT || 3000;
 
-
-app.listen(PORT, () => {
-  console.log("Servidor corriendo en puerto", PORT);
+app.listen(PORT,()=>{
+ console.log("Servidor activo en",PORT);
 });
