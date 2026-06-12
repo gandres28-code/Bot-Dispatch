@@ -15,7 +15,7 @@ app.get("/", (req, res) => {
   res.send("Bot activo y funcionando ✅");
 });
 
-// 📩 WEBHOOK
+// 📩 WEBHOOK PRINCIPAL
 app.post("/webhook", async (req, res) => {
   try {
 
@@ -24,7 +24,7 @@ app.post("/webhook", async (req, res) => {
     console.log("📩 WEBHOOK RECIBIDO:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    // 🧠 EXTRAER INFO
+    // 🧠 EXTRAER DATOS WHAPI
     const chatId = msg?.chat_id;
     const fromMe = msg?.from_me;
 
@@ -34,21 +34,25 @@ app.post("/webhook", async (req, res) => {
       msg?.message ||
       "mensaje vacío";
 
-    console.log("📨 MENSAJE:", message);
+    // 👷 LIMPIADOR AUTOMÁTICO
+    const employee = msg?.from_name || "Desconocido";
 
-    // 🚫 1. EVITAR LOOP (mensajes del propio bot)
+    console.log("📨 MENSAJE:", message);
+    console.log("👷 EMPLEADO:", employee);
+
+    // 🚫 EVITAR LOOP (mensajes del bot)
     if (fromMe) {
       console.log("🚫 Ignorado: mensaje propio");
       return res.sendStatus(200);
     }
 
-    // 🚫 2. EVITAR LOOP (grupo OPERACIONES)
+    // 🚫 EVITAR LOOP (grupo operaciones)
     if (chatId === OPERATIONS_GROUP_ID) {
-      console.log("🚫 Ignorado: mensaje del grupo operaciones");
+      console.log("🚫 Ignorado: grupo operaciones");
       return res.sendStatus(200);
     }
 
-    // 🚫 3. EVITAR MENSAJES VACÍOS
+    // 🚫 MENSAJES VACÍOS
     if (!message || message === "mensaje vacío") {
       console.log("🚫 Mensaje vacío ignorado");
       return res.sendStatus(200);
@@ -63,20 +67,26 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content: `
-Eres un sistema de housekeeping de hotel.
+Eres un sistema de housekeeping hotelero.
 
-Extrae:
+IMPORTANTE:
+- El empleado ya viene identificado automáticamente.
+- No preguntes el nombre del empleado.
+
+Extrae del mensaje:
 - Unidad
-- Empleado
 - Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
 - Notas
 
-Devuelve un reporte corto y claro para supervisor.
+Devuelve un reporte claro para supervisión.
 `
           },
           {
             role: "user",
-            content: message
+            content: `
+Empleado: ${employee}
+Mensaje: ${message}
+`
           }
         ]
       },
@@ -90,15 +100,18 @@ Devuelve un reporte corto y claro para supervisor.
 
     const ai = response.data.choices[0].message.content;
 
-    console.log("🤖 IA RESULTADO:");
-    console.log(ai);
+    // 📦 FORMATO FINAL
+    const finalMessage = `👷 ${employee}\n\n${ai}`;
 
-    // 📲 ENVIAR AL GRUPO OPERACIONES
+    console.log("🤖 IA RESULTADO:");
+    console.log(finalMessage);
+
+    // 📲 ENVIAR A OPERACIONES
     await axios.post(
       "https://gate.whapi.cloud/messages/text",
       {
         to: OPERATIONS_GROUP_ID,
-        body: ai
+        body: finalMessage
       },
       {
         headers: {
@@ -116,12 +129,11 @@ Devuelve un reporte corto y claro para supervisor.
     console.log("❌ ERROR WEBHOOK:");
     console.log(error.response?.data || error.message);
 
-    // ⚠️ NUNCA ROMPER WHAPI
     res.sendStatus(200);
   }
 });
 
-// 🚀 SERVER START
+// 🚀 START SERVER
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
