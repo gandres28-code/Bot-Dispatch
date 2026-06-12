@@ -1,36 +1,78 @@
 const express = require("express");
+const axios = require("axios");
 
 const app = express();
 
-// 🔥 IMPORTANTE: permite leer JSON
 app.use(express.json());
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 app.get("/", (req, res) => {
   res.send("Bot activo ✅");
 });
 
-app.post("/webhook", (req, res) => {
+app.post("/webhook", async (req, res) => {
   try {
 
-    console.log("🔥 WEBHOOK RECIBIDO");
-    console.log("BODY:", req.body);
+    const message = req.body.body;
 
-    const message = req.body?.body;
+    console.log("📩 Mensaje:", message);
 
-    if (!message) {
-      return res.json({
-        error: "No message received"
-      });
-    }
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+Eres un sistema de operaciones de housekeeping.
+
+Extrae:
+- Unidad
+- Empleado
+- Estado
+- Problema
+- Acción
+
+Estados:
+ENTRANDO
+LIMPIANDO
+LISTA
+INSPECCIONADA
+PROBLEMA
+SUMINISTROS
+
+Devuelve un reporte limpio para supervisor.
+`
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const ai = response.data.choices[0].message.content;
+
+    console.log("🤖 IA:", ai);
 
     res.json({
       ok: true,
-      received: message
+      input: message,
+      ai: ai
     });
 
-  } catch (err) {
-    console.log("ERROR:", err.message);
-    res.status(500).send("error interno");
+  } catch (error) {
+    console.log(error.response?.data || error.message);
+    res.sendStatus(500);
   }
 });
 
