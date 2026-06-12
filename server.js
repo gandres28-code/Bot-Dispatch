@@ -24,43 +24,25 @@ app.post("/webhook", async (req, res) => {
 
     const msg = req.body?.messages?.[0];
 
-    console.log("📩 WEBHOOK RECIBIDO:");
-    console.log(JSON.stringify(req.body, null, 2));
-
     const chatId = msg?.chat_id;
     const fromMe = msg?.from_me;
     const employee = msg?.from_name || "Desconocido";
 
-    // 🚫 evitar loops
-    if (fromMe) {
-      console.log("🚫 Mensaje propio ignorado");
-      return res.sendStatus(200);
-    }
+    if (fromMe) return res.sendStatus(200);
 
     const key = `${chatId}_${msg?.from}`;
 
-    console.log("🧩 KEY:", key);
-    console.log("📦 TYPE:", msg?.type);
-
-    // 📸 IMAGEN (WHAPI REAL FIX)
+    // 📸 IMAGEN
     if (msg?.type === "image") {
 
       const imageBase64 = msg?.image?.preview;
 
-      console.log("📸 IMAGE RECEIVED (BASE64)");
-
-      if (!imageBase64) {
-        console.log("⚠️ No image preview found");
-        return res.sendStatus(200);
-      }
+      if (!imageBase64) return res.sendStatus(200);
 
       pendingMedia[key] = {
         image: imageBase64,
-        employee,
         time: Date.now()
       };
-
-      console.log("📸 Imagen guardada correctamente:", key);
 
       return res.sendStatus(200);
     }
@@ -72,16 +54,9 @@ app.post("/webhook", async (req, res) => {
       msg?.message ||
       "mensaje vacío";
 
-    console.log("📨 MENSAJE:", message);
+    if (!message || message === "mensaje vacío") return res.sendStatus(200);
 
-    if (!message || message === "mensaje vacío") {
-      return res.sendStatus(200);
-    }
-
-    // 🔗 BUSCAR IMAGEN PENDIENTE
-    console.log("🔍 BUSCANDO KEY:", key);
-    console.log("🧠 PENDING:", Object.keys(pendingMedia));
-
+    // 🔗 BUSCAR IMAGEN
     const pending = pendingMedia[key];
 
     let image = null;
@@ -89,7 +64,6 @@ app.post("/webhook", async (req, res) => {
     if (pending && Date.now() - pending.time < 20 * 60 * 1000) {
       image = pending.image;
       delete pendingMedia[key];
-      console.log("🔗 IMAGEN COMBINADA CON MENSAJE");
     }
 
     // 🤖 OPENAI
@@ -103,16 +77,14 @@ app.post("/webhook", async (req, res) => {
             content: `
 Eres un sistema de housekeeping hotelero.
 
-IMPORTANTE:
-- El empleado ya está identificado.
-- Si hay imagen, es evidencia visual.
+Reglas:
+- No menciones imágenes ni evidencia.
+- Solo reporta datos claros.
 
 Extrae:
 - Unidad
 - Estado (ENTRANDO, LIMPIANDO, LISTA, PROBLEMA, INSPECCIONADA)
 - Notas
-
-Devuelve reporte claro y profesional.
 `
           },
           {
@@ -120,7 +92,6 @@ Devuelve reporte claro y profesional.
             content: `
 Empleado: ${employee}
 Mensaje: ${message}
-Evidencia visual: ${image ? "SI (imagen recibida)" : "NO"}
 `
           }
         ]
@@ -135,40 +106,47 @@ Evidencia visual: ${image ? "SI (imagen recibida)" : "NO"}
 
     const ai = response.data.choices[0].message.content;
 
-    // 📦 MENSAJE FINAL
-    const finalMessage =
-`👷 ${employee}
+    // 📤 MENSAJE BASE
+    const finalMessage = `👷 ${employee}\n\n${ai}`;
 
-${ai}
-
-${image ? "📸 Evidencia visual incluida" : ""}`;
-
-    console.log("🤖 IA RESULTADO:");
-    console.log(finalMessage);
-
-    // 📤 ENVIAR A OPERACIONES
-    await axios.post(
-      "https://gate.whapi.cloud/messages/text",
-      {
-        to: OPERATIONS_GROUP_ID,
-        body: finalMessage
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHAPI_TOKEN}`,
-          "Content-Type": "application/json"
+    // 📡 SI HAY IMAGEN → ENVIAR COMO IMAGEN (SEPARADO)
+    if (image) {
+      await axios.post(
+        "https://gate.whapi.cloud/messages/image",
+        {
+          to: OPERATIONS_GROUP_ID,
+          image: image,
+          caption: finalMessage
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHAPI_TOKEN}`,
+            "Content-Type": "application/json"
+          }
         }
-      }
-    );
-
-    console.log("📤 ENVIADO A OPERACIONES");
+      );
+    } 
+    // 📄 SI NO HAY IMAGEN → SOLO TEXTO
+    else {
+      await axios.post(
+        "https://gate.whapi.cloud/messages/text",
+        {
+          to: OPERATIONS_GROUP_ID,
+          body: finalMessage
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHAPI_TOKEN}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }
 
     res.sendStatus(200);
 
   } catch (error) {
-    console.log("❌ ERROR:");
-    console.log(error.response?.data || error.message);
-
+    console.log("❌ ERROR:", error.response?.data || error.message);
     res.sendStatus(200);
   }
 });
