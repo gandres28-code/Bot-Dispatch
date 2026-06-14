@@ -14,15 +14,15 @@ const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
 
 const notion = new Client({ auth: NOTION_API_KEY });
 
-// 🏨 GRUPOS
+// 🏨 GRUPOS DE LIMPIEZA
 const ALLOWED_GROUPS = [
-"120363427834097943@g.us",
-"120363425416827106@g.us",
-"120363408939064520@g.us",
-"120363428515985008@g.us",
-"120363425695848832@g.us",
-"120363408317536314@g.us",
-"120363426540218225@g.us"
+"[120363427834097943@g.us](mailto:120363427834097943@g.us)",
+"[120363425416827106@g.us](mailto:120363425416827106@g.us)",
+"[120363408939064520@g.us](mailto:120363408939064520@g.us)",
+"[120363428515985008@g.us](mailto:120363428515985008@g.us)",
+"[120363425695848832@g.us](mailto:120363425695848832@g.us)",
+"[120363408317536314@g.us](mailto:120363408317536314@g.us)",
+"[120363426540218225@g.us](mailto:120363426540218225@g.us)"
 ];
 
 const processed = new Set();
@@ -32,7 +32,7 @@ processed.clear();
 }, 600000);
 
 app.get("/", (req, res) => {
-res.send("Bot hotelero PRO + Notion activo 🏨");
+res.send("🚀 Bot hotelero PRO + Notion + Inspectores activo");
 });
 
 function todayISO() {
@@ -48,10 +48,7 @@ function detectUnitInfo(message) {
 const match = message.match(/(\d{2,4})\s*(A\s*Y\s*B|B\s*Y\s*A|A|B)?/i);
 
 if (!match) {
-return {
-display: "",
-targets: []
-};
+return { display: "", targets: [] };
 }
 
 const number = match[1];
@@ -230,13 +227,12 @@ equals: todayISO()
 
 pages = pages.concat(response.results);
 cursor = response.has_more ? response.next_cursor : undefined;
-
 } while (cursor);
 
 return pages;
 }
 
-async function updateNotionRooms(unitTargets, intent, employee, message) {
+async function updateNotionRooms(unitTargets, intent, employee, message, customStatus = null) {
 if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
 console.log("⚠️ Notion env faltante");
 return;
@@ -298,7 +294,7 @@ content: employee
 }
 };
 
-const status = notionStatusFromIntent(intent);
+const status = customStatus || notionStatusFromIntent(intent);
 
 if (status) {
 props["Cleaning Status"] = {
@@ -341,13 +337,48 @@ page_id: page.id,
 properties: props
 });
 
-console.log("✅ Notion actualizado:", target);
+console.log("✅ Notion actualizado:", target, status || "");
 }
 }
-
 } catch (err) {
 console.log("❌ NOTION ERROR:", err.body || err.message);
 }
+}
+
+function detectInspectionIntent(lower) {
+const started =
+lower.includes("empezando inspeccion") ||
+lower.includes("empezando inspección") ||
+lower.includes("voy a inspeccionar") ||
+lower.includes("iniciando inspeccion") ||
+lower.includes("iniciando inspección") ||
+lower.includes("empecé inspeccion") ||
+lower.includes("empecé inspección") ||
+lower.includes("empece inspeccion") ||
+lower.includes("empece inspección") ||
+lower.includes("inspeccionando") ||
+lower.includes("inspección iniciada") ||
+lower.includes("inspeccion iniciada");
+
+const finished =
+lower.includes("inspeccion terminada") ||
+lower.includes("inspección terminada") ||
+lower.includes("termine inspeccion") ||
+lower.includes("terminé inspección") ||
+lower.includes("terminé inspeccion") ||
+lower.includes("termine inspección") ||
+lower.includes("aprobada") ||
+lower.includes("aprobado") ||
+lower.includes("ready for guest") ||
+lower.includes("lista para guest") ||
+lower.includes("listo para guest") ||
+lower.includes("lista para huesped") ||
+lower.includes("lista para huésped");
+
+if (started) return "INSPECTION_STARTED";
+if (finished) return "READY_FOR_GUEST";
+
+return "";
 }
 
 app.post("/webhook", async (req, res) => {
@@ -358,7 +389,11 @@ if (!msg) return res.sendStatus(200);
 if (msg?.type === "action" || msg?.from_me) return res.sendStatus(200);
 
 const chatId = msg?.chat_id;
-if (!ALLOWED_GROUPS.includes(chatId)) return res.sendStatus(200);
+
+const isCleaningGroup = ALLOWED_GROUPS.includes(chatId);
+const isInspectionGroup = chatId === INSPECTION_GROUP_ID;
+
+if (!isCleaningGroup && !isInspectionGroup) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
 
@@ -385,6 +420,78 @@ console.log("🧊 ignorado trivial");
 return res.sendStatus(200);
 }
 
+// 🔎 FLUJO DEL GRUPO DE INSPECTORES
+if (isInspectionGroup) {
+const inspectionIntent = detectInspectionIntent(lower);
+
+if (!inspectionIntent) {
+return res.sendStatus(200);
+}
+
+if (!unit) {
+await axios.post(
+"https://gate.whapi.cloud/messages/text",
+{
+to: chatId,
+body: "⚠️ ¿Podrían especificar la unidad que están inspeccionando?"
+},
+{
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
+}
+);
+
+return res.sendStatus(200);
+}
+
+let notionStatus = "";
+let opsText = "";
+
+if (inspectionIntent === "INSPECTION_STARTED") {
+notionStatus = "Inspection Started";
+opsText = employee + " empezó inspección en " + unit;
+}
+
+if (inspectionIntent === "READY_FOR_GUEST") {
+notionStatus = "Ready for Guest";
+opsText = employee + " terminó inspección en " + unit + ". Lista para guest.";
+}
+
+await updateNotionRooms(unitInfo.targets, "INSPECTION", employee, message, notionStatus);
+
+await axios.post(
+"https://gate.whapi.cloud/messages/text",
+{
+to: OPERATIONS_GROUP_ID,
+body: opsText
+},
+{
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
+}
+);
+
+console.log("✅ inspección enviada a operaciones");
+
+await axios.post(
+"https://gate.whapi.cloud/messages/text",
+{
+to: chatId,
+body: "✅ " + employee + ", ya lo reporté a operaciones"
+},
+{
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
+}
+);
+
+return res.sendStatus(200);
+}
+
+// 🧹 FLUJO DE LIMPIEZA
 const intent = getIntent(lower, unit);
 
 if (intent === "TRIVIAL") {
@@ -501,5 +608,5 @@ return res.sendStatus(200);
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-console.log("🚀 Bot hotelero PRO + Notion listo");
+console.log("🚀 Bot hotelero PRO + Notion + Inspectores listo");
 });
