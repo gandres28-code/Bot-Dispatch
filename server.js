@@ -315,7 +315,7 @@ async function updateNotionRoom(unit, action, employee, note) {
     }
 
     const props = {
-      "Last Whatsapp Update": {
+      "Last Whatsapp Update ": {
         date: {
           start: now,
         },
