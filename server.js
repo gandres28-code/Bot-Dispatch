@@ -50,6 +50,54 @@ app.get("/debug-env", (req, res) => {
   });
 });
 
+// 🔍 Ver qué databases puede ver Notion
+app.get("/test-notion", async (req, res) => {
+  try {
+    const response = await fetch("https://api.notion.com/v1/search", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify({
+        filter: {
+          property: "object",
+          value: "database",
+        },
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log("❌ NOTION SEARCH ERROR:", data);
+      return res.status(response.status).json(data);
+    }
+
+    const results = (data.results || []).map((db) => ({
+      id: db.id,
+      title:
+        db.title?.map((t) => t.plain_text).join("") ||
+        db.name ||
+        "Sin título",
+      url: db.url,
+      archived: db.archived,
+      in_trash: db.in_trash,
+    }));
+
+    res.json({
+      count: results.length,
+      results,
+    });
+  } catch (err) {
+    console.log("❌ TEST NOTION ERROR:", err.message);
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
+
 // 📅 Fecha de hoy
 function todayISO() {
   return new Intl.DateTimeFormat("en-CA", {
