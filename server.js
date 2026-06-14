@@ -1,8 +1,19 @@
-const express = require("express");
-const axios = require("axios");
+const express=require("express");
+const app=express();
 
-const app = express();
 app.use(express.json());
+
+app.post("/webhook",(req,res)=>{
+console.log("RECIBIDO");
+console.log(req.body);
+res.sendStatus(200);
+});
+
+app.get("/",(req,res)=>{
+res.send("OK");
+});
+
+app.listen(process.env.PORT||3000);
 
 // 🔑 ENV
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
