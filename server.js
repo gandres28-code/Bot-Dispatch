@@ -355,15 +355,14 @@ app.post("/action", async (req, res) => {
       success: true,
       message: `✅ Enviado correctamente: ${actionLabel(action)} - ${unit}`,
     });
-  } catch (error) {
-    console.error("❌ Error en /action:", error.message);
+  } } catch (error) {
+  console.error("❌ ERROR COMPLETO:", JSON.stringify(error, null, 2));
 
-    res.status(500).json({
-      success: false,
-      message: `❌ Error: ${error.message}`,
-    });
-  }
-});
+  res.status(500).json({
+    success: false,
+    message: error.message,
+    details: error.body || error,
+  });
 
 // ❤️ Health check para Render
 app.get("/health", (req, res) => {
