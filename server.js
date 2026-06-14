@@ -347,6 +347,8 @@ console.log("❌ NOTION ERROR:", err.body || err.message);
 
 function detectInspectionIntent(lower) {
 const started =
+lower.includes("empiezo inspeccion") ||
+lower.includes("empiezo inspección") ||
 lower.includes("empezando inspeccion") ||
 lower.includes("empezando inspección") ||
 lower.includes("voy a inspeccionar") ||
@@ -361,12 +363,14 @@ lower.includes("inspección iniciada") ||
 lower.includes("inspeccion iniciada");
 
 const finished =
+lower.includes("termino inspeccion") ||
+lower.includes("termino inspección") ||
+lower.includes("terminé inspeccion") ||
+lower.includes("terminé inspección") ||
+lower.includes("termine inspeccion") ||
+lower.includes("termine inspección") ||
 lower.includes("inspeccion terminada") ||
 lower.includes("inspección terminada") ||
-lower.includes("termine inspeccion") ||
-lower.includes("terminé inspección") ||
-lower.includes("terminé inspeccion") ||
-lower.includes("termine inspección") ||
 lower.includes("aprobada") ||
 lower.includes("aprobado") ||
 lower.includes("ready for guest") ||
