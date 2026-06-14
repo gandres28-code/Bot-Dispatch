@@ -364,6 +364,8 @@ lower.includes("inspeccionando") ||
 lower.includes("inicia inspeccion") ||
 lower.includes("inicio inspeccion") ||
 lower.includes("inspección iniciada") ||
+lower.includes("enpezando") ||
+lower.includes("empezando") ||
 lower.includes("inspeccion iniciada");
 
 const finished =
@@ -373,6 +375,7 @@ lower.includes("terminé inspeccion") ||
 lower.includes("terminé inspección") ||
 lower.includes("termine inspeccion") ||
 lower.includes("termine inspección") ||
+lower.includes("listo") ||
 lower.includes("inspeccion terminada") ||
 lower.includes("inspección terminada") ||
 lower.includes("aprobada") ||
