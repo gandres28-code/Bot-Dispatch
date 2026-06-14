@@ -76,6 +76,14 @@ lower.includes("entrando") ||
 lower.includes("entré") ||
 lower.includes("entre") ||
 lower.includes("llegué") ||
+lower.includes("vamos a empezar") ||
+lower.includes ("voy a empezar") ||
+lower.includes ("empezando") ||
+lower.includes ("iniciando") ||
+lower.includes ("comenze") ||
+lower.includes ("comence") ||
+lower.includes ("comenzando") ||
+lower.includes ("estoy en") ||
 lower.includes("llegue");
 
 const isCleaning =
