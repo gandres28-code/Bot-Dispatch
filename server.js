@@ -10,19 +10,44 @@ app.use(express.json());
 app.use(express.static("public"));
 
 // 🔑 ENV
-const NOTION_API_KEY = process.env.NOTION_API_KEY || "";
-const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
+const NOTION_API_KEY =
+  process.env.NOTION_API_KEY ||
+  process.env.NOTION_TOKEN ||
+  "";
+
+const NOTION_DATABASE_ID =
+  process.env.NOTION_DATABASE_ID ||
+  process.env.DATABASE_ID ||
+  "";
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+
+console.log("🔍 ENV CHECK");
+console.log("NOTION_API_KEY existe:", !!NOTION_API_KEY);
+console.log("NOTION_DATABASE_ID:", NOTION_DATABASE_ID ? "✅ Existe" : "❌ Falta");
+console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
 
 const notion = new Client({ auth: NOTION_API_KEY });
 
 const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
+  apiKey: OPENAI_API_KEY || "no-key",
 });
 
 // 🌎 Página principal
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/index.html");
+});
+
+// 🧪 Diagnóstico seguro
+app.get("/debug-env", (req, res) => {
+  res.json({
+    notionApiKeyExists: !!NOTION_API_KEY,
+    notionDatabaseIdExists: !!NOTION_DATABASE_ID,
+    openAiKeyExists: !!OPENAI_API_KEY,
+    notionDatabaseIdPreview: NOTION_DATABASE_ID
+      ? NOTION_DATABASE_ID.slice(0, 6) + "..." + NOTION_DATABASE_ID.slice(-6)
+      : null,
+  });
 });
 
 // 📅 Fecha de hoy
@@ -88,13 +113,11 @@ function notionStatusFromAction(action) {
   if (action === "CHECK") return "Inspection Started";
   if (action === "PASS") return "Ready for Guest";
   if (action === "FAIL") return "Needs Reclean";
-  if (action === "ISSUE") return null;
-  if (action === "SUPPLIES") return null;
 
   return null;
 }
 
-// 📝 Texto bonito para guardar
+// 📝 Texto bonito
 function actionLabel(action) {
   if (action === "START") return "🟢 Limpieza iniciada";
   if (action === "DONE") return "🔴 Limpieza terminada";
@@ -127,7 +150,7 @@ async function analyzeNoteWithAI(action, note) {
         {
           role: "system",
           content:
-            "Eres un asistente para una operación de housekeeping en hotel. Clasifica reportes de limpieza, inspección, mantenimiento y supplies. Responde únicamente JSON válido.",
+            "Clasifica reportes de housekeeping de hotel. Responde solo JSON válido.",
         },
         {
           role: "user",
@@ -135,7 +158,7 @@ async function analyzeNoteWithAI(action, note) {
 Acción: ${action}
 Nota: ${safeNote}
 
-Devuelve exactamente este JSON:
+Devuelve exactamente:
 {
   "category": "Cleaning | Maintenance | Supplies | Damage | Guest Item | Other",
   "priority": "Low | Normal | High | Urgent",
@@ -164,7 +187,9 @@ Devuelve exactamente este JSON:
 // ✅ Actualizar Notion
 async function updateNotionRoom(unit, action, employee, note) {
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
-    throw new Error("Faltan variables de Notion");
+    throw new Error(
+      "Faltan variables de Notion. Revisa en Render: NOTION_API_KEY y NOTION_DATABASE_ID"
+    );
   }
 
   const pages = await queryTodayRooms();
@@ -291,8 +316,6 @@ async function updateNotionRoom(unit, action, employee, note) {
         ],
       };
 
-      // OPCIONAL: Solo funcionará si tienes estas propiedades en Notion.
-      // Si no existen, bórralas.
       props["Issue Category"] = {
         select: {
           name: ai ? ai.category : "Other",
