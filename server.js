@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const { Client } = require("@notionhq/client");
 
 const app = express();
 app.use(express.json());
@@ -8,6 +9,10 @@ app.use(express.json());
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN || "";
 const OPERATIONS_GROUP_ID = process.env.OPERATIONS_GROUP_ID || "";
 const INSPECTION_GROUP_ID = process.env.INSPECTION_GROUP_ID || "";
+const NOTION_API_KEY = process.env.NOTION_API_KEY || "";
+const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
+
+const notion = new Client({ auth: NOTION_API_KEY });
 
 // 🏨 GRUPOS
 const ALLOWED_GROUPS = [
@@ -27,26 +32,73 @@ processed.clear();
 }, 600000);
 
 app.get("/", (req, res) => {
-res.send("Bot hotelero PRO activo 🏨");
+res.send("Bot hotelero PRO + Notion activo 🏨");
 });
 
-function detectUnit(message) {
+function todayISO() {
+return new Intl.DateTimeFormat("en-CA", {
+timeZone: "America/Mexico_City",
+year: "numeric",
+month: "2-digit",
+day: "2-digit"
+}).format(new Date());
+}
+
+function detectUnitInfo(message) {
 const match = message.match(/(\d{2,4})\s*(A\s*Y\s*B|B\s*Y\s*A|A|B)?/i);
+
+if (!match) {
+return {
+display: "",
+targets: []
+};
+}
+
+const number = match[1];
+let suffix = "";
+
+if (match[2]) {
+suffix = match[2].toUpperCase().replace(/\s+/g, " ").replace("B Y A", "A Y B");
+}
+
+if (suffix === "A Y B") {
+return {
+display: number + " A Y B",
+targets: [number + "A", number + "B"]
+};
+}
+
+if (suffix === "A" || suffix === "B") {
+return {
+display: number + " " + suffix,
+targets: [number + suffix]
+};
+}
+
+return {
+display: number,
+targets: [number]
+};
+}
+
+function normalizeRoom(value) {
+const text = String(value || "").toUpperCase();
+const match = text.match(/(\d{2,4})\s*([A-Z])?/);
 
 if (!match) return "";
 
-let unit = match[1];
+let room = match[1];
 
 if (match[2]) {
-let suffix = match[2]
-.toUpperCase()
-.replace(/\s+/g, " ")
-.replace("B Y A", "A Y B");
-
-unit += " " + suffix;
+room += match[2];
 }
 
-return unit;
+return room;
+}
+
+function roomDigits(value) {
+const match = String(value || "").match(/(\d{2,4})/);
+return match ? match[1] : "";
 }
 
 function isTrivialMessage(lower) {
@@ -76,15 +128,15 @@ lower.includes("entrando") ||
 lower.includes("entré") ||
 lower.includes("entre") ||
 lower.includes("llegué") ||
+lower.includes("llegue") ||
 lower.includes("vamos a empezar") ||
-lower.includes ("voy a empezar") ||
-lower.includes ("empezando") ||
-lower.includes ("iniciando") ||
-lower.includes ("comenze") ||
-lower.includes ("comence") ||
-lower.includes ("comenzando") ||
-lower.includes ("estoy en") ||
-lower.includes("llegue");
+lower.includes("voy a empezar") ||
+lower.includes("empezando") ||
+lower.includes("iniciando") ||
+lower.includes("comenze") ||
+lower.includes("comence") ||
+lower.includes("comenzando") ||
+lower.includes("estoy en");
 
 const isCleaning =
 lower.includes("limpiando") ||
@@ -153,6 +205,151 @@ if (intent === "ISSUE") return employee + " necesita atención en " + target + "
 return "";
 }
 
+function notionStatusFromIntent(intent) {
+if (intent === "ENTRY") return "In Progress";
+if (intent === "CLEANING") return "In Progress";
+if (intent === "READY") return "Cleaned - Awaiting Inspection";
+return null;
+}
+
+async function queryTodayRooms() {
+let pages = [];
+let cursor = undefined;
+
+do {
+const response = await notion.databases.query({
+database_id: NOTION_DATABASE_ID,
+start_cursor: cursor,
+filter: {
+property: "Date",
+date: {
+equals: todayISO()
+}
+}
+});
+
+pages = pages.concat(response.results);
+cursor = response.has_more ? response.next_cursor : undefined;
+
+} while (cursor);
+
+return pages;
+}
+
+async function updateNotionRooms(unitTargets, intent, employee, message) {
+if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
+console.log("⚠️ Notion env faltante");
+return;
+}
+
+if (!unitTargets || unitTargets.length === 0) {
+console.log("⚠️ No hay unidad para Notion");
+return;
+}
+
+try {
+const pages = await queryTodayRooms();
+
+for (const target of unitTargets) {
+const normalizedTarget = normalizeRoom(target);
+const targetDigits = roomDigits(target);
+
+let matches = pages.filter((page) => {
+const title = page.properties["Room Number"]?.title?.map(t => t.plain_text).join("") || "";
+return normalizeRoom(title) === normalizedTarget;
+});
+
+if (matches.length === 0) {
+matches = pages.filter((page) => {
+const title = page.properties["Room Number"]?.title?.map(t => t.plain_text).join("") || "";
+return roomDigits(title) === targetDigits;
+});
+}
+
+if (matches.length === 0) {
+console.log("⚠️ No encontré unidad en Notion:", target);
+continue;
+}
+
+for (const page of matches) {
+const props = {
+"Last Whatsapp Update": {
+date: {
+start: new Date().toISOString()
+}
+},
+"Last Message": {
+rich_text: [
+{
+text: {
+content: message
+}
+}
+]
+},
+"Last Update By": {
+rich_text: [
+{
+text: {
+content: employee
+}
+}
+]
+}
+};
+
+const status = notionStatusFromIntent(intent);
+
+if (status) {
+props["Cleaning Status"] = {
+select: {
+name: status
+}
+};
+}
+
+if (intent === "ENTRY" || intent === "CLEANING") {
+props["Started At"] = {
+date: {
+start: new Date().toISOString()
+}
+};
+}
+
+if (intent === "READY") {
+props["Finished At"] = {
+date: {
+start: new Date().toISOString()
+}
+};
+}
+
+if (intent === "ISSUE") {
+props["Issues Notes"] = {
+rich_text: [
+{
+text: {
+content: message
+}
+}
+]
+};
+}
+
+await notion.pages.update({
+page_id: page.id,
+properties: props
+});
+
+console.log("✅ Notion actualizado:", target);
+}
+}
+
+} catch (err) {
+console.log("❌ NOTION ERROR:", err.body || err.message);
+}
+}
+
 app.post("/webhook", async (req, res) => {
 try {
 const msg = req.body?.messages?.[0];
@@ -180,7 +377,8 @@ if (!message.trim()) return res.sendStatus(200);
 console.log("📨", message);
 
 const lower = message.toLowerCase();
-const unit = detectUnit(message);
+const unitInfo = detectUnitInfo(message);
+const unit = unitInfo.display;
 
 if (isTrivialMessage(lower)) {
 console.log("🧊 ignorado trivial");
@@ -258,6 +456,8 @@ Authorization: "Bearer " + WHAPI_TOKEN
 
 console.log("✅ operaciones enviado");
 
+await updateNotionRooms(unitInfo.targets, intent, employee, message);
+
 if (intent === "READY" && unit && INSPECTION_GROUP_ID) {
 const inspectionMsg = unit + " lista para inspeccionar";
 
@@ -301,5 +501,5 @@ return res.sendStatus(200);
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-console.log("🚀 Bot hotelero PRO listo");
+console.log("🚀 Bot hotelero PRO + Notion listo");
 });
