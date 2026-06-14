@@ -359,6 +359,8 @@ lower.includes("empecé inspección") ||
 lower.includes("empece inspeccion") ||
 lower.includes("empece inspección") ||
 lower.includes("inspeccionando") ||
+lower.includes("inicia inspeccion") ||
+lower.includes("inicio inspeccion") ||
 lower.includes("inspección iniciada") ||
 lower.includes("inspeccion iniciada");
 
@@ -375,6 +377,10 @@ lower.includes("aprobada") ||
 lower.includes("aprobado") ||
 lower.includes("ready for guest") ||
 lower.includes("lista para guest") ||
+lower.includes("listo para guest") ||
+lower.includes("lista") ||
+lower.includes("lista e inspeccionada") ||
+lower.includes("listas la inspeccion") ||
 lower.includes("listo para guest") ||
 lower.includes("lista para huesped") ||
 lower.includes("lista para huésped");
