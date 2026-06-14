@@ -19,13 +19,12 @@ const NOTION_DATABASE_ID =
   process.env.NOTION_DATABASE_ID ||
   process.env.DATABASE_ID ||
   "37f25b5a514a8092ad64e6a8d478dc76";
-;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
 console.log("🔍 ENV CHECK");
 console.log("NOTION_API_KEY existe:", !!NOTION_API_KEY);
-console.log("NOTION_DATABASE_ID:", NOTION_DATABASE_ID ? "✅ Existe" : "❌ Falta");
+console.log("NOTION_DATABASE_ID existe:", !!NOTION_DATABASE_ID);
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
 
 const notion = new Client({ auth: NOTION_API_KEY });
@@ -83,24 +82,54 @@ function roomDigits(value) {
   return match ? match[1] : "";
 }
 
+// 🔎 Query Notion API nueva para data sources
+async function notionDataSourceQuery(dataSourceId, body) {
+  const response = await fetch(
+    `https://api.notion.com/v1/data_sources/${dataSourceId}/query`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2025-09-03",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.log("❌ NOTION QUERY ERROR:", data);
+    throw new Error(data.message || "Error consultando Notion");
+  }
+
+  return data;
+}
+
 // 🔍 Buscar unidades de hoy en Notion
 async function queryTodayRooms() {
   let pages = [];
   let cursor = undefined;
 
   do {
-    const response = await notion.databases.query({
-      database_id: NOTION_DATABASE_ID,
-      start_cursor: cursor,
+    const body = {
+      page_size: 100,
       filter: {
         property: "Date",
         date: {
           equals: todayISO(),
         },
       },
-    });
+    };
 
-    pages = pages.concat(response.results);
+    if (cursor) {
+      body.start_cursor = cursor;
+    }
+
+    const response = await notionDataSourceQuery(NOTION_DATABASE_ID, body);
+
+    pages = pages.concat(response.results || []);
     cursor = response.has_more ? response.next_cursor : undefined;
   } while (cursor);
 
@@ -189,7 +218,7 @@ Devuelve exactamente:
 async function updateNotionRoom(unit, action, employee, note) {
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
     throw new Error(
-      "Faltan variables de Notion. Revisa en Render: NOTION_API_KEY y NOTION_DATABASE_ID"
+      "Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID"
     );
   }
 
@@ -355,14 +384,15 @@ app.post("/action", async (req, res) => {
       success: true,
       message: `✅ Enviado correctamente: ${actionLabel(action)} - ${unit}`,
     });
-  } } catch (error) {
-  console.error("❌ ERROR COMPLETO:", JSON.stringify(error, null, 2));
+  } catch (error) {
+    console.error("❌ Error en /action:", error.message);
 
-  res.status(500).json({
-    success: false,
-    message: error.message,
-    details: error.body || error,
-  });
+    res.status(500).json({
+      success: false,
+      message: `❌ Error: ${error.message}`,
+    });
+  }
+});
 
 // ❤️ Health check para Render
 app.get("/health", (req, res) => {
