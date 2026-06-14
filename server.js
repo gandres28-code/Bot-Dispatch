@@ -50,7 +50,31 @@ app.get("/debug-env", (req, res) => {
   });
 });
 
-// 🔍 Test de Notion con API nueva
+// 🔍 Ver TODO lo que Hotel Bot puede ver
+app.get("/test-page", async (req, res) => {
+  try {
+    const response = await fetch("https://api.notion.com/v1/search", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify({})
+    });
+
+    const data = await response.json();
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
+
+// 🔍 Ver databases visibles
 app.get("/test-notion", async (req, res) => {
   try {
     const response = await fetch("https://api.notion.com/v1/search", {
@@ -58,13 +82,26 @@ app.get("/test-notion", async (req, res) => {
       headers: {
         Authorization: `Bearer ${NOTION_API_KEY}`,
         "Content-Type": "application/json",
-        "Notion-Version": "2025-09-03",
+        "Notion-Version": "2022-06-28",
       },
       body: JSON.stringify({
-        query: "",
-        page_size: 20,
+        filter: {
+          property: "object",
+          value: "database",
+        },
       }),
     });
+
+    const data = await response.json();
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+    });
+  }
+});
 
     const data = await response.json();
 
