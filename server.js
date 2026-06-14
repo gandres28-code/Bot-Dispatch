@@ -2,7 +2,6 @@ const express = require("express");
 const axios = require("axios");
 
 const app = express();
-
 app.use(express.json());
 
 // 🔑 ENV
@@ -12,407 +11,245 @@ const INSPECTION_GROUP_ID = process.env.INSPECTION_GROUP_ID || "";
 
 // 🏨 GRUPOS
 const ALLOWED_GROUPS = [
-"[120363427834097943@g.us](mailto:120363427834097943@g.us)",
-"[120363425416827106@g.us](mailto:120363425416827106@g.us)",
-"[120363408939064520@g.us](mailto:120363408939064520@g.us)",
-"[120363428515985008@g.us](mailto:120363428515985008@g.us)",
-"[120363425695848832@g.us](mailto:120363425695848832@g.us)",
-"[120363408317536314@g.us](mailto:120363408317536314@g.us)"
+"120363427834097943@g.us",
+"120363425416827106@g.us",
+"120363408939064520@g.us",
+"120363428515985008@g.us",
+"120363425695848832@g.us",
+"120363408317536314@g.us",
+"120363426540218225@g.us"
 ];
 
 // 🧠 MEMORIA
-const pendingMedia = {};
 const processed = new Set();
 
-// 🧹 limpieza
+// 🧹 LIMPIEZA
 setInterval(() => {
-
-const now = Date.now();
-
-for (const k in pendingMedia) {
-
-if (
-now -
-pendingMedia[k].time >
-1800000
-) {
-
-delete pendingMedia[k];
-
-}
-
-}
-
 processed.clear();
-
-},600000);
+}, 600000);
 
 // 🟢 HEALTH
-app.get("/",(req,res)=>{
-
-res.send(
-"Bot hotelero activo ✅"
-);
-
+app.get("/", (req, res) => {
+res.send("Bot hotelero PRO activo 🏨");
 });
 
+// ======================================================
+// 🧠 MOTOR INTELIGENTE DE INTENCIÓN
+// ======================================================
+
+function detectIntent(text) {
+const lower = text.toLowerCase();
+
+// ❌ trivial chat
+const trivial =
+lower.match(/^(hola|ok|gracias|jaja|buenas|que tal|hey)$/);
+
+// 🧠 operación real (lo importante)
+const operational =
+/\d{2,4}/.test(lower) || // tiene unidad
+lower.includes("unidad") ||
+lower.includes("habitación") ||
+lower.includes("cuarto") ||
+lower.includes("limpi") ||
+lower.includes("entr") ||
+lower.includes("sal") ||
+lower.includes("falta") ||
+lower.includes("hay") ||
+lower.includes("necesito") ||
+lower.includes("problema") ||
+lower.includes("mantenimiento") ||
+lower.includes("todavía") ||
+lower.includes("aún");
+
+// 🎯 clasificación
+if (trivial) return "TRIVIAL";
+if (operational) return "OPERATIONAL";
+
+return "UNKNOWN";
+}
+
+// ======================================================
 // 📩 WEBHOOK
-app.post(
-"/webhook",
-async(req,res)=>{
+// ======================================================
 
-try{
+app.post("/webhook", async (req, res) => {
 
-const msg =
-req.body?.messages?.[0];
+try {
 
-if(!msg)
-return res.sendStatus(200);
+const msg = req.body?.messages?.[0];
+if (!msg) return res.sendStatus(200);
 
-if(
-msg?.type==="action"||
-msg?.from_me
-){
-return res.sendStatus(200);
-}
+if (msg?.type === "action" || msg?.from_me) return res.sendStatus(200);
 
-const chatId =
-msg?.chat_id;
+const chatId = msg?.chat_id;
 
-if(
-!ALLOWED_GROUPS.includes(
-chatId
-)
-){
-return res.sendStatus(200);
-}
+if (!ALLOWED_GROUPS.includes(chatId)) return res.sendStatus(200);
 
-const employee =
-msg?.from_name ||
-"Desconocido";
+const employee = msg?.from_name || "Desconocido";
 
-const eventId =
-msg?.id ||
-(
-chatId+
-msg?.timestamp
-);
+const eventId = msg?.id || (chatId + "_" + msg?.timestamp);
+if (processed.has(eventId)) return res.sendStatus(200);
+processed.add(eventId);
 
-if(
-processed.has(
-eventId
-)
-){
-return res.sendStatus(200);
-}
-
-processed.add(
-eventId
-);
-
-// 📸 FOTO
-if(
-msg?.type==="image"
-){
-
-pendingMedia[
-chatId+
-"_"+msg?.from
-]={
-time:Date.now()
-};
-
-return res.sendStatus(200);
-
-}
-
-// ✍️ MENSAJE
+// 📨 mensaje
 const message =
-msg?.text?.body||
-msg?.text||
-msg?.message||
+msg?.text?.body ||
+msg?.text ||
+msg?.message ||
 "";
 
-if(
-!message.trim()
-){
+if (!message.trim()) return res.sendStatus(200);
+
+console.log("📨", message);
+
+// 🧠 detectar intención
+const intent = detectIntent(message);
+
+// 🚫 ignorar charla trivial
+if (intent === "TRIVIAL") {
+console.log("🧊 ignorado trivial");
 return res.sendStatus(200);
 }
 
-console.log(
-"📨",
-message
-);
+// ❓ si no entiende pero parece operación → pedir aclaración
+if (intent === "UNKNOWN") {
 
-const lower =
-message.toLowerCase();
-
-// 🔎 UNIDAD
-const unitMatch =
-message.match(
-/(\d{2,4})\s*(A\s*Y\s*B|B\s*Y\s*A|A|B)?/i
-);
-
-let unit="";
-
-if(unitMatch){
-
-unit=
-(unitMatch[1]||"")
-.trim();
-
-if(unitMatch[2]){
-
-unit+=
-" "+
-unitMatch[2]
-.toUpperCase()
-.replace(
-/\s+/g,
-" "
-);
-
-}
-
-}
-
-// 🚦 ESTADO
-let report="";
-
-// ENTRADA
-if(
-
-lower.includes("entre")||
-lower.includes("entré")||
-lower.includes("entrando")||
-lower.includes("ya llegue")||
-lower.includes("ya llegué")
-
-){
-
-report=
-employee+
-" entró a "+
-(unit||"la unidad");
-
-}
-
-// LIMPIEZA
-else if(
-
-lower.includes("limpiando")||
-lower.includes("empece")||
-lower.includes("empecé")||
-lower.includes("trabajando")
-
-){
-
-report=
-employee+
-" está limpiando "+
-(unit||"la unidad");
-
-}
-
-// LISTA
-else if(
-
-lower.includes("lista")||
-lower.includes("terminada")||
-lower.includes("finalizada")
-
-){
-
-report=
-employee+
-" terminó "+
-(unit||"la unidad");
-
-}
-
-// SALIDA
-else if(
-
-lower.includes("salgo")||
-lower.includes("salí")||
-lower.includes("sali")
-
-){
-
-report=
-employee+
-" salió de "+
-(unit||"la unidad");
-
-}
-
-// NECESITA ALGO
-else if(
-
-lower.includes("hay")||
-lower.includes("falta")||
-lower.includes("maleta")||
-lower.includes("equipaje")||
-lower.includes("problema")||
-lower.includes("sucio")||
-lower.includes("mantenimiento")||
-lower.includes("necesito")
-
-){
-
-report=
-employee+
-" necesita atención en "+
-(unit||"la unidad");
-
-}
-
-// ignorar casual
-else{
-
-return res.sendStatus(200);
-
-}
-
-// 🕒 HORA
-const time =
-new Date()
-.toLocaleTimeString(
-"en-US",
+await axios.post(
+"https://gate.whapi.cloud/messages/text",
 {
-timeZone:
-"America/Mexico_City",
-hour:"2-digit",
-minute:"2-digit",
-hour12:true
+to: chatId,
+body: `👷 ${employee} necesito un poco más de detalle para poder reportarlo correctamente (unidad + qué sucede)`
+},
+{
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
 }
 );
+
+return res.sendStatus(200);
+}
+
+// 🔎 detectar unidad
+const unitMatch = message.match(/(\d{2,4})\s*(A|B|A\s*Y\s*B|B\s*Y\s*A)?/i);
+
+let unit = "";
+
+if (unitMatch) {
+unit = unitMatch[1];
+if (unitMatch[2]) {
+unit += " " + unitMatch[2].toUpperCase().replace(/\s+/g, " ");
+}
+}
+
+// 🧠 estados humanos
+const lower = message.toLowerCase();
+
+let action = "";
+
+if (lower.includes("entr") || lower.includes("acabo de entrar") || lower.includes("lleg")) {
+action = "ENTRÓ A";
+}
+else if (lower.includes("limpi")) {
+action = "LIMPIANDO";
+}
+else if (lower.includes("lista") || lower.includes("terminad") || lower.includes("finalizad")) {
+action = "TERMINÓ";
+}
+else if (lower.includes("sal")) {
+action = "SALIÓ DE";
+}
+else if (lower.includes("falta") || lower.includes("hay") || lower.includes("problema") || lower.includes("necesito")) {
+action = "NECESITA ATENCIÓN EN";
+}
+else {
+action = "REVISAR";
+}
+
+// 🕒 hora
+const time = new Date().toLocaleTimeString("en-US", {
+timeZone: "America/Mexico_City",
+hour: "2-digit",
+minute: "2-digit",
+hour12: true
+});
+
+// 📦 MENSAJE OPERACIONES (ULTRA SIMPLE)
+const opsMessage =
+`👷 ${employee}
+🕒 ${time}
+🏨 ${action} ${unit || "unidad no especificada"}`;
 
 // 📤 OPERACIONES
 await axios.post(
-
 "https://gate.whapi.cloud/messages/text",
-
 {
-
-to:
-OPERATIONS_GROUP_ID,
-
-body:
-
-"🕒 "+
-time+
-
-"\n\n"+
-
-report
-
+to: OPERATIONS_GROUP_ID,
+body: opsMessage
 },
-
 {
-
-headers:{
-
-Authorization:
-"Bearer "+
-WHAPI_TOKEN
-
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
 }
-
 }
-
 );
 
-console.log(
-"✅ operaciones"
-);
+console.log("✅ operaciones enviado");
 
 // 🔎 INSPECTORES
-const ready =
+if (
+lower.includes("lista") ||
+lower.includes("terminad") ||
+lower.includes("finalizad")
+) {
 
-lower.includes(
-"lista"
-)
+if (unit) {
 
-||
-
-lower.includes(
-"terminada"
-)
-
-||
-
-lower.includes(
-"finalizada"
-);
-
-if(
-ready &&
-unit &&
-INSPECTION_GROUP_ID
-){
+const inspectionMsg = `${unit} lista para inspeccionar`;
 
 await axios.post(
-
 "https://gate.whapi.cloud/messages/text",
-
 {
-
-to:
-INSPECTION_GROUP_ID,
-
-body:
-unit+
-" lista para inspeccionar"
-
+to: INSPECTION_GROUP_ID,
+body: inspectionMsg
 },
-
 {
-
-headers:{
-
-Authorization:
-"Bearer "+
-WHAPI_TOKEN
-
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
 }
-
 }
-
 );
 
-console.log(
-"🔎 inspectores"
-);
-
+console.log("🔎 inspectores enviado");
+}
 }
 
-return res.sendStatus(200);
-
-}catch(err){
-
-console.log(
-err.response?.data||
-err.message
+// 🤖 RESPUESTA AUTOMÁTICA SOLO CUANDO IMPORTA
+await axios.post(
+"https://gate.whapi.cloud/messages/text",
+{
+to: chatId,
+body: `✅ ${employee}, ya lo reporté a operaciones`
+},
+{
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
+}
 );
 
 return res.sendStatus(200);
 
+} catch (err) {
+console.log("❌ ERROR:", err.response?.data || err.message);
+return res.sendStatus(200);
 }
 
 });
 
-const PORT=
-process.env.PORT||
-3000;
+// 🚀 START
+const PORT = process.env.PORT || 3000;
 
-app.listen(
-PORT,
-()=>{
-
-console.log(
-"Servidor hotelero listo"
-);
-
-}
-);
+app.listen(PORT, () => {
+console.log("🚀 Bot hotelero PRO listo");
+});
