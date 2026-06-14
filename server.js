@@ -18,7 +18,8 @@ const NOTION_API_KEY =
 const NOTION_DATABASE_ID =
   process.env.NOTION_DATABASE_ID ||
   process.env.DATABASE_ID ||
-  "";
+  "37f25b5a514a8092ad64e6a8d478dc76";
+;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
