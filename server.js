@@ -133,6 +133,7 @@ lower.includes("iniciando") ||
 lower.includes("comenze") ||
 lower.includes("comence") ||
 lower.includes("comenzando") ||
+lower.includes("Voy a la") ||
 lower.includes("estoy en");
 
 const isCleaning =
@@ -146,6 +147,7 @@ lower.includes("lista") ||
 lower.includes("terminada") ||
 lower.includes("finalizada") ||
 lower.includes("terminé") ||
+lower.includes("lista la") ||
 lower.includes("termine");
 
 const isExit =
