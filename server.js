@@ -50,7 +50,7 @@ app.get("/debug-env", (req, res) => {
   });
 });
 
-// 🔍 Ver qué databases puede ver Notion
+// 🔍 Test de Notion con API nueva
 app.get("/test-notion", async (req, res) => {
   try {
     const response = await fetch("https://api.notion.com/v1/search", {
@@ -58,13 +58,11 @@ app.get("/test-notion", async (req, res) => {
       headers: {
         Authorization: `Bearer ${NOTION_API_KEY}`,
         "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": "2025-09-03",
       },
       body: JSON.stringify({
-        filter: {
-          property: "object",
-          value: "database",
-        },
+        query: "",
+        page_size: 20,
       }),
     });
 
@@ -75,15 +73,18 @@ app.get("/test-notion", async (req, res) => {
       return res.status(response.status).json(data);
     }
 
-    const results = (data.results || []).map((db) => ({
-      id: db.id,
+    const results = (data.results || []).map((item) => ({
+      object: item.object,
+      id: item.id,
       title:
-        db.title?.map((t) => t.plain_text).join("") ||
-        db.name ||
+        item.title?.map((t) => t.plain_text).join("") ||
+        item.properties?.title?.title?.map((t) => t.plain_text).join("") ||
+        item.properties?.Name?.title?.map((t) => t.plain_text).join("") ||
+        item.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") ||
         "Sin título",
-      url: db.url,
-      archived: db.archived,
-      in_trash: db.in_trash,
+      url: item.url || null,
+      archived: item.archived || false,
+      in_trash: item.in_trash || false,
     }));
 
     res.json({
@@ -117,9 +118,7 @@ function normalizeRoom(value) {
 
   let room = match[1];
 
-  if (match[2]) {
-    room += match[2];
-  }
+  if (match[2]) room += match[2];
 
   return room;
 }
@@ -171,9 +170,7 @@ async function queryTodayRooms() {
       },
     };
 
-    if (cursor) {
-      body.start_cursor = cursor;
-    }
+    if (cursor) body.start_cursor = cursor;
 
     const response = await notionDataSourceQuery(NOTION_DATABASE_ID, body);
 
