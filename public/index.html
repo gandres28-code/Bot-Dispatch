@@ -1,1 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Panel de Limpieza</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f4f4f4; }
+    h2 { text-align: center; }
+    input, textarea {
+      width: 100%;
+      padding: 15px;
+      margin: 10px 0;
+      font-size: 18px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      padding: 18px;
+      margin: 10px 0;
+      font-size: 19px;
+      border: none;
+      border-radius: 12px;
+      color: white;
+    }
+    .start { background: #16a34a; }
+    .done { background: #dc2626; }
+    .issue { background: #f59e0b; }
+    .supplies { background: #2563eb; }
+    .check { background: #7c3aed; }
+    .pass { background: #059669; }
+    .fail { background: #b91c1c; }
+    #status { text-align: center; font-weight: bold; font-size: 18px; }
+  </style>
+</head>
+<body>
 
+  <h2>🏠 Panel de Limpieza</h2>
+
+  <input id="name" placeholder="Tu nombre">
+  <input id="unit" placeholder="Unidad, ejemplo: 331A">
+  <textarea id="note" placeholder="Nota opcional"></textarea>
+
+  <button class="start" onclick="sendAction('START')">🟢 Empezar limpieza</button>
+  <button class="done" onclick="sendAction('DONE')">🔴 Terminar limpieza</button>
+  <button class="issue" onclick="sendAction('ISSUE')">⚠️ Reportar problema</button>
+  <button class="supplies" onclick="sendAction('SUPPLIES')">🧺 Pedir supplies</button>
+
+  <h2>🔍 Panel de Inspección</h2>
+
+  <button class="check" onclick="sendAction('CHECK')">🔍 Empezar inspección</button>
+  <button class="pass" onclick="sendAction('PASS')">✅ Aprobar unidad</button>
+  <button class="fail" onclick="sendAction('FAIL')">❌ Rechazar unidad</button>
+
+  <p id="status"></p>
+
+<script>
+async function sendAction(action) {
+  const name = document.getElementById("name").value.trim();
+  const unit = document.getElementById("unit").value.trim().toUpperCase();
+  const note = document.getElementById("note").value.trim();
+
+  if (!name) {
+    alert("Escribe tu nombre");
+    return;
+  }
+
+  if (!unit) {
+    alert("Escribe la unidad");
+    return;
+  }
+
+  const response = await fetch("/action", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ action, unit, note, name })
+  });
+
+  const data = await response.json();
+  document.getElementById("status").innerText = data.message;
+}
+</script>
+
+</body>
+</html>
