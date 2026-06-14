@@ -1,18 +1,11 @@
 {
   "name": "cleaning-panel",
   "version": "1.0.0",
-  "description": "Cleaning Operations Panel + Notion",
+  "description": "Housekeeping Operations Panel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [
-    "notion",
-    "housekeeping",
-    "cleaning",
-    "hotel",
-    "operations"
-  ],
   "author": "Andres Garcia",
   "license": "ISC",
   "dependencies": {
@@ -20,5 +13,4 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2"
   }
-}
 }
