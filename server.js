@@ -20,69 +20,139 @@ const ALLOWED_GROUPS = [
 "120363426540218225@g.us"
 ];
 
-// 🧠 MEMORIA
 const processed = new Set();
 
-// 🧹 LIMPIEZA
 setInterval(() => {
 processed.clear();
 }, 600000);
 
-// 🟢 HEALTH
 app.get("/", (req, res) => {
 res.send("Bot hotelero PRO activo 🏨");
 });
 
-// ======================================================
-// 🧠 MOTOR INTELIGENTE DE INTENCIÓN
-// ======================================================
+function detectUnit(message) {
+const match = message.match(/(\d{2,4})\s*(A\s*Y\s*B|B\s*Y\s*A|A|B)?/i);
 
-function detectIntent(text) {
-const lower = text.toLowerCase();
+if (!match) return "";
 
-// ❌ trivial chat
-const trivial =
-lower.match(/^(hola|ok|gracias|jaja|buenas|que tal|hey)$/);
+let unit = match[1];
 
-// 🧠 operación real (lo importante)
-const operational =
-/\d{2,4}/.test(lower) || // tiene unidad
-lower.includes("unidad") ||
-lower.includes("habitación") ||
-lower.includes("cuarto") ||
-lower.includes("limpi") ||
-lower.includes("entr") ||
-lower.includes("sal") ||
-lower.includes("falta") ||
-lower.includes("hay") ||
-lower.includes("necesito") ||
-lower.includes("problema") ||
-lower.includes("mantenimiento") ||
-lower.includes("todavía") ||
-lower.includes("aún");
+if (match[2]) {
+let suffix = match[2]
+.toUpperCase()
+.replace(/\s+/g, " ")
+.replace("B Y A", "A Y B");
 
-// 🎯 clasificación
-if (trivial) return "TRIVIAL";
-if (operational) return "OPERATIONAL";
-
-return "UNKNOWN";
+unit += " " + suffix;
 }
 
-// ======================================================
-// 📩 WEBHOOK
-// ======================================================
+return unit;
+}
+
+function isTrivialMessage(lower) {
+const clean = lower.trim();
+
+return (
+clean === "hola" ||
+clean === "ok" ||
+clean === "okay" ||
+clean === "gracias" ||
+clean === "thanks" ||
+clean === "jaja" ||
+clean === "👍" ||
+clean === "👌" ||
+clean === "buenos dias" ||
+clean === "buenos días" ||
+clean === "buenas"
+);
+}
+
+function getIntent(lower, unit) {
+const isEntry =
+lower.includes("acabo de entrar") ||
+lower.includes("ya entré") ||
+lower.includes("ya entre") ||
+lower.includes("entrando") ||
+lower.includes("entré") ||
+lower.includes("entre") ||
+lower.includes("llegué") ||
+lower.includes("llegue");
+
+const isCleaning =
+lower.includes("limpiando") ||
+lower.includes("empecé") ||
+lower.includes("empece") ||
+lower.includes("trabajando");
+
+const isReady =
+lower.includes("lista") ||
+lower.includes("terminada") ||
+lower.includes("finalizada") ||
+lower.includes("terminé") ||
+lower.includes("termine");
+
+const isExit =
+lower.includes("salí") ||
+lower.includes("sali") ||
+lower.includes("salgo") ||
+lower.includes("ya salí") ||
+lower.includes("ya sali");
+
+const isIssue =
+lower.includes("hay") ||
+lower.includes("falta") ||
+lower.includes("maleta") ||
+lower.includes("equipaje") ||
+lower.includes("problema") ||
+lower.includes("sucio") ||
+lower.includes("mantenimiento") ||
+lower.includes("necesito") ||
+lower.includes("toalla") ||
+lower.includes("papel") ||
+lower.includes("basura") ||
+lower.includes("dañado") ||
+lower.includes("roto") ||
+lower.includes("no funciona");
+
+const hasOperationalHint =
+lower.includes("unidad") ||
+lower.includes("cuarto") ||
+lower.includes("habitación") ||
+lower.includes("habitacion") ||
+lower.includes("room") ||
+unit;
+
+if (isEntry) return "ENTRY";
+if (isCleaning) return "CLEANING";
+if (isReady) return "READY";
+if (isExit) return "EXIT";
+if (isIssue) return "ISSUE";
+
+if (hasOperationalHint) return "INCOMPLETE";
+
+return "TRIVIAL";
+}
+
+function buildReport(employee, unit, intent, originalMessage) {
+const target = unit || "la unidad";
+
+if (intent === "ENTRY") return employee + " entró a " + target;
+if (intent === "CLEANING") return employee + " está limpiando " + target;
+if (intent === "READY") return employee + " terminó " + target;
+if (intent === "EXIT") return employee + " salió de " + target;
+if (intent === "ISSUE") return employee + " necesita atención en " + target + ": " + originalMessage;
+
+return "";
+}
 
 app.post("/webhook", async (req, res) => {
-
 try {
-
 const msg = req.body?.messages?.[0];
 if (!msg) return res.sendStatus(200);
 
 if (msg?.type === "action" || msg?.from_me) return res.sendStatus(200);
 
 const chatId = msg?.chat_id;
-
 if (!ALLOWED_GROUPS.includes(chatId)) return res.sendStatus(200);
 
 const employee = msg?.from_name || "Desconocido";
@@ -91,7 +161,6 @@ const eventId = msg?.id || (chatId + "_" + msg?.timestamp);
 if (processed.has(eventId)) return res.sendStatus(200);
 processed.add(eventId);
 
-// 📨 mensaje
 const message =
 msg?.text?.body ||
 msg?.text ||
@@ -102,23 +171,26 @@ if (!message.trim()) return res.sendStatus(200);
 
 console.log("📨", message);
 
-// 🧠 detectar intención
-const intent = detectIntent(message);
+const lower = message.toLowerCase();
+const unit = detectUnit(message);
 
-// 🚫 ignorar charla trivial
-if (intent === "TRIVIAL") {
+if (isTrivialMessage(lower)) {
 console.log("🧊 ignorado trivial");
 return res.sendStatus(200);
 }
 
-// ❓ si no entiende pero parece operación → pedir aclaración
-if (intent === "UNKNOWN") {
+const intent = getIntent(lower, unit);
 
+if (intent === "TRIVIAL") {
+return res.sendStatus(200);
+}
+
+if (intent === "INCOMPLETE" && !unit) {
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
 {
 to: chatId,
-body: `👷 ${employee} necesito un poco más de detalle para poder reportarlo correctamente (unidad + qué sucede)`
+body: "⚠️ ¿Podrían especificar la unidad y qué necesitan reportar?"
 },
 {
 headers: {
@@ -130,43 +202,27 @@ Authorization: "Bearer " + WHAPI_TOKEN
 return res.sendStatus(200);
 }
 
-// 🔎 detectar unidad
-const unitMatch = message.match(/(\d{2,4})\s*(A|B|A\s*Y\s*B|B\s*Y\s*A)?/i);
+if ((intent === "ENTRY" || intent === "CLEANING" || intent === "READY" || intent === "EXIT" || intent === "ISSUE") && !unit) {
+await axios.post(
+"https://gate.whapi.cloud/messages/text",
+{
+to: chatId,
+body: "⚠️ ¿Podrían especificar la unidad para poder reportarlo?"
+},
+{
+headers: {
+Authorization: "Bearer " + WHAPI_TOKEN
+}
+}
+);
 
-let unit = "";
-
-if (unitMatch) {
-unit = unitMatch[1];
-if (unitMatch[2]) {
-unit += " " + unitMatch[2].toUpperCase().replace(/\s+/g, " ");
-}
-}
-
-// 🧠 estados humanos
-const lower = message.toLowerCase();
-
-let action = "";
-
-if (lower.includes("entr") || lower.includes("acabo de entrar") || lower.includes("lleg")) {
-action = "ENTRÓ A";
-}
-else if (lower.includes("limpi")) {
-action = "LIMPIANDO";
-}
-else if (lower.includes("lista") || lower.includes("terminad") || lower.includes("finalizad")) {
-action = "TERMINÓ";
-}
-else if (lower.includes("sal")) {
-action = "SALIÓ DE";
-}
-else if (lower.includes("falta") || lower.includes("hay") || lower.includes("problema") || lower.includes("necesito")) {
-action = "NECESITA ATENCIÓN EN";
-}
-else {
-action = "REVISAR";
+return res.sendStatus(200);
 }
 
-// 🕒 hora
+const report = buildReport(employee, unit, intent, message);
+
+if (!report) return res.sendStatus(200);
+
 const time = new Date().toLocaleTimeString("en-US", {
 timeZone: "America/Mexico_City",
 hour: "2-digit",
@@ -174,13 +230,11 @@ minute: "2-digit",
 hour12: true
 });
 
-// 📦 MENSAJE OPERACIONES (ULTRA SIMPLE)
 const opsMessage =
-`👷 ${employee}
-🕒 ${time}
-🏨 ${action} ${unit || "unidad no especificada"}`;
+"🕒 " + time +
+"\n\n" +
+report;
 
-// 📤 OPERACIONES
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
 {
@@ -196,16 +250,8 @@ Authorization: "Bearer " + WHAPI_TOKEN
 
 console.log("✅ operaciones enviado");
 
-// 🔎 INSPECTORES
-if (
-lower.includes("lista") ||
-lower.includes("terminad") ||
-lower.includes("finalizad")
-) {
-
-if (unit) {
-
-const inspectionMsg = `${unit} lista para inspeccionar`;
+if (intent === "READY" && unit && INSPECTION_GROUP_ID) {
+const inspectionMsg = unit + " lista para inspeccionar";
 
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
@@ -222,14 +268,12 @@ Authorization: "Bearer " + WHAPI_TOKEN
 
 console.log("🔎 inspectores enviado");
 }
-}
 
-// 🤖 RESPUESTA AUTOMÁTICA SOLO CUANDO IMPORTA
 await axios.post(
 "https://gate.whapi.cloud/messages/text",
 {
 to: chatId,
-body: `✅ ${employee}, ya lo reporté a operaciones`
+body: "✅ " + employee + ", ya lo reporté a operaciones"
 },
 {
 headers: {
@@ -244,10 +288,8 @@ return res.sendStatus(200);
 console.log("❌ ERROR:", err.response?.data || err.message);
 return res.sendStatus(200);
 }
-
 });
 
-// 🚀 START
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
