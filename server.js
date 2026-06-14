@@ -365,7 +365,7 @@ async function updateNotionRoom(unit, action, employee, note) {
 
     if (status) {
       props["Cleaning Status"] = {
-        select: {
+        status: {
           name: status,
         },
       };
