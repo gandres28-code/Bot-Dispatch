@@ -60,13 +60,11 @@ app.get("/test-page", async (req, res) => {
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28",
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
     });
 
     const data = await response.json();
-
     res.json(data);
-
   } catch (err) {
     res.status(500).json({
       error: err.message,
@@ -93,43 +91,8 @@ app.get("/test-notion", async (req, res) => {
     });
 
     const data = await response.json();
-
     res.json(data);
-
   } catch (err) {
-    res.status(500).json({
-      error: err.message,
-    });
-  }
-});
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.log("❌ NOTION SEARCH ERROR:", data);
-      return res.status(response.status).json(data);
-    }
-
-    const results = (data.results || []).map((item) => ({
-      object: item.object,
-      id: item.id,
-      title:
-        item.title?.map((t) => t.plain_text).join("") ||
-        item.properties?.title?.title?.map((t) => t.plain_text).join("") ||
-        item.properties?.Name?.title?.map((t) => t.plain_text).join("") ||
-        item.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") ||
-        "Sin título",
-      url: item.url || null,
-      archived: item.archived || false,
-      in_trash: item.in_trash || false,
-    }));
-
-    res.json({
-      count: results.length,
-      results,
-    });
-  } catch (err) {
-    console.log("❌ TEST NOTION ERROR:", err.message);
     res.status(500).json({
       error: err.message,
     });
