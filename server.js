@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const { Client } = require("@notionhq/client");
+const OpenAI = require("openai");
 
 const app = express();
 
@@ -11,8 +12,13 @@ app.use(express.static("public"));
 // 🔑 ENV
 const NOTION_API_KEY = process.env.NOTION_API_KEY || "";
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
 const notion = new Client({ auth: NOTION_API_KEY });
+
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY,
+});
 
 // 🌎 Página principal
 app.get("/", (req, res) => {
@@ -101,6 +107,60 @@ function actionLabel(action) {
   return "Actualización";
 }
 
+// 🧠 Analizar nota con OpenAI
+async function analyzeNoteWithAI(action, note) {
+  const safeNote = String(note || "").trim();
+
+  if (!OPENAI_API_KEY || !safeNote) {
+    return {
+      category: "Other",
+      priority: "Normal",
+      summary: safeNote || "Sin nota",
+    };
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Eres un asistente para una operación de housekeeping en hotel. Clasifica reportes de limpieza, inspección, mantenimiento y supplies. Responde únicamente JSON válido.",
+        },
+        {
+          role: "user",
+          content: `
+Acción: ${action}
+Nota: ${safeNote}
+
+Devuelve exactamente este JSON:
+{
+  "category": "Cleaning | Maintenance | Supplies | Damage | Guest Item | Other",
+  "priority": "Low | Normal | High | Urgent",
+  "summary": "resumen corto en español"
+}
+`,
+        },
+      ],
+    });
+
+    const text = response.choices[0].message.content;
+    const cleanText = text.replace(/```json|```/g, "").trim();
+
+    return JSON.parse(cleanText);
+  } catch (error) {
+    console.log("⚠️ OpenAI error:", error.message);
+
+    return {
+      category: "Other",
+      priority: "Normal",
+      summary: safeNote || "Sin nota",
+    };
+  }
+}
+
 // ✅ Actualizar Notion
 async function updateNotionRoom(unit, action, employee, note) {
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
@@ -136,7 +196,24 @@ async function updateNotionRoom(unit, action, employee, note) {
   const label = actionLabel(action);
   const status = notionStatusFromAction(action);
 
+  let ai = null;
+
+  if (action === "ISSUE" || action === "FAIL" || action === "SUPPLIES") {
+    ai = await analyzeNoteWithAI(action, note);
+  }
+
   for (const page of matches) {
+    const messageParts = [
+      label,
+      note ? `Nota: ${note}` : "Nota: Sin nota",
+    ];
+
+    if (ai) {
+      messageParts.push(`Categoría: ${ai.category}`);
+      messageParts.push(`Prioridad: ${ai.priority}`);
+      messageParts.push(`Resumen: ${ai.summary}`);
+    }
+
     const props = {
       "Last Whatsapp Update": {
         date: {
@@ -147,7 +224,7 @@ async function updateNotionRoom(unit, action, employee, note) {
         rich_text: [
           {
             text: {
-              content: `${label} - ${note || "Sin nota"}`,
+              content: messageParts.join(" | "),
             },
           },
         ],
@@ -208,10 +285,24 @@ async function updateNotionRoom(unit, action, employee, note) {
         rich_text: [
           {
             text: {
-              content: note || label,
+              content: ai ? ai.summary : note || label,
             },
           },
         ],
+      };
+
+      // OPCIONAL: Solo funcionará si tienes estas propiedades en Notion.
+      // Si no existen, bórralas.
+      props["Issue Category"] = {
+        select: {
+          name: ai ? ai.category : "Other",
+        },
+      };
+
+      props["Priority"] = {
+        select: {
+          name: ai ? ai.priority : "Normal",
+        },
       };
     }
 
