@@ -158,24 +158,47 @@ async function notionDataSourceQuery(dataSourceId, body) {
 async function queryTodayRooms() {
   let pages = [];
   let cursor = undefined;
+  const today = todayISO();
 
   do {
     const body = {
       page_size: 100,
+      query: "",
       filter: {
-        property: "Date",
-        date: {
-          equals: todayISO(),
-        },
+        property: "object",
+        value: "page",
       },
     };
 
     if (cursor) body.start_cursor = cursor;
 
-    const response = await notionDataSourceQuery(NOTION_DATABASE_ID, body);
+    const response = await fetch("https://api.notion.com/v1/search", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify(body),
+    });
 
-    pages = pages.concat(response.results || []);
-    cursor = response.has_more ? response.next_cursor : undefined;
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log("❌ NOTION SEARCH ERROR:", data);
+      throw new Error(data.message || "Error buscando páginas en Notion");
+    }
+
+    const todayPages = (data.results || []).filter((page) => {
+      const pageDate = page.properties?.Date?.date?.start;
+      const roomTitle =
+        page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+
+      return pageDate === today && roomTitle;
+    });
+
+    pages = pages.concat(todayPages);
+    cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
 
   return pages;
