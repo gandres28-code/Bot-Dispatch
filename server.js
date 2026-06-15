@@ -656,6 +656,93 @@ app.post("/inspector-action", async (req, res) => {
     });
   }
 });
+// 🚨 Eventos para Centro de Operaciones
+app.get("/operations-events", async (req, res) => {
+  try {
+
+    if (!NOTION_LOG_DATABASE_ID) {
+      return res.json({
+        count: 0,
+        events: [],
+      });
+    }
+
+    const response = await notion.databases.query({
+      database_id: NOTION_LOG_DATABASE_ID,
+      page_size: 20,
+      sorts: [
+        {
+          property: "Time",
+          direction: "descending",
+        },
+      ],
+    });
+
+    const events = response.results.map((page) => {
+
+      const props = page.properties;
+
+      return {
+        id: page.id,
+
+        time:
+          props.Time?.date?.start
+            ? new Date(
+                props.Time.date.start
+              ).toLocaleString("en-US", {
+                timeZone: "America/Chicago",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })
+            : "",
+
+        unit:
+          props.Unit?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") || "",
+
+        action:
+          props.Action?.select?.name || "",
+
+        person:
+          props.Cleaner?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") ||
+
+          props.Inspector?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") ||
+
+          "",
+
+        note:
+          props.Note?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") || "",
+      };
+    });
+
+    res.json({
+      count: events.length,
+      events,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "❌ Error en /operations-events:",
+      error.message
+    );
+
+    res.status(500).json({
+      count: 0,
+      events: [],
+      error: error.message,
+    });
+
+  }
+});
 
 // ❤️ Health check para Render
 app.get("/health", (req, res) => {
