@@ -29,7 +29,7 @@
     }
 
     textarea{
-      min-height:100px;
+      min-height:110px;
     }
 
     button{
@@ -68,6 +68,14 @@
       color:#666;
       margin-top:15px;
     }
+
+    .help{
+      font-size:13px;
+      color:#777;
+      line-height:1.4;
+      margin-bottom:10px;
+      text-align:center;
+    }
   </style>
 </head>
 
@@ -77,11 +85,13 @@
 
 <h2>🔍 Panel de Inspectores</h2>
 
+<p class="help">
+Usa este panel para iniciar inspección, marcar una unidad lista, reportar errores de limpieza o pedir supplies.
+</p>
+
 <input id="name" placeholder="Nombre del inspector">
 
 <input id="unit" placeholder="Unidad (Ej: 331A)">
-
-<input id="cleaner" placeholder="Marco es Puto">
 
 <div class="note-title">
 Informe / Problema / Supplies
@@ -117,7 +127,6 @@ async function sendInspectionAction(action){
 
   const name = document.getElementById("name").value.trim();
   const unit = document.getElementById("unit").value.trim().toUpperCase();
-  const cleaner = document.getElementById("cleaner").value.trim();
   const note = document.getElementById("note").value.trim();
 
   if(!name){
@@ -150,8 +159,7 @@ async function sendInspectionAction(action){
         action,
         unit,
         note,
-        name,
-        cleaner
+        name
       })
     });
 
