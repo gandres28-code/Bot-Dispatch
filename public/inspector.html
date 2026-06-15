@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Panel de Inspectores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body{
+      font-family:Arial,sans-serif;
+      padding:20px;
+      background:#f4f4f4;
+      max-width:600px;
+      margin:auto;
+    }
+
+    h2{
+      text-align:center;
+      margin-bottom:20px;
+    }
+
+    input, textarea{
+      width:100%;
+      padding:15px;
+      margin:10px 0;
+      font-size:18px;
+      border-radius:10px;
+      border:1px solid #ccc;
+      box-sizing:border-box;
+    }
+
+    textarea{
+      min-height:100px;
+    }
+
+    button{
+      width:100%;
+      padding:18px;
+      margin:10px 0;
+      font-size:19px;
+      border:none;
+      border-radius:12px;
+      color:white;
+      cursor:pointer;
+      font-weight:bold;
+    }
+
+    .start{ background:#7c3aed; }
+    .ready{ background:#059669; }
+    .report{ background:#f59e0b; }
+    .supplies{ background:#2563eb; }
+
+    #status{
+      text-align:center;
+      font-weight:bold;
+      margin-top:20px;
+      font-size:18px;
+    }
+
+    .card{
+      background:white;
+      padding:20px;
+      border-radius:15px;
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+    }
+
+    .note-title{
+      font-size:14px;
+      color:#666;
+      margin-top:15px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>🔍 Panel de Inspectores</h2>
+
+<input id="name" placeholder="Nombre del inspector">
+
+<input id="unit" placeholder="Unidad (Ej: 331A)">
+
+<input id="cleaner" placeholder="Limpiador relacionado (opcional)">
+
+<div class="note-title">
+Informe / Problema / Supplies
+</div>
+
+<textarea
+  id="note"
+  placeholder="Escribe aquí qué salió mal, qué falta o qué necesita la unidad..."
+></textarea>
+
+<button class="start" onclick="sendInspectionAction('INSPECTION_START')">
+  🔍 Empezar inspección
+</button>
+
+<button class="ready" onclick="sendInspectionAction('READY_GUEST')">
+  ✅ Ready for Guest
+</button>
+
+<button class="report" onclick="sendInspectionAction('INSPECTION_REPORT')">
+  📝 Informe de error de limpieza
+</button>
+
+<button class="supplies" onclick="sendInspectionAction('INSPECTION_SUPPLIES')">
+  🧺 Pedir algo para la unidad
+</button>
+
+<p id="status"></p>
+
+</div>
+
+<script>
+async function sendInspectionAction(action){
+
+  const name = document.getElementById("name").value.trim();
+  const unit = document.getElementById("unit").value.trim().toUpperCase();
+  const cleaner = document.getElementById("cleaner").value.trim();
+  const note = document.getElementById("note").value.trim();
+
+  if(!name){
+    alert("Escribe tu nombre");
+    return;
+  }
+
+  if(!unit){
+    alert("Escribe la unidad");
+    return;
+  }
+
+  if(
+    (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES")
+    && !note
+  ){
+    alert("Debes escribir un informe o nota");
+    return;
+  }
+
+  document.getElementById("status").innerText = "⏳ Enviando...";
+
+  try{
+    const response = await fetch("/inspector-action",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        action,
+        unit,
+        note,
+        name,
+        cleaner
+      })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("status").innerText =
+      data.message || "Enviado";
+
+    if(data.success && action !== "INSPECTION_START"){
+      document.getElementById("note").value = "";
+    }
+
+  }catch(error){
+    document.getElementById("status").innerText =
+      "❌ Error de conexión";
+  }
+}
+</script>
+
+</body>
+</html>
