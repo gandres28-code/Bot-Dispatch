@@ -96,12 +96,34 @@ async function loadEvents(){
       await response.json();
 
     if(
-      data.count >
-      lastCount &&
-      lastCount !== 0
-    ){
-      playAlert();
-    }
+  data.count >
+  lastCount &&
+  lastCount !== 0
+){
+
+  playAlert();
+
+  const newest =
+    data.events[0];
+
+  if(
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ){
+
+    new Notification(
+      newest.action,
+      {
+        body:
+          `${newest.unit} - ${newest.person}`,
+        icon:
+          "https://cdn-icons-png.flaticon.com/512/1827/1827392.png"
+      }
+    );
+
+  }
+
+}
 
     lastCount =
       data.count;
@@ -130,7 +152,20 @@ async function loadEvents(){
   }
 
 }
+// 🔔 Pedir permiso para notificaciones
+async function enableNotifications(){
 
+  if(!("Notification" in window)){
+    return;
+  }
+
+  if(Notification.permission === "default"){
+    await Notification.requestPermission();
+  }
+
+}
+
+enableNotifications();
 loadEvents();
 
 setInterval(
