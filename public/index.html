@@ -3,79 +3,216 @@
 <head>
   <title>Panel de Limpieza</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <style>
-    body { font-family: Arial; padding: 20px; background: #f4f4f4; }
-    h2 { text-align: center; }
-    input, textarea {
-      width: 100%;
-      padding: 15px;
-      margin: 10px 0;
-      font-size: 18px;
-      border-radius: 10px;
-      border: 1px solid #ccc;
+    body{
+      font-family:Arial,sans-serif;
+      padding:20px;
+      background:#f4f4f4;
+      max-width:600px;
+      margin:auto;
     }
-    button {
-      width: 100%;
-      padding: 18px;
-      margin: 10px 0;
-      font-size: 19px;
-      border: none;
-      border-radius: 12px;
-      color: white;
+
+    h2{
+      text-align:center;
+      margin-bottom:20px;
     }
-    .start { background: #16a34a; }
-    .done { background: #dc2626; }
-    .issue { background: #f59e0b; }
-    .supplies { background: #2563eb; }
-    .check { background: #7c3aed; }
-    .pass { background: #059669; }
-    .fail { background: #b91c1c; }
-    #status { text-align: center; font-weight: bold; font-size: 18px; }
+
+    input, textarea{
+      width:100%;
+      padding:15px;
+      margin:10px 0;
+      font-size:18px;
+      border-radius:10px;
+      border:1px solid #ccc;
+      box-sizing:border-box;
+    }
+
+    textarea{
+      min-height:100px;
+    }
+
+    button{
+      width:100%;
+      padding:18px;
+      margin:10px 0;
+      font-size:19px;
+      border:none;
+      border-radius:12px;
+      color:white;
+      cursor:pointer;
+      font-weight:bold;
+    }
+
+    .start{
+      background:#16a34a;
+    }
+
+    .done{
+      background:#dc2626;
+    }
+
+    .issue{
+      background:#f59e0b;
+    }
+
+    .supplies{
+      background:#2563eb;
+    }
+
+    #status{
+      text-align:center;
+      font-weight:bold;
+      margin-top:20px;
+      font-size:18px;
+    }
+
+    .card{
+      background:white;
+      padding:20px;
+      border-radius:15px;
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+    }
+
+    .note-title{
+      font-size:14px;
+      color:#666;
+      margin-top:15px;
+    }
   </style>
 </head>
+
 <body>
 
-  <h2>🏠 Panel de Limpieza</h2>
+<div class="card">
 
-  <input id="name" placeholder="Tu nombre">
-  <input id="unit" placeholder="Unidad, ejemplo: 331A">
-  <textarea id="note" placeholder="Nota opcional"></textarea>
+<h2>🏠 Panel de Limpieza</h2>
 
-  <button class="start" onclick="sendAction('START')">🟢 Empezar limpieza</button>
-  <button class="done" onclick="sendAction('DONE')">🔴 Terminar limpieza</button>
-  <button class="issue" onclick="sendAction('ISSUE')">⚠️ Reportar problema</button>
-  <button class="supplies" onclick="sendAction('SUPPLIES')">🧺 Pedir supplies</button>
+<input
+  id="name"
+  placeholder="Nombre del limpiador"
+/>
 
-  </h2>
-  <p id="status"></p>
+<input
+  id="unit"
+  placeholder="Unidad (Ej: 331A)"
+/>
+
+<div class="note-title">
+Notas / Problemas / Supplies
+</div>
+
+<textarea
+  id="note"
+  placeholder="Escribe aquí si necesitas algo o reportas un problema..."
+></textarea>
+
+<button
+  class="start"
+  onclick="sendAction('START')">
+  🟢 Empezar limpieza
+</button>
+
+<button
+  class="done"
+  onclick="sendAction('DONE')">
+  🔴 Terminar limpieza
+</button>
+
+<button
+  class="supplies"
+  onclick="sendAction('SUPPLIES')">
+  🧺 Necesito supplies
+</button>
+
+<button
+  class="issue"
+  onclick="sendAction('ISSUE')">
+  ⚠️ Reportar problema
+</button>
+
+<p id="status"></p>
+
+</div>
 
 <script>
-async function sendAction(action) {
-  const name = document.getElementById("name").value.trim();
-  const unit = document.getElementById("unit").value.trim().toUpperCase();
-  const note = document.getElementById("note").value.trim();
 
-  if (!name) {
+async function sendAction(action){
+
+  const name =
+    document.getElementById("name")
+    .value
+    .trim();
+
+  const unit =
+    document.getElementById("unit")
+    .value
+    .trim()
+    .toUpperCase();
+
+  const note =
+    document.getElementById("note")
+    .value
+    .trim();
+
+  if(!name){
     alert("Escribe tu nombre");
     return;
   }
 
-  if (!unit) {
+  if(!unit){
     alert("Escribe la unidad");
     return;
   }
 
-  const response = await fetch("/action", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ action, unit, note, name })
-  });
+  if(
+    (action === "ISSUE" || action === "SUPPLIES")
+    && !note
+  ){
+    alert("Debes escribir una nota");
+    return;
+  }
 
-  const data = await response.json();
-  document.getElementById("status").innerText = data.message;
+  document.getElementById("status").innerText =
+    "⏳ Enviando...";
+
+  try{
+
+    const response = await fetch("/action",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        action,
+        unit,
+        note,
+        name
+      })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("status").innerText =
+      data.message || "Enviado";
+
+    if(data.success){
+
+      if(action !== "START"){
+        document.getElementById("note").value = "";
+      }
+
+    }
+
+  }catch(error){
+
+    document.getElementById("status").innerText =
+      "❌ Error de conexión";
+
+  }
+
 }
+
 </script>
 
 </body>
