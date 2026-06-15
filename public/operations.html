@@ -2,64 +2,18 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <title>Centro de Operaciones</title>
 
 <style>
-body{
-  font-family:Arial;
-  background:#111827;
-  color:white;
-  padding:20px;
-}
-
-h1{
-  text-align:center;
-}
-
-button{
-  width:100%;
-  padding:15px;
-  font-size:18px;
-  border:none;
-  border-radius:10px;
-  margin-bottom:20px;
-  cursor:pointer;
-  background:#2563eb;
-  color:white;
-  font-weight:bold;
-}
-
-#notificationStatus{
-  text-align:center;
-  margin-bottom:15px;
-  color:#d1d5db;
-  font-size:14px;
-}
-
-#events{
-  margin-top:20px;
-}
-
-.event{
-  background:#1f2937;
-  border-left:6px solid #10b981;
-  padding:15px;
-  margin-bottom:10px;
-  border-radius:10px;
-}
-
-.time{
-  color:#9ca3af;
-  font-size:13px;
-}
-
-.unit{
-  font-size:20px;
-  font-weight:bold;
-}
+body{font-family:Arial;background:#111827;color:white;padding:20px;}
+h1{text-align:center;}
+button{width:100%;padding:15px;font-size:18px;border:none;border-radius:10px;margin-bottom:20px;cursor:pointer;background:#2563eb;color:white;font-weight:bold;}
+#notificationStatus{text-align:center;margin-bottom:15px;color:#d1d5db;font-size:14px;}
+#events{margin-top:20px;}
+.event{background:#1f2937;border-left:6px solid #10b981;padding:15px;margin-bottom:10px;border-radius:10px;}
+.time{color:#9ca3af;font-size:13px;}
+.unit{font-size:20px;font-weight:bold;}
 </style>
-
 </head>
 
 <body>
@@ -67,7 +21,7 @@ button{
 <h1>🚨 Centro de Operaciones</h1>
 
 <button onclick="enableNotifications()">
-  🔔 Activar notificaciones
+  🔔 Activar sonido y notificaciones
 </button>
 
 <div id="notificationStatus">
@@ -77,142 +31,115 @@ button{
 <div id="events"></div>
 
 <script>
-
-let lastCount = 0;
-
-function updateNotificationStatus(){
-
-  const status =
-    document.getElementById("notificationStatus");
-
-  if(!("Notification" in window)){
-    status.innerText =
-      "Notificaciones: no soportadas en este navegador";
-    return;
-  }
-
-  if(Notification.permission === "granted"){
-    status.innerText =
-      "✅ Notificaciones activadas";
-  }else if(Notification.permission === "denied"){
-    status.innerText =
-      "❌ Notificaciones bloqueadas";
-  }else{
-    status.innerText =
-      "🔔 Presiona el botón para activar notificaciones";
-  }
-
-}
+let lastEventId = null;
+let firstLoad = true;
+let audioUnlocked = false;
 
 async function enableNotifications(){
+  unlockAudio();
 
   if(!("Notification" in window)){
     alert("Este navegador no soporta notificaciones.");
-    updateNotificationStatus();
     return;
   }
 
-  const permission =
-    await Notification.requestPermission();
+  const permission = await Notification.requestPermission();
 
   if(permission === "granted"){
-    alert("✅ Notificaciones activadas");
+    document.getElementById("notificationStatus").innerText =
+      "✅ Notificaciones activadas";
+    alert("✅ Notificaciones y sonido activados");
   }else{
-    alert("❌ Notificaciones no permitidas. Revisa permisos del navegador.");
+    document.getElementById("notificationStatus").innerText =
+      "❌ Notificaciones bloqueadas";
+    alert("❌ Notificaciones bloqueadas. Revisa permisos del navegador.");
   }
+}
 
-  updateNotificationStatus();
+function unlockAudio(){
+  try{
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
 
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    gain.gain.value = 0.01;
+    osc.frequency.value = 600;
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+
+    audioUnlocked = true;
+  }catch(err){
+    console.log("Audio unlock error:", err);
+  }
 }
 
 function playAlert(){
-
   try{
-
-    const audioCtx =
-      new(window.AudioContext ||
-      window.webkitAudioContext)();
-
-    const osc =
-      audioCtx.createOscillator();
-
-    const gain =
-      audioCtx.createGain();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
 
     osc.connect(gain);
     gain.connect(audioCtx.destination);
 
-    osc.frequency.value = 900;
-    gain.gain.value = 0.15;
+    osc.frequency.value = 950;
+    gain.gain.value = 0.25;
 
     osc.start();
 
-    setTimeout(()=>{
+    setTimeout(() => {
       osc.stop();
-    },250);
+    }, 400);
 
-  }catch(err){}
-
+  }catch(err){
+    console.log("Sound error:", err);
+  }
 }
 
 function sendBrowserNotification(event){
-
   if(
     "Notification" in window &&
     Notification.permission === "granted"
   ){
-
     new Notification(
       event.action || "Nueva actualización",
       {
-        body:
-          `${event.unit || "Unidad"} - ${event.person || "Operación"}`,
-        icon:
-          "https://cdn-icons-png.flaticon.com/512/1827/1827392.png"
+        body: `${event.unit || "Unidad"} - ${event.person || "Operación"}`,
       }
     );
-
   }
-
 }
 
 async function loadEvents(){
-
   try{
+    const response = await fetch("/operations-events");
+    const data = await response.json();
 
-    const response =
-      await fetch("/operations-events");
+    const newest = data.events && data.events.length > 0
+      ? data.events[0]
+      : null;
 
-    const data =
-      await response.json();
+    if(newest){
+      if(firstLoad){
+        lastEventId = newest.id;
+        firstLoad = false;
+      }else if(newest.id !== lastEventId){
+        lastEventId = newest.id;
 
-    if(
-      data.count >
-      lastCount &&
-      lastCount !== 0
-    ){
-
-      playAlert();
-
-      const newest =
-        data.events[0];
-
-      if(newest){
+        playAlert();
         sendBrowserNotification(newest);
       }
-
     }
 
-    lastCount =
-      data.count;
-
-    const container =
-      document.getElementById("events");
-
+    const container = document.getElementById("events");
     container.innerHTML = "";
 
-    data.events.forEach(event=>{
-
+    data.events.forEach(event => {
       container.innerHTML += `
         <div class="event">
           <div class="time">${event.time || ""}</div>
@@ -222,23 +149,19 @@ async function loadEvents(){
           <div>${event.note || ""}</div>
         </div>
       `;
-
     });
 
   }catch(err){
     console.log(err);
   }
-
 }
 
-updateNotificationStatus();
 loadEvents();
 
 setInterval(
   loadEvents,
   5000
 );
-
 </script>
 
 </body>
