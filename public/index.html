@@ -44,28 +44,15 @@
       font-weight:bold;
     }
 
-    .start{
-      background:#16a34a;
+    button:disabled{
+      opacity:.55;
+      cursor:not-allowed;
     }
 
-    .done{
-      background:#dc2626;
-    }
-
-    .issue{
-      background:#f59e0b;
-    }
-
-    .supplies{
-      background:#2563eb;
-    }
-
-    #status{
-      text-align:center;
-      font-weight:bold;
-      margin-top:20px;
-      font-size:18px;
-    }
+    .start{ background:#16a34a; }
+    .done{ background:#dc2626; }
+    .issue{ background:#f59e0b; }
+    .supplies{ background:#2563eb; }
 
     .card{
       background:white;
@@ -79,10 +66,47 @@
       color:#666;
       margin-top:15px;
     }
+
+    #status{
+      text-align:center;
+      font-weight:bold;
+      margin-top:20px;
+      font-size:18px;
+    }
+
+    #bigStatus{
+      display:none;
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      padding:22px;
+      box-sizing:border-box;
+      color:white;
+      font-size:22px;
+      font-weight:bold;
+      text-align:center;
+      z-index:9999;
+      box-shadow:0 4px 14px rgba(0,0,0,.25);
+    }
+
+    #bigStatus.success{
+      background:#16a34a;
+    }
+
+    #bigStatus.error{
+      background:#dc2626;
+    }
+
+    #bigStatus.loading{
+      background:#2563eb;
+    }
   </style>
 </head>
 
 <body>
+
+<div id="bigStatus"></div>
 
 <div class="card">
 
@@ -108,25 +132,25 @@ Notas / Problemas / Supplies
 ></textarea>
 
 <button
-  class="start"
+  class="start action-btn"
   onclick="sendAction('START')">
   🟢 Empezar limpieza
 </button>
 
 <button
-  class="done"
+  class="done action-btn"
   onclick="sendAction('DONE')">
   🔴 Terminar limpieza
 </button>
 
 <button
-  class="supplies"
+  class="supplies action-btn"
   onclick="sendAction('SUPPLIES')">
   🧺 Necesito supplies
 </button>
 
 <button
-  class="issue"
+  class="issue action-btn"
   onclick="sendAction('ISSUE')">
   ⚠️ Reportar problema
 </button>
@@ -136,8 +160,67 @@ Notas / Problemas / Supplies
 </div>
 
 <script>
+let isSending = false;
+let lastSendKey = "";
+let lastSendTime = 0;
+
+function setButtonsDisabled(disabled){
+  document.querySelectorAll(".action-btn").forEach(button => {
+    button.disabled = disabled;
+  });
+}
+
+function showBigStatus(message, type){
+  const box = document.getElementById("bigStatus");
+
+  box.className = "";
+  box.classList.add(type);
+  box.innerText = message;
+  box.style.display = "block";
+
+  if(type !== "loading"){
+    setTimeout(() => {
+      box.style.display = "none";
+    }, 3500);
+  }
+}
+
+function playBeep(type){
+  try{
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = type === "success" ? 880 : 220;
+
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.25);
+  }catch(error){}
+}
+
+function vibratePhone(type){
+  if(navigator.vibrate){
+    if(type === "success"){
+      navigator.vibrate([120, 60, 120]);
+    }else{
+      navigator.vibrate([300, 80, 300]);
+    }
+  }
+}
 
 async function sendAction(action){
+
+  if(isSending){
+    return;
+  }
 
   const name =
     document.getElementById("name")
@@ -173,8 +256,26 @@ async function sendAction(action){
     return;
   }
 
+  const sendKey = `${action}-${unit}-${name}-${note}`;
+  const now = Date.now();
+
+  if(sendKey === lastSendKey && now - lastSendTime < 30000){
+    showBigStatus("⚠️ Ya fue enviado. Espera unos segundos.", "error");
+    playBeep("error");
+    vibratePhone("error");
+    return;
+  }
+
+  isSending = true;
+  lastSendKey = sendKey;
+  lastSendTime = now;
+
+  setButtonsDisabled(true);
+
   document.getElementById("status").innerText =
     "⏳ Enviando...";
+
+  showBigStatus("⏳ Enviando...", "loading");
 
   try{
 
@@ -193,21 +294,40 @@ async function sendAction(action){
 
     const data = await response.json();
 
-    document.getElementById("status").innerText =
-      data.message || "Enviado";
-
     if(data.success){
+      document.getElementById("status").innerText =
+        data.message || "✅ Enviado";
+
+      showBigStatus(data.message || "✅ Enviado correctamente", "success");
+      playBeep("success");
+      vibratePhone("success");
 
       if(action !== "START"){
         document.getElementById("note").value = "";
       }
 
+    }else{
+      document.getElementById("status").innerText =
+        data.message || "❌ Error";
+
+      showBigStatus(data.message || "❌ Error", "error");
+      playBeep("error");
+      vibratePhone("error");
     }
 
   }catch(error){
 
     document.getElementById("status").innerText =
       "❌ Error de conexión";
+
+    showBigStatus("❌ Error de conexión", "error");
+    playBeep("error");
+    vibratePhone("error");
+
+  }finally{
+
+    isSending = false;
+    setButtonsDisabled(false);
 
   }
 
