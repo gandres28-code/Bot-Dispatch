@@ -5,20 +5,68 @@
 <title>Centro de Operaciones</title>
 
 <style>
-body{font-family:Arial;background:#111827;color:white;padding:20px;}
-h1{text-align:center;}
-button{width:100%;padding:15px;font-size:18px;border:none;border-radius:10px;margin-bottom:20px;cursor:pointer;background:#2563eb;color:white;font-weight:bold;}
-#notificationStatus{text-align:center;margin-bottom:15px;color:#d1d5db;font-size:14px;}
-#events{margin-top:20px;}
-.event{background:#1f2937;border-left:6px solid #10b981;padding:15px;margin-bottom:10px;border-radius:10px;}
-.time{color:#9ca3af;font-size:13px;}
-.unit{font-size:20px;font-weight:bold;}
+body{
+  font-family:Arial;
+  background:#111827;
+  color:white;
+  padding:20px;
+}
+
+h1{
+  text-align:center;
+}
+
+button{
+  width:100%;
+  padding:15px;
+  font-size:18px;
+  border:none;
+  border-radius:10px;
+  margin-bottom:20px;
+  cursor:pointer;
+  background:#2563eb;
+  color:white;
+  font-weight:bold;
+}
+
+#notificationStatus{
+  text-align:center;
+  margin-bottom:15px;
+  color:#d1d5db;
+  font-size:14px;
+}
+
+#events{
+  margin-top:20px;
+}
+
+.event{
+  background:#1f2937;
+  border-left:6px solid #10b981;
+  padding:15px;
+  margin-bottom:10px;
+  border-radius:10px;
+}
+
+.time{
+  color:#9ca3af;
+  font-size:13px;
+}
+
+.unit{
+  font-size:20px;
+  font-weight:bold;
+}
 </style>
 </head>
 
 <body>
 
 <h1>🚨 Centro de Operaciones</h1>
+
+<audio id="alertSound" preload="auto">
+  <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
+</audio>
 
 <button onclick="enableNotifications()">
   🔔 Activar sonido y notificaciones
@@ -36,18 +84,33 @@ let firstLoad = true;
 let audioUnlocked = false;
 
 async function enableNotifications(){
+
   unlockAudio();
+
+  const sound =
+    document.getElementById("alertSound");
+
+  if(sound){
+    sound.play().then(() => {
+      sound.pause();
+      sound.currentTime = 0;
+      audioUnlocked = true;
+    }).catch(err => {
+      console.log("Audio permission pending:", err);
+    });
+  }
 
   if(!("Notification" in window)){
     alert("Este navegador no soporta notificaciones.");
     return;
   }
 
-  const permission = await Notification.requestPermission();
+  const permission =
+    await Notification.requestPermission();
 
   if(permission === "granted"){
     document.getElementById("notificationStatus").innerText =
-      "✅ Notificaciones activadas";
+      "✅ Notificaciones y sonido activados";
     alert("✅ Notificaciones y sonido activados");
   }else{
     document.getElementById("notificationStatus").innerText =
@@ -58,13 +121,22 @@ async function enableNotifications(){
 
 function unlockAudio(){
   try{
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const audioCtx = new AudioContext();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+    const AudioContext =
+      window.AudioContext ||
+      window.webkitAudioContext;
+
+    const audioCtx =
+      new AudioContext();
+
+    const osc =
+      audioCtx.createOscillator();
+
+    const gain =
+      audioCtx.createGain();
 
     osc.connect(gain);
     gain.connect(audioCtx.destination);
+
     gain.gain.value = 0.01;
     osc.frequency.value = 600;
 
@@ -78,27 +150,17 @@ function unlockAudio(){
 }
 
 function playAlert(){
-  try{
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const audioCtx = new AudioContext();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
 
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
+  const sound =
+    document.getElementById("alertSound");
 
-    osc.frequency.value = 950;
-    gain.gain.value = 0.25;
-
-    osc.start();
-
-    setTimeout(() => {
-      osc.stop();
-    }, 400);
-
-  }catch(err){
-    console.log("Sound error:", err);
+  if(sound){
+    sound.currentTime = 0;
+    sound.play().catch(error => {
+      console.log("Sound blocked:", error);
+    });
   }
+
 }
 
 function sendBrowserNotification(event){
@@ -109,7 +171,8 @@ function sendBrowserNotification(event){
     new Notification(
       event.action || "Nueva actualización",
       {
-        body: `${event.unit || "Unidad"} - ${event.person || "Operación"}`,
+        body:
+          `${event.unit || "Unidad"} - ${event.person || "Operación"}`,
       }
     );
   }
@@ -117,27 +180,40 @@ function sendBrowserNotification(event){
 
 async function loadEvents(){
   try{
-    const response = await fetch("/operations-events");
-    const data = await response.json();
+    const response =
+      await fetch("/operations-events");
 
-    const newest = data.events && data.events.length > 0
-      ? data.events[0]
-      : null;
+    const data =
+      await response.json();
+
+    const newest =
+      data.events && data.events.length > 0
+        ? data.events[0]
+        : null;
 
     if(newest){
       if(firstLoad){
-        lastEventId = newest.id;
-        firstLoad = false;
+        lastEventId =
+          newest.id;
+
+        firstLoad =
+          false;
+
       }else if(newest.id !== lastEventId){
-        lastEventId = newest.id;
+
+        lastEventId =
+          newest.id;
 
         playAlert();
         sendBrowserNotification(newest);
       }
     }
 
-    const container = document.getElementById("events");
-    container.innerHTML = "";
+    const container =
+      document.getElementById("events");
+
+    container.innerHTML =
+      "";
 
     data.events.forEach(event => {
       container.innerHTML += `
