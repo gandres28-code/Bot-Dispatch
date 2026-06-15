@@ -495,22 +495,6 @@ async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") 
       };
     }
 
-    if (action === "INSPECTION_START") {
-      props["Inspection Status"] = {
-        status: {
-          name: "Inspection Started",
-        },
-      };
-    }
-
-    if (action === "READY_GUEST") {
-      props["Inspection Status"] = {
-        status: {
-          name: "Ready for Guest",
-        },
-      };
-    }
-
     if (needsAI) {
       props["Issues Notes"] = {
         rich_text: [
