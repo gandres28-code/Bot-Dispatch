@@ -192,7 +192,57 @@ function notionStatusFromAction(action) {
 
   return null;
 }
+async function notifyInspectors(unit) {
 
+  if (
+    !process.env.WHAPI_TOKEN ||
+    !process.env.INSPECTORS_GROUP_ID
+  ) {
+    console.log(
+      "⚠️ WHAPI_TOKEN o INSPECTORS_GROUP_ID faltante"
+    );
+    return;
+  }
+
+  try {
+
+    const response = await fetch(
+      "https://gate.whapi.cloud/messages/text",
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${process.env.WHAPI_TOKEN}`,
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          to:
+            process.env.INSPECTORS_GROUP_ID,
+          body:
+            `🔍 ${unit} lista para inspeccionar`,
+        }),
+      }
+    );
+
+    const data =
+      await response.json();
+
+    console.log(
+      "✅ Aviso enviado a inspectores:",
+      data
+    );
+
+  } catch (error) {
+
+    console.log(
+      "❌ Error enviando a inspectores:",
+      error.message
+    );
+
+  }
+
+}
 // 📝 Labels
 function actionLabel(action) {
   if (action === "START") return "🟢 Limpieza iniciada";
@@ -597,6 +647,9 @@ app.post("/action", async (req, res) => {
     }
 
     const result = await updateNotionRoom(unit, action, name, note, "cleaner");
+    if (action === "DONE") {
+  await notifyInspectors(unit);
+}
 
     res.json({
       success: true,
