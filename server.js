@@ -20,11 +20,15 @@ const NOTION_DATABASE_ID =
   process.env.DATABASE_ID ||
   "37f25b5a514a8092ad64e6a8d478dc76";
 
+const NOTION_LOG_DATABASE_ID =
+  process.env.NOTION_LOG_DATABASE_ID || "";
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
 console.log("🔍 ENV CHECK");
 console.log("NOTION_API_KEY existe:", !!NOTION_API_KEY);
 console.log("NOTION_DATABASE_ID existe:", !!NOTION_DATABASE_ID);
+console.log("NOTION_LOG_DATABASE_ID existe:", !!NOTION_LOG_DATABASE_ID);
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
 
 const notion = new Client({ auth: NOTION_API_KEY });
@@ -43,60 +47,15 @@ app.get("/debug-env", (req, res) => {
   res.json({
     notionApiKeyExists: !!NOTION_API_KEY,
     notionDatabaseIdExists: !!NOTION_DATABASE_ID,
+    notionLogDatabaseIdExists: !!NOTION_LOG_DATABASE_ID,
     openAiKeyExists: !!OPENAI_API_KEY,
     notionDatabaseIdPreview: NOTION_DATABASE_ID
       ? NOTION_DATABASE_ID.slice(0, 6) + "..." + NOTION_DATABASE_ID.slice(-6)
       : null,
+    notionLogDatabaseIdPreview: NOTION_LOG_DATABASE_ID
+      ? NOTION_LOG_DATABASE_ID.slice(0, 6) + "..." + NOTION_LOG_DATABASE_ID.slice(-6)
+      : null,
   });
-});
-
-// 🔍 Ver TODO lo que Hotel Bot puede ver
-app.get("/test-page", async (req, res) => {
-  try {
-    const response = await fetch("https://api.notion.com/v1/search", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${NOTION_API_KEY}`,
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
-      },
-      body: JSON.stringify({}),
-    });
-
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({
-      error: err.message,
-    });
-  }
-});
-
-// 🔍 Ver databases visibles
-app.get("/test-notion", async (req, res) => {
-  try {
-    const response = await fetch("https://api.notion.com/v1/search", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${NOTION_API_KEY}`,
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
-      },
-      body: JSON.stringify({
-        filter: {
-          property: "object",
-          value: "database",
-        },
-      }),
-    });
-
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({
-      error: err.message,
-    });
-  }
 });
 
 // 📅 Fecha de hoy
@@ -107,6 +66,16 @@ function todayISO() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+// 🕒 Hora local bonita
+function localTime() {
+  return new Date().toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 // 🏠 Normalizar unidad
@@ -129,32 +98,7 @@ function roomDigits(value) {
   return match ? match[1] : "";
 }
 
-// 🔎 Query Notion API nueva para data sources
-async function notionDataSourceQuery(dataSourceId, body) {
-  const response = await fetch(
-    `https://api.notion.com/v1/data_sources/${dataSourceId}/query`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${NOTION_API_KEY}`,
-        "Content-Type": "application/json",
-        "Notion-Version": "2025-09-03",
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.log("❌ NOTION QUERY ERROR:", data);
-    throw new Error(data.message || "Error consultando Notion");
-  }
-
-  return data;
-}
-
-// 🔍 Buscar unidades de hoy en Notion
+// 🔍 Buscar unidades de hoy en Notion usando search
 async function queryTodayRooms() {
   let pages = [];
   let cursor = undefined;
@@ -204,14 +148,10 @@ async function queryTodayRooms() {
   return pages;
 }
 
-// 🧠 Convertir acción del panel a status de Notion
+// 🧠 Convertir acción a status
 function notionStatusFromAction(action) {
   if (action === "START") return "In Progress";
   if (action === "DONE") return "Cleaned - Awaiting Inspection";
-  if (action === "CHECK") return "Inspection Started";
-  if (action === "PASS") return "Ready for Guest";
-  if (action === "FAIL") return "Needs Reclean";
-
   return null;
 }
 
@@ -221,9 +161,6 @@ function actionLabel(action) {
   if (action === "DONE") return "🔴 Limpieza terminada";
   if (action === "ISSUE") return "⚠️ Problema reportado";
   if (action === "SUPPLIES") return "🧺 Supplies solicitados";
-  if (action === "CHECK") return "🔍 Inspección iniciada";
-  if (action === "PASS") return "✅ Unidad aprobada";
-  if (action === "FAIL") return "❌ Unidad rechazada";
 
   return "Actualización";
 }
@@ -282,12 +219,103 @@ Devuelve exactamente:
   }
 }
 
-// ✅ Actualizar Notion
+// 🗃️ Guardar historial diario
+async function saveDailyLog(action, unit, employee, note, ai = null) {
+  if (!NOTION_LOG_DATABASE_ID) {
+    console.log("⚠️ NOTION_LOG_DATABASE_ID faltante, no se guardó historial");
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    await notion.pages.create({
+      parent: {
+        database_id: NOTION_LOG_DATABASE_ID,
+      },
+      properties: {
+        Log: {
+          title: [
+            {
+              text: {
+                content: `${unit} - ${action} - ${employee}`,
+              },
+            },
+          ],
+        },
+        Date: {
+          date: {
+            start: todayISO(),
+          },
+        },
+        Time: {
+          date: {
+            start: now,
+          },
+        },
+        Unit: {
+          rich_text: [
+            {
+              text: {
+                content: unit,
+              },
+            },
+          ],
+        },
+        Cleaner: {
+          rich_text: [
+            {
+              text: {
+                content: employee,
+              },
+            },
+          ],
+        },
+        Action: {
+          select: {
+            name: action,
+          },
+        },
+        Note: {
+          rich_text: [
+            {
+              text: {
+                content: note || "",
+              },
+            },
+          ],
+        },
+        Category: {
+          select: {
+            name: ai?.category || "Other",
+          },
+        },
+        Priority: {
+          select: {
+            name: ai?.priority || "Normal",
+          },
+        },
+      },
+    });
+
+    console.log("✅ Daily Cleaning Log guardado");
+  } catch (error) {
+    console.log("❌ ERROR guardando Daily Cleaning Log:", error.body || error.message);
+  }
+}
+
+// ✅ Actualizar habitación principal
 async function updateNotionRoom(unit, action, employee, note) {
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
     throw new Error(
       "Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID"
     );
+  }
+
+  const allowedActions = ["START", "DONE", "ISSUE", "SUPPLIES"];
+
+  if (!allowedActions.includes(action)) {
+    throw new Error("Acción no permitida");
   }
 
   const pages = await queryTodayRooms();
@@ -321,21 +349,23 @@ async function updateNotionRoom(unit, action, employee, note) {
 
   let ai = null;
 
-  if (action === "ISSUE" || action === "FAIL" || action === "SUPPLIES") {
+  if (action === "ISSUE" || action === "SUPPLIES") {
     ai = await analyzeNoteWithAI(action, note);
   }
 
-  for (const page of matches) {
-    const messageParts = [
-      label,
-      note ? `Nota: ${note}` : "Nota: Sin nota",
-    ];
+  const historyLine =
+    `${localTime()} - ${employee} - ${label}` +
+    `${note ? ` - ${note}` : ""}` +
+    `${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
 
-    if (ai) {
-      messageParts.push(`Categoría: ${ai.category}`);
-      messageParts.push(`Prioridad: ${ai.priority}`);
-      messageParts.push(`Resumen: ${ai.summary}`);
-    }
+  for (const page of matches) {
+    const oldLastMessage =
+      page.properties["Last Message"]?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    const newLastMessage =
+      oldLastMessage
+        ? `${oldLastMessage}\n${historyLine}`
+        : historyLine;
 
     const props = {
       "Last Whatsapp Update ": {
@@ -347,7 +377,7 @@ async function updateNotionRoom(unit, action, employee, note) {
         rich_text: [
           {
             text: {
-              content: messageParts.join(" | "),
+              content: newLastMessage.slice(-1900),
             },
           },
         ],
@@ -387,23 +417,7 @@ async function updateNotionRoom(unit, action, employee, note) {
       };
     }
 
-    if (action === "CHECK") {
-      props["Inspection Started At"] = {
-        date: {
-          start: now,
-        },
-      };
-    }
-
-    if (action === "PASS") {
-      props["Inspection Finished At"] = {
-        date: {
-          start: now,
-        },
-      };
-    }
-
-    if (action === "ISSUE" || action === "FAIL" || action === "SUPPLIES") {
+    if (action === "ISSUE" || action === "SUPPLIES") {
       props["Issues Notes"] = {
         rich_text: [
           {
@@ -432,6 +446,13 @@ async function updateNotionRoom(unit, action, employee, note) {
       properties: props,
     });
   }
+
+  await saveDailyLog(action, unit, employee, note, ai);
+
+  return {
+    label,
+    ai,
+  };
 }
 
 // 📲 Ruta del panel web
@@ -446,11 +467,18 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    await updateNotionRoom(unit, action, name, note);
+    if ((action === "ISSUE" || action === "SUPPLIES") && !String(note || "").trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ Debes escribir una nota",
+      });
+    }
+
+    const result = await updateNotionRoom(unit, action, name, note);
 
     res.json({
       success: true,
-      message: `✅ Enviado correctamente: ${actionLabel(action)} - ${unit}`,
+      message: `✅ Enviado correctamente: ${result.label} - ${unit}`,
     });
   } catch (error) {
     console.error("❌ Error en /action:", error.message);
