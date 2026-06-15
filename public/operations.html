@@ -1,1 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
+<title>Centro de Operaciones</title>
+
+<style>
+
+body{
+  font-family:Arial;
+  background:#111827;
+  color:white;
+  padding:20px;
+}
+
+h1{
+  text-align:center;
+}
+
+#events{
+  margin-top:20px;
+}
+
+.event{
+  background:#1f2937;
+  border-left:6px solid #10b981;
+  padding:15px;
+  margin-bottom:10px;
+  border-radius:10px;
+}
+
+.time{
+  color:#9ca3af;
+  font-size:13px;
+}
+
+.unit{
+  font-size:20px;
+  font-weight:bold;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>🚨 Centro de Operaciones</h1>
+
+<div id="events"></div>
+
+<script>
+
+let lastCount = 0;
+
+function playAlert(){
+
+  try{
+
+    const audioCtx =
+      new(window.AudioContext ||
+      window.webkitAudioContext)();
+
+    const osc =
+      audioCtx.createOscillator();
+
+    const gain =
+      audioCtx.createGain();
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.frequency.value = 900;
+
+    gain.gain.value = 0.15;
+
+    osc.start();
+
+    setTimeout(()=>{
+      osc.stop();
+    },250);
+
+  }catch(err){}
+
+}
+
+async function loadEvents(){
+
+  try{
+
+    const response =
+      await fetch("/operations-events");
+
+    const data =
+      await response.json();
+
+    if(
+      data.count >
+      lastCount &&
+      lastCount !== 0
+    ){
+      playAlert();
+    }
+
+    lastCount =
+      data.count;
+
+    const container =
+      document.getElementById("events");
+
+    container.innerHTML = "";
+
+    data.events.forEach(event=>{
+
+      container.innerHTML += `
+        <div class="event">
+          <div class="time">${event.time}</div>
+          <div class="unit">${event.unit}</div>
+          <div>${event.action}</div>
+          <div>${event.person}</div>
+          <div>${event.note || ""}</div>
+        </div>
+      `;
+
+    });
+
+  }catch(err){
+    console.log(err);
+  }
+
+}
+
+loadEvents();
+
+setInterval(
+  loadEvents,
+  5000
+);
+
+</script>
+
+</body>
+</html>
