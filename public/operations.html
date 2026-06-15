@@ -6,7 +6,6 @@
 <title>Centro de Operaciones</title>
 
 <style>
-
 body{
   font-family:Arial;
   background:#111827;
@@ -16,6 +15,26 @@ body{
 
 h1{
   text-align:center;
+}
+
+button{
+  width:100%;
+  padding:15px;
+  font-size:18px;
+  border:none;
+  border-radius:10px;
+  margin-bottom:20px;
+  cursor:pointer;
+  background:#2563eb;
+  color:white;
+  font-weight:bold;
+}
+
+#notificationStatus{
+  text-align:center;
+  margin-bottom:15px;
+  color:#d1d5db;
+  font-size:14px;
 }
 
 #events{
@@ -39,7 +58,6 @@ h1{
   font-size:20px;
   font-weight:bold;
 }
-
 </style>
 
 </head>
@@ -48,11 +66,64 @@ h1{
 
 <h1>🚨 Centro de Operaciones</h1>
 
+<button onclick="enableNotifications()">
+  🔔 Activar notificaciones
+</button>
+
+<div id="notificationStatus">
+  Notificaciones: sin activar
+</div>
+
 <div id="events"></div>
 
 <script>
 
 let lastCount = 0;
+
+function updateNotificationStatus(){
+
+  const status =
+    document.getElementById("notificationStatus");
+
+  if(!("Notification" in window)){
+    status.innerText =
+      "Notificaciones: no soportadas en este navegador";
+    return;
+  }
+
+  if(Notification.permission === "granted"){
+    status.innerText =
+      "✅ Notificaciones activadas";
+  }else if(Notification.permission === "denied"){
+    status.innerText =
+      "❌ Notificaciones bloqueadas";
+  }else{
+    status.innerText =
+      "🔔 Presiona el botón para activar notificaciones";
+  }
+
+}
+
+async function enableNotifications(){
+
+  if(!("Notification" in window)){
+    alert("Este navegador no soporta notificaciones.");
+    updateNotificationStatus();
+    return;
+  }
+
+  const permission =
+    await Notification.requestPermission();
+
+  if(permission === "granted"){
+    alert("✅ Notificaciones activadas");
+  }else{
+    alert("❌ Notificaciones no permitidas. Revisa permisos del navegador.");
+  }
+
+  updateNotificationStatus();
+
+}
 
 function playAlert(){
 
@@ -72,7 +143,6 @@ function playAlert(){
     gain.connect(audioCtx.destination);
 
     osc.frequency.value = 900;
-
     gain.gain.value = 0.15;
 
     osc.start();
@@ -82,6 +152,27 @@ function playAlert(){
     },250);
 
   }catch(err){}
+
+}
+
+function sendBrowserNotification(event){
+
+  if(
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ){
+
+    new Notification(
+      event.action || "Nueva actualización",
+      {
+        body:
+          `${event.unit || "Unidad"} - ${event.person || "Operación"}`,
+        icon:
+          "https://cdn-icons-png.flaticon.com/512/1827/1827392.png"
+      }
+    );
+
+  }
 
 }
 
@@ -96,34 +187,21 @@ async function loadEvents(){
       await response.json();
 
     if(
-  data.count >
-  lastCount &&
-  lastCount !== 0
-){
+      data.count >
+      lastCount &&
+      lastCount !== 0
+    ){
 
-  playAlert();
+      playAlert();
 
-  const newest =
-    data.events[0];
+      const newest =
+        data.events[0];
 
-  if(
-    "Notification" in window &&
-    Notification.permission === "granted"
-  ){
-
-    new Notification(
-      newest.action,
-      {
-        body:
-          `${newest.unit} - ${newest.person}`,
-        icon:
-          "https://cdn-icons-png.flaticon.com/512/1827/1827392.png"
+      if(newest){
+        sendBrowserNotification(newest);
       }
-    );
 
-  }
-
-}
+    }
 
     lastCount =
       data.count;
@@ -137,10 +215,10 @@ async function loadEvents(){
 
       container.innerHTML += `
         <div class="event">
-          <div class="time">${event.time}</div>
-          <div class="unit">${event.unit}</div>
-          <div>${event.action}</div>
-          <div>${event.person}</div>
+          <div class="time">${event.time || ""}</div>
+          <div class="unit">${event.unit || ""}</div>
+          <div>${event.action || ""}</div>
+          <div>${event.person || ""}</div>
           <div>${event.note || ""}</div>
         </div>
       `;
@@ -152,20 +230,8 @@ async function loadEvents(){
   }
 
 }
-// 🔔 Pedir permiso para notificaciones
-async function enableNotifications(){
 
-  if(!("Notification" in window)){
-    return;
-  }
-
-  if(Notification.permission === "default"){
-    await Notification.requestPermission();
-  }
-
-}
-
-enableNotifications();
+updateNotificationStatus();
 loadEvents();
 
 setInterval(
