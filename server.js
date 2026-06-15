@@ -23,7 +23,8 @@ const NOTION_DATABASE_ID =
 const NOTION_LOG_DATABASE_ID =
   process.env.NOTION_LOG_DATABASE_ID || "";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_API_KEY =
+  process.env.OPENAI_API_KEY || "";
 
 console.log("🔍 ENV CHECK");
 console.log("NOTION_API_KEY existe:", !!NOTION_API_KEY);
@@ -37,9 +38,14 @@ const openai = new OpenAI({
   apiKey: OPENAI_API_KEY || "no-key",
 });
 
-// 🌎 Página principal
+// 🌎 Página principal limpiadores
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/index.html");
+});
+
+// 🔍 Página inspectores
+app.get("/inspector", (req, res) => {
+  res.sendFile(__dirname + "/public/inspector.html");
 });
 
 // 🧪 Diagnóstico seguro
@@ -68,7 +74,7 @@ function todayISO() {
   }).format(new Date());
 }
 
-// 🕒 Hora local bonita
+// 🕒 Hora local
 function localTime() {
   return new Date().toLocaleString("en-US", {
     timeZone: "America/Chicago",
@@ -92,7 +98,7 @@ function normalizeRoom(value) {
   return room;
 }
 
-// 🔢 Solo números de unidad
+// 🔢 Solo números
 function roomDigits(value) {
   const match = String(value || "").match(/(\d{2,4})/);
   return match ? match[1] : "";
@@ -148,19 +154,27 @@ async function queryTodayRooms() {
   return pages;
 }
 
-// 🧠 Convertir acción a status
+// 🧠 Status de Notion
 function notionStatusFromAction(action) {
   if (action === "START") return "In Progress";
   if (action === "DONE") return "Cleaned - Awaiting Inspection";
+  if (action === "INSPECTION_START") return "Inspection Started";
+  if (action === "READY_GUEST") return "Ready for Guest";
+
   return null;
 }
 
-// 📝 Texto bonito
+// 📝 Labels
 function actionLabel(action) {
   if (action === "START") return "🟢 Limpieza iniciada";
   if (action === "DONE") return "🔴 Limpieza terminada";
   if (action === "ISSUE") return "⚠️ Problema reportado";
   if (action === "SUPPLIES") return "🧺 Supplies solicitados";
+
+  if (action === "INSPECTION_START") return "🔍 Inspección iniciada";
+  if (action === "READY_GUEST") return "✅ Ready for Guest";
+  if (action === "INSPECTION_REPORT") return "📝 Error de limpieza reportado";
+  if (action === "INSPECTION_SUPPLIES") return "🧺 Solicitud de inspector";
 
   return "Actualización";
 }
@@ -219,8 +233,24 @@ Devuelve exactamente:
   }
 }
 
+// 🧹 Sacar limpiador asignado desde Notion
+function getAssignedCleaner(page) {
+  return (
+    page.properties?.["Assigned Cleaner"]?.select?.name ||
+    ""
+  );
+}
+
 // 🗃️ Guardar historial diario
-async function saveDailyLog(action, unit, employee, note, ai = null) {
+async function saveDailyLog({
+  action,
+  unit,
+  employee,
+  inspector,
+  assignedCleaner,
+  note,
+  ai = null,
+}) {
   if (!NOTION_LOG_DATABASE_ID) {
     console.log("⚠️ NOTION_LOG_DATABASE_ID faltante, no se guardó historial");
     return;
@@ -229,73 +259,102 @@ async function saveDailyLog(action, unit, employee, note, ai = null) {
   const now = new Date().toISOString();
 
   try {
+    const props = {
+      Log: {
+        title: [
+          {
+            text: {
+              content: `${unit} - ${action} - ${employee || inspector}`,
+            },
+          },
+        ],
+      },
+      Date: {
+        date: {
+          start: todayISO(),
+        },
+      },
+      Time: {
+        date: {
+          start: now,
+        },
+      },
+      Unit: {
+        rich_text: [
+          {
+            text: {
+              content: unit,
+            },
+          },
+        ],
+      },
+      Action: {
+        select: {
+          name: action,
+        },
+      },
+      Note: {
+        rich_text: [
+          {
+            text: {
+              content: note || "",
+            },
+          },
+        ],
+      },
+      Category: {
+        select: {
+          name: ai?.category || "Other",
+        },
+      },
+      Priority: {
+        select: {
+          name: ai?.priority || "Normal",
+        },
+      },
+    };
+
+    if (employee) {
+      props.Cleaner = {
+        rich_text: [
+          {
+            text: {
+              content: employee,
+            },
+          },
+        ],
+      };
+    }
+
+    if (inspector) {
+      props.Inspector = {
+        rich_text: [
+          {
+            text: {
+              content: inspector,
+            },
+          },
+        ],
+      };
+    }
+
+    if (assignedCleaner) {
+      props["Cleaner Error"] = {
+        rich_text: [
+          {
+            text: {
+              content: assignedCleaner,
+            },
+          },
+        ],
+      };
+    }
+
     await notion.pages.create({
       parent: {
         database_id: NOTION_LOG_DATABASE_ID,
       },
-      properties: {
-        Log: {
-          title: [
-            {
-              text: {
-                content: `${unit} - ${action} - ${employee}`,
-              },
-            },
-          ],
-        },
-        Date: {
-          date: {
-            start: todayISO(),
-          },
-        },
-        Time: {
-          date: {
-            start: now,
-          },
-        },
-        Unit: {
-          rich_text: [
-            {
-              text: {
-                content: unit,
-              },
-            },
-          ],
-        },
-        Cleaner: {
-          rich_text: [
-            {
-              text: {
-                content: employee,
-              },
-            },
-          ],
-        },
-        Action: {
-          select: {
-            name: action,
-          },
-        },
-        Note: {
-          rich_text: [
-            {
-              text: {
-                content: note || "",
-              },
-            },
-          ],
-        },
-        Category: {
-          select: {
-            name: ai?.category || "Other",
-          },
-        },
-        Priority: {
-          select: {
-            name: ai?.priority || "Normal",
-          },
-        },
-      },
+      properties: props,
     });
 
     console.log("✅ Daily Cleaning Log guardado");
@@ -305,14 +364,23 @@ async function saveDailyLog(action, unit, employee, note, ai = null) {
 }
 
 // ✅ Actualizar habitación principal
-async function updateNotionRoom(unit, action, employee, note) {
+async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") {
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
     throw new Error(
       "Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID"
     );
   }
 
-  const allowedActions = ["START", "DONE", "ISSUE", "SUPPLIES"];
+  const allowedActions = [
+    "START",
+    "DONE",
+    "ISSUE",
+    "SUPPLIES",
+    "INSPECTION_START",
+    "READY_GUEST",
+    "INSPECTION_REPORT",
+    "INSPECTION_SUPPLIES",
+  ];
 
   if (!allowedActions.includes(action)) {
     throw new Error("Acción no permitida");
@@ -347,18 +415,28 @@ async function updateNotionRoom(unit, action, employee, note) {
   const label = actionLabel(action);
   const status = notionStatusFromAction(action);
 
+  const needsAI = [
+    "ISSUE",
+    "SUPPLIES",
+    "INSPECTION_REPORT",
+    "INSPECTION_SUPPLIES",
+  ].includes(action);
+
   let ai = null;
 
-  if (action === "ISSUE" || action === "SUPPLIES") {
+  if (needsAI) {
     ai = await analyzeNoteWithAI(action, note);
   }
 
-  const historyLine =
-    `${localTime()} - ${employee} - ${label}` +
-    `${note ? ` - ${note}` : ""}` +
-    `${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
-
   for (const page of matches) {
+    const assignedCleaner = getAssignedCleaner(page);
+
+    const historyLine =
+      `${localTime()} - ${employee} - ${label}` +
+      `${assignedCleaner && mode === "inspector" ? ` - Cleaner: ${assignedCleaner}` : ""}` +
+      `${note ? ` - ${note}` : ""}` +
+      `${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
+
     const oldLastMessage =
       page.properties["Last Message"]?.rich_text?.map((t) => t.plain_text).join("") || "";
 
@@ -417,7 +495,23 @@ async function updateNotionRoom(unit, action, employee, note) {
       };
     }
 
-    if (action === "ISSUE" || action === "SUPPLIES") {
+    if (action === "INSPECTION_START") {
+      props["Inspection Status"] = {
+        status: {
+          name: "Inspection Started",
+        },
+      };
+    }
+
+    if (action === "READY_GUEST") {
+      props["Inspection Status"] = {
+        status: {
+          name: "Ready for Guest",
+        },
+      };
+    }
+
+    if (needsAI) {
       props["Issues Notes"] = {
         rich_text: [
           {
@@ -445,9 +539,17 @@ async function updateNotionRoom(unit, action, employee, note) {
       page_id: page.id,
       properties: props,
     });
-  }
 
-  await saveDailyLog(action, unit, employee, note, ai);
+    await saveDailyLog({
+      action,
+      unit,
+      employee: mode === "cleaner" ? employee : assignedCleaner,
+      inspector: mode === "inspector" ? employee : "",
+      assignedCleaner: mode === "inspector" ? assignedCleaner : "",
+      note,
+      ai,
+    });
+  }
 
   return {
     label,
@@ -455,7 +557,7 @@ async function updateNotionRoom(unit, action, employee, note) {
   };
 }
 
-// 📲 Ruta del panel web
+// 📲 Ruta limpiadores
 app.post("/action", async (req, res) => {
   try {
     const { action, unit, note, name } = req.body;
@@ -474,7 +576,7 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    const result = await updateNotionRoom(unit, action, name, note);
+    const result = await updateNotionRoom(unit, action, name, note, "cleaner");
 
     res.json({
       success: true,
@@ -482,6 +584,44 @@ app.post("/action", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error en /action:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: `❌ Error: ${error.message}`,
+    });
+  }
+});
+
+// 🔍 Ruta inspectores
+app.post("/inspector-action", async (req, res) => {
+  try {
+    const { action, unit, note, name } = req.body;
+
+    if (!action || !unit || !name) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ Faltan datos: inspector, unidad o acción",
+      });
+    }
+
+    if (
+      (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES") &&
+      !String(note || "").trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "❌ Debes escribir una nota",
+      });
+    }
+
+    const result = await updateNotionRoom(unit, action, name, note, "inspector");
+
+    res.json({
+      success: true,
+      message: `✅ Inspector: ${result.label} - ${unit}`,
+    });
+  } catch (error) {
+    console.error("❌ Error inspector:", error.message);
 
     res.status(500).json({
       success: false,
