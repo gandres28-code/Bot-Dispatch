@@ -6,6 +6,9 @@ const OpenAI = require("openai");
 
 const app = express();
 
+// 🚫 Anti duplicados
+const recentActions = new Map();
+
 app.use(express.json());
 app.use(express.static("public"));
 
@@ -102,6 +105,32 @@ function normalizeRoom(value) {
 function roomDigits(value) {
   const match = String(value || "").match(/(\d{2,4})/);
   return match ? match[1] : "";
+}
+
+// 🚫 Evitar acciones duplicadas
+function isDuplicateAction(action, unit, employee) {
+  const key =
+    `${action}-${unit}-${employee}`.toUpperCase();
+
+  const now = Date.now();
+
+  const lastTime =
+    recentActions.get(key);
+
+  if (
+    lastTime &&
+    now - lastTime < 30000
+  ) {
+    return true;
+  }
+
+  recentActions.set(key, now);
+
+  setTimeout(() => {
+    recentActions.delete(key);
+  }, 30000);
+
+  return false;
 }
 
 // 🔍 Buscar unidades de hoy en Notion usando search
@@ -553,6 +582,13 @@ app.post("/action", async (req, res) => {
       });
     }
 
+    if (isDuplicateAction(action, unit, name)) {
+      return res.status(400).json({
+        success: false,
+        message: "⚠️ Acción ya registrada recientemente",
+      });
+    }
+
     if ((action === "ISSUE" || action === "SUPPLIES") && !String(note || "").trim()) {
       return res.status(400).json({
         success: false,
@@ -585,6 +621,13 @@ app.post("/inspector-action", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "❌ Faltan datos: inspector, unidad o acción",
+      });
+    }
+
+    if (isDuplicateAction(action, unit, name)) {
+      return res.status(400).json({
+        success: false,
+        message: "⚠️ Acción ya registrada recientemente",
       });
     }
 
