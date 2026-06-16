@@ -1087,7 +1087,6 @@ app.get("/finalizar-dia", async (req, res) => {
   }
 });
 });
-
 app.get("/finalizar-dia", async (req, res) => {
   try {
     const date = req.query.date || todayISO();
@@ -1096,7 +1095,10 @@ app.get("/finalizar-dia", async (req, res) => {
 
     const filePath = path.join(reportsDir, report.fileName);
 
-    res.download(filePath, report.fileName);
+    setTimeout(() => {
+      res.download(filePath, report.fileName);
+    }, 1500);
+
   } catch (error) {
     console.error("❌ Error finalizando día:", error.message);
     res.status(500).send(`Error finalizando día: ${error.message}`);
