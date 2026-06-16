@@ -212,7 +212,7 @@ if (Object.keys(errorsByCleaner).length > 0) {
 
   doc.addPage();
 
-  doc.fontSize(16).text("4. Complete Activity Ledger", {
+  doc.fontSize(13).text("4. Complete Activity Ledger", {
     align: "center"
   });
 
