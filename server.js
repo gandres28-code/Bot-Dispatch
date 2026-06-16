@@ -298,7 +298,85 @@ function getAssignedCleaner(page) {
   return page.properties?.["Assigned Cleaner"]?.select?.name || "";
 }
 
-// 🗃️ Guardar historial diario
+async function getDatabaseSchema(databaseId) {
+  const db = await notion.databases.retrieve({
+    database_id: databaseId,
+  });
+
+  return db.properties;
+}
+
+function findPropName(schema, possibleNames) {
+  return possibleNames.find((name) => schema[name]);
+}
+
+function buildTextProperty(schema, possibleNames, value) {
+  const name = findPropName(schema, possibleNames);
+  if (!name) return null;
+
+  const type = schema[name].type;
+
+  if (type === "title") {
+    return {
+      name,
+      value: {
+        title: [
+          {
+            text: {
+              content: String(value || ""),
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  if (type === "rich_text") {
+    return {
+      name,
+      value: {
+        rich_text: [
+          {
+            text: {
+              content: String(value || ""),
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  return null;
+}
+
+function buildDateProperty(schema, possibleNames, value) {
+  const name = findPropName(schema, possibleNames);
+  if (!name) return null;
+
+  return {
+    name,
+    value: {
+      date: {
+        start: value,
+      },
+    },
+  };
+}
+
+function buildSelectProperty(schema, possibleNames, value) {
+  const name = findPropName(schema, possibleNames);
+  if (!name) return null;
+
+  return {
+    name,
+    value: {
+      select: {
+        name: String(value || "Other"),
+      },
+    },
+  };
+}
+
 async function saveDailyLog({
   action,
   unit,
@@ -308,6 +386,52 @@ async function saveDailyLog({
   note,
   ai = null,
 }) {
+  if (!NOTION_LOG_DATABASE_ID) {
+    console.log("⚠️ NOTION_LOG_DATABASE_ID faltante, no se guardó historial");
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    const schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
+
+    const props = {};
+
+    const fields = [
+      buildTextProperty(schema, ["log", "Log"], `${unit} - ${action} - ${employee || inspector || ""}`),
+      buildDateProperty(schema, ["date", "Date"], todayISO()),
+      buildDateProperty(schema, ["time", "Time"], now),
+      buildTextProperty(schema, ["unit", "Unit"], unit),
+      buildTextProperty(schema, ["cleaner", "Cleaner"], employee || ""),
+      buildTextProperty(schema, ["inspector", "Inspector"], inspector || ""),
+      buildSelectProperty(schema, ["action", "Action"], action),
+      buildTextProperty(schema, ["note", "Note"], note || ""),
+      buildSelectProperty(schema, ["category", "Category"], ai?.category || "Other"),
+      buildSelectProperty(schema, ["priority", "Priority"], ai?.priority || "Normal"),
+      buildSelectProperty(schema, ["status", "Status"], notionStatusFromAction(action) || action),
+      buildTextProperty(schema, ["cleaner error", "Cleaner Error"], assignedCleaner || ""),
+    ];
+
+    fields.forEach((field) => {
+      if (field) {
+        props[field.name] = field.value;
+      }
+    });
+
+    await notion.pages.create({
+      parent: {
+        database_id: NOTION_LOG_DATABASE_ID,
+      },
+      properties: props,
+    });
+
+    console.log("✅ Daily Cleaning Log guardado");
+  } catch (error) {
+    console.log("❌ ERROR guardando Daily Cleaning Log:", error.body || error.message);
+  }
+}
+{
   if (!NOTION_LOG_DATABASE_ID) {
     console.log("⚠️ NOTION_LOG_DATABASE_ID faltante, no se guardó historial");
     return;
