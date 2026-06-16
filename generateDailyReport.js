@@ -231,20 +231,37 @@ if (Object.keys(errorsByCleaner).length > 0) {
     const status = getText(log, "status");
     const cleanerError = getText(log, "cleaner error");
 
-    doc.fontSize(9).text(
-      `${index + 1}. ${formatTime(time)} | Unit: ${unit || "N/A"} | Action: ${action || "N/A"}`
-    );
+    doc.fontSize(8.5).text(
+  `${index + 1}. ${formatReportTime(time)} | Unit: ${unit || "N/A"} | ${action || "N/A"}`
+);
 
-    if (logTitle) doc.text(`   Log: ${logTitle}`);
-    if (cleaner) doc.text(`   Cleaner: ${cleaner}`);
-    if (inspector) doc.text(`   Inspector: ${inspector}`);
-    if (category) doc.text(`   Category: ${category}`);
-    if (priority) doc.text(`   Priority: ${priority}`);
-    if (status) doc.text(`   Status: ${status}`);
-    if (cleanerError) doc.text(`   Cleaner Error: ${cleanerError}`);
-    if (note) doc.text(`   Note: ${note}`);
+if (cleaner) doc.text(`Cleaner: ${cleaner}`);
+if (inspector) doc.text(`Inspector: ${inspector}`);
+if (category) doc.text(`Category: ${category}`);
+if (priority) doc.text(`Priority: ${priority}`);
+if (status) doc.text(`Status: ${status}`);
 
-    doc.moveDown(0.6);
+if (
+  cleanerError &&
+  cleanerError.trim() &&
+  !["no", "none", "n/a", "na"].includes(
+    cleanerError.toLowerCase().trim()
+  )
+) {
+  doc.text(`Cleaner Error: ${cleanerError}`);
+}
+
+if (note) {
+  doc.text(`Note: ${note}`);
+}
+
+doc.moveDown(0.3);
+
+doc.moveTo(50, doc.y)
+   .lineTo(560, doc.y)
+   .stroke();
+
+doc.moveDown(0.4);
   });
 
   doc.end();
