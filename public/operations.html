@@ -29,7 +29,17 @@ button{
   font-weight:bold;
 }
 
-#notificationStatus{
+.finish-day{
+  background:#10b981;
+}
+
+.finish-day:disabled{
+  background:#6b7280;
+  cursor:not-allowed;
+}
+
+#notificationStatus,
+#reportStatus{
   text-align:center;
   margin-bottom:15px;
   color:#d1d5db;
@@ -74,6 +84,14 @@ button{
 
 <div id="notificationStatus">
   Notificaciones: sin activar
+</div>
+
+<button id="finishDayBtn" class="finish-day" onclick="finalizarDia()">
+  📄 Finalizar Día y Descargar Reporte
+</button>
+
+<div id="reportStatus">
+  Reporte diario: listo para generar
 </div>
 
 <div id="events"></div>
@@ -176,6 +194,43 @@ function sendBrowserNotification(event){
       }
     );
   }
+}
+
+function todayLocalISO(){
+  const now = new Date();
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(now);
+}
+
+function finalizarDia(){
+  const btn =
+    document.getElementById("finishDayBtn");
+
+  const status =
+    document.getElementById("reportStatus");
+
+  const today =
+    todayLocalISO();
+
+  btn.disabled = true;
+  btn.innerText = "⏳ Generando reporte...";
+  status.innerText = "Generando y descargando reporte del día...";
+
+  window.location.href =
+    `/finalizar-dia?date=${today}`;
+
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerText = "📄 Finalizar Día y Descargar Reporte";
+    status.innerText = "✅ Reporte solicitado. Revisa tus descargas.";
+  }, 3000);
 }
 
 async function loadEvents(){
