@@ -435,7 +435,17 @@ async function saveDailyLog({
 
   try {
     const schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
+const alreadyExists = await dailyLogAlreadyExists(
+  action,
+  unit,
+  employee,
+  inspector
+);
 
+if (alreadyExists) {
+  console.log("⚠️ Registro duplicado, no se guardó en Daily Cleaning Logs");
+  return;
+}
     const props = {};
 
     const fields = [
