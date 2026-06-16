@@ -153,7 +153,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
 
   doc.moveDown();
 
-  doc.fontSize(16).text("1. Executive Summary");
+  doc.fontSize(12).text("1. Executive Summary");
   doc.moveDown(0.5);
   doc.fontSize(12).text(`Total Records: ${logs.length}`);
   doc.text(`Total Units Registered: ${units.size}`);
@@ -166,7 +166,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
 
   doc.moveDown();
 
-  doc.fontSize(16).text("2. Productivity by Cleaner");
+  doc.fontSize(12).text("2. Productivity by Cleaner");
   doc.moveDown(0.5);
 
   if (Object.keys(productivity).length === 0) {
@@ -179,7 +179,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
 
   doc.moveDown();
 
-  doc.fontSize(16).text("3. Issues & Cleaner Errors");
+  doc.fontSize(12).text("3. Issues & Cleaner Errors");
   doc.moveDown(0.5);
 
   doc.fontSize(12).text("Issues by Unit:");
@@ -205,7 +205,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
 
   doc.addPage();
 
-  doc.fontSize(18).text("4. Complete Activity Ledger", {
+  doc.fontSize(16).text("4. Complete Activity Ledger", {
     align: "center"
   });
 
@@ -224,7 +224,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
     const status = getText(log, "status");
     const cleanerError = getText(log, "cleaner error");
 
-    doc.fontSize(11).text(
+    doc.fontSize(9).text(
       `${index + 1}. ${formatTime(time)} | Unit: ${unit || "N/A"} | Action: ${action || "N/A"}`
     );
 
