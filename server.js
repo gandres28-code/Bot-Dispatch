@@ -1071,6 +1071,21 @@ app.get("/generate-daily-report", async (req, res) => {
     console.error("❌ Error generating daily report:", error.message);
     res.status(500).send(`Error generating report: ${error.message}`);
   }
+  // 📥 Descargar reporte al finalizar el día
+app.get("/finalizar-dia", async (req, res) => {
+  try {
+    const date = req.query.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    const filePath = path.join(reportsDir, report.fileName);
+
+    res.download(filePath, report.fileName);
+  } catch (error) {
+    console.error("❌ Error finalizando día:", error.message);
+    res.status(500).send(`Error finalizando día: ${error.message}`);
+  }
+});
 });
 
 // ❤️ Health check para Render
