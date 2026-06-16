@@ -221,26 +221,30 @@ function todayLocalISO(){
 }
 
 function finalizarDia(){
+
+  const selectedDate =
+    document.getElementById("reportDate").value;
+
+  const date =
+    selectedDate || todayLocalISO();
+
   const btn =
     document.getElementById("finishDayBtn");
 
   const status =
     document.getElementById("reportStatus");
 
-  const today =
-    todayLocalISO();
-
   btn.disabled = true;
   btn.innerText = "⏳ Generando reporte...";
-  status.innerText = "Generando y descargando reporte del día...";
+  status.innerText = "Generando y descargando reporte...";
 
   window.location.href =
-    `/finalizar-dia?date=${today}`;
+    `/finalizar-dia?date=${date}`;
 
   setTimeout(() => {
     btn.disabled = false;
     btn.innerText = "📄 Finalizar Día y Descargar Reporte";
-    status.innerText = "✅ Reporte solicitado. Revisa tus descargas.";
+    status.innerText = "✅ Reporte solicitado.";
   }, 3000);
 }
 
