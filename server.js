@@ -1088,6 +1088,20 @@ app.get("/finalizar-dia", async (req, res) => {
 });
 });
 
+app.get("/finalizar-dia", async (req, res) => {
+  try {
+    const date = req.query.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    const filePath = path.join(reportsDir, report.fileName);
+
+    res.download(filePath, report.fileName);
+  } catch (error) {
+    console.error("❌ Error finalizando día:", error.message);
+    res.status(500).send(`Error finalizando día: ${error.message}`);
+  }
+});
 // ❤️ Health check para Render
 app.get("/health", (req, res) => {
   res.send("OK");
