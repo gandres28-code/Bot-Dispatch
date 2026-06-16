@@ -643,20 +643,10 @@ async function getDailyLogsForReport(date) {
   const response = await notion.databases.query({
     database_id: NOTION_LOG_DATABASE_ID,
     filter: {
-      or: [
-        {
-          property: "Date",
-          date: {
-            equals: date,
-          },
-        },
-        {
-          property: "date",
-          date: {
-            equals: date,
-          },
-        },
-      ],
+      property: "Date",
+      date: {
+        equals: date,
+      },
     },
     sorts: [
       {
