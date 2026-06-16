@@ -141,67 +141,74 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
     }
   });
 
-  doc.fontSize(20).text("DAILY HOUSEKEEPING OPERATIONS REPORT", {
-    align: "center"
-  });
+  doc.fontSize(16).text("DAILY HOUSEKEEPING OPERATIONS REPORT", {
+  align: "center",
+});
 
-  doc.moveDown();
+doc.moveDown(0.5);
+doc.fontSize(9).text(`Date: ${date}`);
+doc.text(`Company: ${process.env.COMPANY_NAME || "Housekeeping Operations"}`);
+doc.text(`Property: ${process.env.PROPERTY_NAME || "Property"}`);
 
-  doc.fontSize(12).text(`Date: ${date}`);
-  doc.text(`Company: ${process.env.COMPANY_NAME || "Housekeeping Operations"}`);
-  doc.text(`Property: ${process.env.PROPERTY_NAME || "Property"}`);
+doc.moveDown();
 
-  doc.moveDown();
+doc.fontSize(12).text("1. Executive Summary");
+doc.moveDown(0.4);
+doc.fontSize(9).text(`Total Records: ${logs.length}`);
+doc.text(`Total Units Registered: ${units.size}`);
+doc.text(`Completed / Ready Records: ${completed}`);
+doc.text(`Issues Reported: ${issues}`);
+doc.text(`High Priority Records: ${highPriority}`);
+doc.text(`Active Cleaners: ${cleaners.size}`);
+doc.text(`Active Inspectors: ${inspectors.size}`);
 
-  doc.fontSize(12).text("1. Executive Summary");
-  doc.moveDown(0.5);
-  doc.fontSize(12).text(`Total Records: ${logs.length}`);
-  doc.text(`Total Units Registered: ${units.size}`);
-  doc.text(`Completed / Ready Records: ${completed}`);
-  doc.text(`Issues Reported: ${issues}`);
-  doc.text(`High Priority Records: ${highPriority}`);
+if (cleanerErrors > 0) {
   doc.text(`Cleaner Errors: ${cleanerErrors}`);
-  doc.text(`Active Cleaners: ${cleaners.size}`);
-  doc.text(`Active Inspectors: ${inspectors.size}`);
+}
 
-  doc.moveDown();
+doc.moveDown();
 
-  doc.fontSize(12).text("2. Productivity by Cleaner");
-  doc.moveDown(0.5);
+doc.fontSize(12).text("2. Productivity by Cleaner");
+doc.moveDown(0.4);
 
-  if (Object.keys(productivity).length === 0) {
-    doc.fontSize(12).text("No completed cleaning records found.");
-  } else {
-    Object.entries(productivity).forEach(([cleaner, count]) => {
-      doc.fontSize(12).text(`${cleaner}: ${count} completed unit(s)`);
+if (Object.keys(productivity).length === 0) {
+  doc.fontSize(9).text("No completed cleaning records found.");
+} else {
+  Object.entries(productivity)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([cleaner, count], index) => {
+      doc.fontSize(9).text(`${index + 1}. ${cleaner}: ${count} completed unit(s)`);
     });
-  }
+}
 
-  doc.moveDown();
+doc.moveDown();
 
-  doc.fontSize(12).text("3. Issues & Cleaner Errors");
-  doc.moveDown(0.5);
+doc.fontSize(12).text("3. Issues Summary");
+doc.moveDown(0.4);
 
-  doc.fontSize(12).text("Issues by Unit:");
+doc.fontSize(9).text("Issues by Unit:");
 
-  if (Object.keys(issuesByUnit).length === 0) {
-    doc.text("No issues reported.");
-  } else {
-    Object.entries(issuesByUnit).forEach(([unit, count]) => {
+if (Object.keys(issuesByUnit).length === 0) {
+  doc.text("No issues reported.");
+} else {
+  Object.entries(issuesByUnit)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([unit, count]) => {
       doc.text(`Unit ${unit}: ${count} issue(s)`);
     });
-  }
+}
 
+if (Object.keys(errorsByCleaner).length > 0) {
   doc.moveDown(0.5);
-  doc.text("Cleaner Errors:");
+  doc.fontSize(12).text("4. Cleaner Errors");
+  doc.moveDown(0.4);
 
-  if (Object.keys(errorsByCleaner).length === 0) {
-    doc.text("No cleaner errors reported.");
-  } else {
-    Object.entries(errorsByCleaner).forEach(([cleaner, count]) => {
-      doc.text(`${cleaner}: ${count} error(s)`);
+  Object.entries(errorsByCleaner)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([cleaner, count]) => {
+      doc.fontSize(9).text(`${cleaner}: ${count} error(s)`);
     });
-  }
+}
 
   doc.addPage();
 
