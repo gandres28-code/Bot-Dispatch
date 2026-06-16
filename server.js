@@ -3,6 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const { Client } = require("@notionhq/client");
 const OpenAI = require("openai");
+const PDFDocument = require("pdfkit");
+const fs = require("fs");
+const path = require("path");
+const dayjs = require("dayjs");
 
 const app = express();
 
@@ -11,6 +15,13 @@ const recentActions = new Map();
 
 app.use(express.json());
 app.use(express.static("public"));
+
+// 📁 Carpeta para PDFs
+const reportsDir = path.join(__dirname, "reports");
+if (!fs.existsSync(reportsDir)) {
+  fs.mkdirSync(reportsDir);
+}
+app.use("/reports", express.static(reportsDir));
 
 // 🔑 ENV
 const NOTION_API_KEY =
@@ -24,7 +35,9 @@ const NOTION_DATABASE_ID =
   "37f25b5a514a8092ad64e6a8d478dc76";
 
 const NOTION_LOG_DATABASE_ID =
-  process.env.NOTION_LOG_DATABASE_ID || "";
+  process.env.NOTION_LOG_DATABASE_ID ||
+  process.env.NOTION_DAILY_CLEANING_LOGS_DB_ID ||
+  "";
 
 const OPENAI_API_KEY =
   process.env.OPENAI_API_KEY || "";
@@ -109,18 +122,11 @@ function roomDigits(value) {
 
 // 🚫 Evitar acciones duplicadas
 function isDuplicateAction(action, unit, employee) {
-  const key =
-    `${action}-${unit}-${employee}`.toUpperCase();
-
+  const key = `${action}-${unit}-${employee}`.toUpperCase();
   const now = Date.now();
+  const lastTime = recentActions.get(key);
 
-  const lastTime =
-    recentActions.get(key);
-
-  if (
-    lastTime &&
-    now - lastTime < 30000
-  ) {
+  if (lastTime && now - lastTime < 30000) {
     return true;
   }
 
@@ -192,57 +198,33 @@ function notionStatusFromAction(action) {
 
   return null;
 }
-async function notifyInspectors(unit) {
 
-  if (
-    !process.env.WHAPI_TOKEN ||
-    !process.env.INSPECTORS_GROUP_ID
-  ) {
-    console.log(
-      "⚠️ WHAPI_TOKEN o INSPECTORS_GROUP_ID faltante"
-    );
+async function notifyInspectors(unit) {
+  if (!process.env.WHAPI_TOKEN || !process.env.INSPECTORS_GROUP_ID) {
+    console.log("⚠️ WHAPI_TOKEN o INSPECTORS_GROUP_ID faltante");
     return;
   }
 
   try {
+    const response = await fetch("https://gate.whapi.cloud/messages/text", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.WHAPI_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: process.env.INSPECTORS_GROUP_ID,
+        body: `🔍 ${unit} lista para inspeccionar`,
+      }),
+    });
 
-    const response = await fetch(
-      "https://gate.whapi.cloud/messages/text",
-      {
-        method: "POST",
-        headers: {
-          Authorization:
-            `Bearer ${process.env.WHAPI_TOKEN}`,
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify({
-          to:
-            process.env.INSPECTORS_GROUP_ID,
-          body:
-            `🔍 ${unit} lista para inspeccionar`,
-        }),
-      }
-    );
-
-    const data =
-      await response.json();
-
-    console.log(
-      "✅ Aviso enviado a inspectores:",
-      data
-    );
-
+    const data = await response.json();
+    console.log("✅ Aviso enviado a inspectores:", data);
   } catch (error) {
-
-    console.log(
-      "❌ Error enviando a inspectores:",
-      error.message
-    );
-
+    console.log("❌ Error enviando a inspectores:", error.message);
   }
-
 }
+
 // 📝 Labels
 function actionLabel(action) {
   if (action === "START") return "🟢 Limpieza iniciada";
@@ -277,8 +259,7 @@ async function analyzeNoteWithAI(action, note) {
       messages: [
         {
           role: "system",
-          content:
-            "Clasifica reportes de housekeeping de hotel. Responde solo JSON válido.",
+          content: "Clasifica reportes de housekeeping de hotel. Responde solo JSON válido.",
         },
         {
           role: "user",
@@ -314,10 +295,7 @@ Devuelve exactamente:
 
 // 🧹 Sacar limpiador asignado desde Notion
 function getAssignedCleaner(page) {
-  return (
-    page.properties?.["Assigned Cleaner"]?.select?.name ||
-    ""
-  );
+  return page.properties?.["Assigned Cleaner"]?.select?.name || "";
 }
 
 // 🗃️ Guardar historial diario
@@ -391,6 +369,11 @@ async function saveDailyLog({
           name: ai?.priority || "Normal",
         },
       },
+      Status: {
+        select: {
+          name: notionStatusFromAction(action) || action,
+        },
+      },
     };
 
     if (employee) {
@@ -445,9 +428,7 @@ async function saveDailyLog({
 // ✅ Actualizar habitación principal
 async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") {
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
-    throw new Error(
-      "Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID"
-    );
+    throw new Error("Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID");
   }
 
   const allowedActions = [
@@ -620,6 +601,281 @@ async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") 
   };
 }
 
+// 📄 Helpers para PDF
+function getProp(page, names) {
+  for (const name of names) {
+    if (page.properties[name]) return page.properties[name];
+  }
+  return null;
+}
+
+function readText(page, names) {
+  const prop = getProp(page, names);
+  if (!prop) return "";
+
+  if (prop.title) return prop.title.map((t) => t.plain_text).join("");
+  if (prop.rich_text) return prop.rich_text.map((t) => t.plain_text).join("");
+  if (prop.select) return prop.select.name || "";
+  if (prop.status) return prop.status.name || "";
+  if (prop.date) return prop.date.start || "";
+  if (prop.number !== null && prop.number !== undefined) return String(prop.number);
+  if (prop.checkbox !== undefined) return prop.checkbox ? "Yes" : "No";
+
+  return "";
+}
+
+function formatReportTime(value) {
+  if (!value) return "N/A";
+
+  return new Date(value).toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+async function getDailyLogsForReport(date) {
+  if (!NOTION_LOG_DATABASE_ID) {
+    throw new Error("Falta NOTION_LOG_DATABASE_ID o NOTION_DAILY_CLEANING_LOGS_DB_ID");
+  }
+
+  const response = await notion.databases.query({
+    database_id: NOTION_LOG_DATABASE_ID,
+    filter: {
+      or: [
+        {
+          property: "Date",
+          date: {
+            equals: date,
+          },
+        },
+        {
+          property: "date",
+          date: {
+            equals: date,
+          },
+        },
+      ],
+    },
+    sorts: [
+      {
+        property: "Time",
+        direction: "ascending",
+      },
+    ],
+  });
+
+  return response.results;
+}
+
+async function generateDailyReport(date = todayISO()) {
+  const logs = await getDailyLogsForReport(date);
+
+  const fileName = `daily-housekeeping-report-${date}.pdf`;
+  const filePath = path.join(reportsDir, fileName);
+
+  const doc = new PDFDocument({ margin: 50 });
+  doc.pipe(fs.createWriteStream(filePath));
+
+  const units = new Set();
+  const cleaners = new Set();
+  const inspectors = new Set();
+
+  const productivity = {};
+  const issuesByUnit = {};
+  const errorsByCleaner = {};
+
+  let issues = 0;
+  let cleanerErrors = 0;
+  let highPriority = 0;
+  let completed = 0;
+
+  logs.forEach((log) => {
+    const unit = readText(log, ["Unit", "unit"]);
+    const cleaner = readText(log, ["Cleaner", "cleaner"]);
+    const inspector = readText(log, ["Inspector", "inspector"]);
+    const action = readText(log, ["Action", "action"]);
+    const category = readText(log, ["Category", "category"]);
+    const priority = readText(log, ["Priority", "priority"]);
+    const status = readText(log, ["Status", "status"]);
+    const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
+
+    if (unit) units.add(unit);
+    if (cleaner) cleaners.add(cleaner);
+    if (inspector) inspectors.add(inspector);
+
+    const actionLower = action.toLowerCase();
+    const categoryLower = category.toLowerCase();
+    const priorityLower = priority.toLowerCase();
+    const statusLower = status.toLowerCase();
+    const cleanerErrorLower = cleanerError.toLowerCase();
+
+    if (
+      cleaner &&
+      (
+        actionLower.includes("done") ||
+        actionLower.includes("finished") ||
+        actionLower.includes("completed") ||
+        actionLower.includes("terminada") ||
+        actionLower.includes("terminado") ||
+        actionLower.includes("lista") ||
+        actionLower.includes("ready")
+      )
+    ) {
+      productivity[cleaner] = (productivity[cleaner] || 0) + 1;
+    }
+
+    if (
+      actionLower.includes("issue") ||
+      actionLower.includes("problem") ||
+      actionLower.includes("problema") ||
+      actionLower.includes("report") ||
+      categoryLower.includes("issue") ||
+      categoryLower.includes("problem") ||
+      categoryLower.includes("problema")
+    ) {
+      issues++;
+      if (unit) issuesByUnit[unit] = (issuesByUnit[unit] || 0) + 1;
+    }
+
+    if (
+      cleanerErrorLower &&
+      cleanerErrorLower !== "no" &&
+      cleanerErrorLower !== "none" &&
+      cleanerErrorLower !== "n/a"
+    ) {
+      cleanerErrors++;
+      const cleanerName = cleaner || cleanerError || "Unknown";
+      errorsByCleaner[cleanerName] = (errorsByCleaner[cleanerName] || 0) + 1;
+    }
+
+    if (
+      priorityLower.includes("high") ||
+      priorityLower.includes("urgent") ||
+      priorityLower.includes("alta") ||
+      priorityLower.includes("urgente")
+    ) {
+      highPriority++;
+    }
+
+    if (
+      statusLower.includes("complete") ||
+      statusLower.includes("completed") ||
+      statusLower.includes("ready") ||
+      statusLower.includes("lista") ||
+      actionLower.includes("ready_guest")
+    ) {
+      completed++;
+    }
+  });
+
+  doc.fontSize(20).text("DAILY HOUSEKEEPING OPERATIONS REPORT", {
+    align: "center",
+  });
+
+  doc.moveDown();
+  doc.fontSize(12).text(`Date: ${date}`);
+  doc.text(`Company: ${process.env.COMPANY_NAME || "Housekeeping Operations"}`);
+  doc.text(`Property: ${process.env.PROPERTY_NAME || "Property"}`);
+  doc.moveDown();
+
+  doc.fontSize(16).text("1. Executive Summary");
+  doc.moveDown(0.5);
+  doc.fontSize(12).text(`Total Records: ${logs.length}`);
+  doc.text(`Total Units Registered: ${units.size}`);
+  doc.text(`Completed / Ready Records: ${completed}`);
+  doc.text(`Issues Reported: ${issues}`);
+  doc.text(`High Priority Records: ${highPriority}`);
+  doc.text(`Cleaner Errors: ${cleanerErrors}`);
+  doc.text(`Active Cleaners: ${cleaners.size}`);
+  doc.text(`Active Inspectors: ${inspectors.size}`);
+
+  doc.moveDown();
+
+  doc.fontSize(16).text("2. Productivity by Cleaner");
+  doc.moveDown(0.5);
+
+  if (Object.keys(productivity).length === 0) {
+    doc.fontSize(12).text("No completed cleaning records found.");
+  } else {
+    Object.entries(productivity).forEach(([cleaner, count]) => {
+      doc.fontSize(12).text(`${cleaner}: ${count} completed unit(s)`);
+    });
+  }
+
+  doc.moveDown();
+
+  doc.fontSize(16).text("3. Issues & Cleaner Errors");
+  doc.moveDown(0.5);
+
+  doc.fontSize(12).text("Issues by Unit:");
+
+  if (Object.keys(issuesByUnit).length === 0) {
+    doc.text("No issues reported.");
+  } else {
+    Object.entries(issuesByUnit).forEach(([unit, count]) => {
+      doc.text(`Unit ${unit}: ${count} issue(s)`);
+    });
+  }
+
+  doc.moveDown(0.5);
+  doc.text("Cleaner Errors:");
+
+  if (Object.keys(errorsByCleaner).length === 0) {
+    doc.text("No cleaner errors reported.");
+  } else {
+    Object.entries(errorsByCleaner).forEach(([cleaner, count]) => {
+      doc.text(`${cleaner}: ${count} error(s)`);
+    });
+  }
+
+  doc.addPage();
+
+  doc.fontSize(18).text("4. Complete Activity Ledger", {
+    align: "center",
+  });
+
+  doc.moveDown();
+
+  logs.forEach((log, index) => {
+    const logTitle = readText(log, ["Log", "log"]);
+    const time = readText(log, ["Time", "time"]);
+    const unit = readText(log, ["Unit", "unit"]);
+    const cleaner = readText(log, ["Cleaner", "cleaner"]);
+    const action = readText(log, ["Action", "action"]);
+    const note = readText(log, ["Note", "note"]);
+    const inspector = readText(log, ["Inspector", "inspector"]);
+    const category = readText(log, ["Category", "category"]);
+    const priority = readText(log, ["Priority", "priority"]);
+    const status = readText(log, ["Status", "status"]);
+    const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
+
+    doc.fontSize(11).text(
+      `${index + 1}. ${formatReportTime(time)} | Unit: ${unit || "N/A"} | Action: ${action || "N/A"}`
+    );
+
+    if (logTitle) doc.text(`   Log: ${logTitle}`);
+    if (cleaner) doc.text(`   Cleaner: ${cleaner}`);
+    if (inspector) doc.text(`   Inspector: ${inspector}`);
+    if (category) doc.text(`   Category: ${category}`);
+    if (priority) doc.text(`   Priority: ${priority}`);
+    if (status) doc.text(`   Status: ${status}`);
+    if (cleanerError) doc.text(`   Cleaner Error: ${cleanerError}`);
+    if (note) doc.text(`   Note: ${note}`);
+
+    doc.moveDown(0.6);
+  });
+
+  doc.end();
+
+  return {
+    fileName,
+    fileUrl: `/reports/${fileName}`,
+    totalRecords: logs.length,
+  };
+}
+
 // 📲 Ruta limpiadores
 app.post("/action", async (req, res) => {
   try {
@@ -647,9 +903,10 @@ app.post("/action", async (req, res) => {
     }
 
     const result = await updateNotionRoom(unit, action, name, note, "cleaner");
+
     if (action === "DONE") {
-  await notifyInspectors(unit);
-}
+      await notifyInspectors(unit);
+    }
 
     res.json({
       success: true,
@@ -709,10 +966,10 @@ app.post("/inspector-action", async (req, res) => {
     });
   }
 });
+
 // 🚨 Eventos para Centro de Operaciones
 app.get("/operations-events", async (req, res) => {
   try {
-
     if (!NOTION_LOG_DATABASE_ID) {
       return res.json({
         count: 0,
@@ -732,7 +989,6 @@ app.get("/operations-events", async (req, res) => {
     });
 
     const events = response.results.map((page) => {
-
       const props = page.properties;
 
       return {
@@ -740,9 +996,7 @@ app.get("/operations-events", async (req, res) => {
 
         time:
           props.Time?.date?.start
-            ? new Date(
-                props.Time.date.start
-              ).toLocaleString("en-US", {
+            ? new Date(props.Time.date.start).toLocaleString("en-US", {
                 timeZone: "America/Chicago",
                 hour: "2-digit",
                 minute: "2-digit",
@@ -762,11 +1016,9 @@ app.get("/operations-events", async (req, res) => {
           props.Cleaner?.rich_text
             ?.map((t) => t.plain_text)
             .join("") ||
-
           props.Inspector?.rich_text
             ?.map((t) => t.plain_text)
             .join("") ||
-
           "",
 
         note:
@@ -780,20 +1032,54 @@ app.get("/operations-events", async (req, res) => {
       count: events.length,
       events,
     });
-
   } catch (error) {
-
-    console.error(
-      "❌ Error en /operations-events:",
-      error.message
-    );
+    console.error("❌ Error en /operations-events:", error.message);
 
     res.status(500).json({
       count: 0,
       events: [],
       error: error.message,
     });
+  }
+});
 
+// 📄 Generar Daily Report PDF
+app.post("/generate-daily-report", async (req, res) => {
+  try {
+    const date = req.body.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    res.json({
+      ok: true,
+      message: "Daily report generated successfully",
+      date,
+      totalRecords: report.totalRecords,
+      file: report.fileName,
+      url: report.fileUrl,
+      fullUrl: `${req.protocol}://${req.get("host")}${report.fileUrl}`,
+    });
+  } catch (error) {
+    console.error("❌ Error generating daily report:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+// 📄 Abrir reporte desde navegador
+app.get("/generate-daily-report", async (req, res) => {
+  try {
+    const date = req.query.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    res.redirect(report.fileUrl);
+  } catch (error) {
+    console.error("❌ Error generating daily report:", error.message);
+    res.status(500).send(`Error generating report: ${error.message}`);
   }
 });
 
