@@ -147,8 +147,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
 
 doc.moveDown(0.5);
 doc.fontSize(9).text(`Date: ${date}`);
-doc.text(`Company: ${process.env.COMPANY_NAME || "Housekeeping Operations"}`);
-doc.text(`Property: ${process.env.PROPERTY_NAME || "Property"}`);
+doc.text(`Company: ${process.env.COMPANY_NAME || "417 Maid Cleaning Services "}`);
 
 doc.moveDown();
 
@@ -212,7 +211,7 @@ if (Object.keys(errorsByCleaner).length > 0) {
 
   doc.addPage();
 
-  doc.fontSize(13).text("4. Complete Activity Ledger", {
+  doc.fontSize(13).text("4. Activity Ledger", {
     align: "center"
   });
 
