@@ -817,14 +817,13 @@ async function generateDailyReport(date = todayISO()) {
     }
   });
 
-  doc.fontSize(20).text("DAILY HOUSEKEEPING OPERATIONS REPORT", {
+  doc.fontSize(20).text("DAILY REPORT", {
     align: "center",
   });
 
   doc.moveDown();
   doc.fontSize(12).text(`Date: ${date}`);
-  doc.text(`Company: ${process.env.COMPANY_NAME || "Housekeeping Operations"}`);
-  doc.text(`Property: ${process.env.PROPERTY_NAME || "Property"}`);
+  doc.text(`Company: ${process.env.COMPANY_NAME || "417 Maid Cleaning Services "}`);
   doc.moveDown();
 
   doc.fontSize(16).text("1. Executive Summary");
@@ -1083,7 +1082,7 @@ Object.entries(inspectorsActivity)
   
   doc.addPage();
 
-  doc.fontSize(18).text("4. Complete Activity Ledger", {
+  doc.fontSize(18).text("Activity Ledger", {
     align: "center",
   });
 
