@@ -141,7 +141,7 @@ async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
     }
   });
 
-  doc.fontSize(16).text("DAILY HOUSEKEEPING OPERATIONS REPORT", {
+  doc.fontSize(16).text("DAILY REPORT", {
   align: "center",
 });
 
