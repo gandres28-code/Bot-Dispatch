@@ -876,7 +876,211 @@ async function generateDailyReport(date = todayISO()) {
       doc.text(`${cleaner}: ${count} error(s)`);
     });
   }
+// 👥 Agrupar actividad por limpiador e inspector
+const cleanersActivity = {};
+const inspectorsActivity = {};
 
+logs.forEach((log) => {
+  const time = readText(log, ["Time", "time"]);
+  const unit = readText(log, ["Unit", "unit"]);
+  const cleaner = readText(log, ["Cleaner", "cleaner"]);
+  const inspector = readText(log, ["Inspector", "inspector"]);
+  const action = readText(log, ["Action", "action"]);
+  const note = readText(log, ["Note", "note"]);
+  const category = readText(log, ["Category", "category"]);
+  const priority = readText(log, ["Priority", "priority"]);
+
+  const actionLower = action.toLowerCase();
+
+  if (cleaner) {
+    if (!cleanersActivity[cleaner]) {
+      cleanersActivity[cleaner] = {};
+    }
+
+    if (!cleanersActivity[cleaner][unit]) {
+      cleanersActivity[cleaner][unit] = {
+        start: "",
+        finish: "",
+        requests: [],
+        issues: [],
+      };
+    }
+
+    if (
+      actionLower.includes("start")
+    ) {
+      cleanersActivity[cleaner][unit].start = formatReportTime(time);
+    }
+
+    if (
+      actionLower.includes("done") ||
+      actionLower.includes("finish") ||
+      actionLower.includes("terminada") ||
+      actionLower.includes("terminado")
+    ) {
+      cleanersActivity[cleaner][unit].finish = formatReportTime(time);
+    }
+
+    if (
+      actionLower.includes("supplies") ||
+      category.toLowerCase().includes("supplies")
+    ) {
+      cleanersActivity[cleaner][unit].requests.push(
+        `${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
+      );
+    }
+
+    if (
+      actionLower.includes("issue") ||
+      actionLower.includes("problem") ||
+      category.toLowerCase().includes("maintenance") ||
+      category.toLowerCase().includes("damage")
+    ) {
+      cleanersActivity[cleaner][unit].issues.push(
+        `${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
+      );
+    }
+  }
+
+  if (inspector) {
+    if (!inspectorsActivity[inspector]) {
+      inspectorsActivity[inspector] = {};
+    }
+
+    if (!inspectorsActivity[inspector][unit]) {
+      inspectorsActivity[inspector][unit] = {
+        inspectionStart: "",
+        ready: "",
+        requests: [],
+        issues: [],
+      };
+    }
+
+    if (
+      actionLower.includes("inspection_start")
+    ) {
+      inspectorsActivity[inspector][unit].inspectionStart = formatReportTime(time);
+    }
+
+    if (
+      actionLower.includes("ready_guest") ||
+      actionLower.includes("ready")
+    ) {
+      inspectorsActivity[inspector][unit].ready = formatReportTime(time);
+    }
+
+    if (
+      actionLower.includes("inspection_supplies") ||
+      actionLower.includes("supplies") ||
+      category.toLowerCase().includes("supplies")
+    ) {
+      inspectorsActivity[inspector][unit].requests.push(
+        `${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
+      );
+    }
+
+    if (
+      actionLower.includes("inspection_report") ||
+      actionLower.includes("issue") ||
+      actionLower.includes("problem") ||
+      category.toLowerCase().includes("maintenance") ||
+      category.toLowerCase().includes("damage")
+    ) {
+      inspectorsActivity[inspector][unit].issues.push(
+        `${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
+      );
+    }
+  }
+});
+
+// 🧹 Sección por limpiador
+doc.addPage();
+
+doc.fontSize(13).text("Cleaners Activity", {
+  align: "center",
+});
+
+doc.moveDown();
+
+Object.entries(cleanersActivity)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .forEach(([cleaner, units]) => {
+    doc.fontSize(11).text(cleaner);
+    doc.moveDown(0.3);
+
+    Object.entries(units)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([unit, data]) => {
+        doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
+        if (data.start) doc.text(`Start: ${data.start}`);
+        if (data.finish) doc.text(`Finished: ${data.finish}`);
+
+        if (data.requests.length > 0) {
+          doc.text("Requests:");
+          data.requests.forEach((item) => {
+            doc.text(`- ${item}`);
+          });
+        }
+
+        if (data.issues.length > 0) {
+          doc.text("Issues:");
+          data.issues.forEach((item) => {
+            doc.text(`- ${item}`);
+          });
+        }
+
+        doc.moveDown(0.3);
+        doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
+        doc.moveDown(0.4);
+      });
+
+    doc.moveDown(0.5);
+  });
+
+// 🔍 Sección por inspector
+doc.addPage();
+
+doc.fontSize(13).text("Inspectors Activity", {
+  align: "center",
+});
+
+doc.moveDown();
+
+Object.entries(inspectorsActivity)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .forEach(([inspector, units]) => {
+    doc.fontSize(11).text(inspector);
+    doc.moveDown(0.3);
+
+    Object.entries(units)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([unit, data]) => {
+        doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
+        if (data.inspectionStart) doc.text(`Inspection Started: ${data.inspectionStart}`);
+        if (data.ready) doc.text(`Ready for Guest: ${data.ready}`);
+
+        if (data.requests.length > 0) {
+          doc.text("Requests:");
+          data.requests.forEach((item) => {
+            doc.text(`- ${item}`);
+          });
+        }
+
+        if (data.issues.length > 0) {
+          doc.text("Issues:");
+          data.issues.forEach((item) => {
+            doc.text(`- ${item}`);
+          });
+        }
+
+        doc.moveDown(0.3);
+        doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
+        doc.moveDown(0.4);
+      });
+
+    doc.moveDown(0.5);
+  });
+  
   doc.addPage();
 
   doc.fontSize(18).text("4. Complete Activity Ledger", {
