@@ -399,41 +399,45 @@ name: String(value || "Other"),
 };
 }
 async function dailyLogAlreadyExists(action, unit, employee, inspector) {
-const today = todayISO();
-const person = employee || inspector || "";
-const response = await notion.databases.query({
-database_id: NOTION_LOG_DATABASE_ID,
-filter: {
-and: [
-{
-property: "Date",
-date: {
-equals: today,
-},
-},
-{
-property: "Unit",
-rich_text: {
-equals: unit,
-},
-},
-{
-property: "Action",
-select: {
-equals: action,
-},
-},
-],
-},
-});
-page_size: 10,
-return response.results.some((page) => {
-const cleaner =
-page.properties.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "";
-const inspectorName =
-page.properties.Inspector?.rich_text?.map((t) => t.plain_text).join("") || "";
-return cleaner === person || inspectorName === person;
-});
+  const today = todayISO();
+  const person = employee || inspector || "";
+
+  const response = await notion.databases.query({
+    database_id: NOTION_LOG_DATABASE_ID,
+    filter: {
+      and: [
+        {
+          property: "Date",
+          date: {
+            equals: today,
+          },
+        },
+        {
+          property: "Unit",
+          rich_text: {
+            equals: unit,
+          },
+        },
+        {
+          property: "Action",
+          select: {
+            equals: action,
+          },
+        },
+      ],
+    },
+    page_size: 10,
+  });
+
+  return response.results.some((page) => {
+    const cleaner =
+      page.properties.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    const inspectorName =
+      page.properties.Inspector?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    return cleaner === person || inspectorName === person;
+  });
 }
 async function saveDailyLog({
 action,
