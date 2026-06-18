@@ -157,33 +157,40 @@ error: null,
 }
 // ■ Semana de nómina: lunes a domingo
 function getPayrollWeek(date = new Date()) {
-const d = new Date(date);
-const day = d.getDay();
-const diffToMonday = day === 0 ? -6 : 1 - day;
-const monday = new Date(d);
-monday.setDate(d.getDate() + diffToMonday);
-monday.setHours(0, 0, 0, 0);
-const sunday = new Date(monday);
-sunday.setDate(monday.getDate() + 6);
-sunday.setHours(23, 59, 59, 999);
-return {
-weekStart: monday.toISOString().slice(0, 10),
-weekEnd: sunday.toISOString().slice(0, 10),
-};
-// ■ Nombre seguro para hojas de Excel
+  const d = new Date(date);
+  const day = d.getDay();
+
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  return {
+    weekStart: monday.toISOString().slice(0, 10),
+    weekEnd: sunday.toISOString().slice(0, 10),
+  };
+}
+
+// Nombre seguro para hojas de Excel
 function cleanSheetName(name) {
-return String(name || "Unknown")
-.replace(/[\\/*?:[\]]/g, "")
-.substring(0, 31);
+  return String(name || "Unknown")
+    .replace(/[\\/*?:[\]]/g, "")
+    .substring(0, 31);
 }
-}
-// ■ Nombre del archivo Excel semanal
+
+// Nombre del archivo Excel semanal
 function payrollFileName(weekStart, weekEnd) {
-return `Payroll_${weekStart}_to_${weekEnd}.xlsx`;
+  return `Payroll_${weekStart}_to_${weekEnd}.xlsx`;
 }
-// ■ Leer título real de la unidad desde Notion, incluyendo paréntesis
+
+// Leer título real de la unidad desde Notion, incluyendo paréntesis
 function getRoomTitleFromPage(page) {
-return page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+  return page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
 }
 // ■ Evitar acciones duplicadas
 function isDuplicateAction(action, unit, employee) {
