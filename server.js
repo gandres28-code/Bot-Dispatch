@@ -1672,35 +1672,53 @@ app.get("/backfill-payroll", async (req, res) => {
     const start = req.query.start || "2026-06-15";
     const end = req.query.end || todayISO();
 
-    const response = await notion.databases.query({
-      database_id: NOTION_DATABASE_ID,
-      filter: {
-        and: [
-          {
-            property: "Date",
-            date: {
-              on_or_after: start,
-            },
+    const response = await fetch(
+      `https://api.notion.com/v1/databases/${NOTION_DATABASE_ID}/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${NOTION_API_KEY}`,
+          "Content-Type": "application/json",
+          "Notion-Version": "2025-09-03",
+        },
+        body: JSON.stringify({
+          filter: {
+            and: [
+              {
+                property: "Date",
+                date: {
+                  on_or_after: start,
+                },
+              },
+              {
+                property: "Date",
+                date: {
+                  on_or_before: end,
+                },
+              },
+            ],
           },
-          {
-            property: "Date",
-            date: {
-              on_or_before: end,
-            },
-          },
-        ],
-      },
-      page_size: 100,
-    });
+          page_size: 100,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log("NOTION BACKFILL ERROR:", data);
+      throw new Error(data.message || "Error consultando Notion");
+    }
 
     let created = 0;
     let skipped = 0;
     let errors = [];
 
-    for (const page of response.results) {
+    for (const page of data.results || []) {
       const props = page.properties;
 
       const date = props.Date?.date?.start || "";
+
       const unit =
         props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
 
@@ -1757,7 +1775,6 @@ app.get("/backfill-payroll", async (req, res) => {
 app.get("/health", (req, res) => {
   res.send("OK");
 });
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
