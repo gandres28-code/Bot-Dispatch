@@ -467,7 +467,7 @@ return;
 }
 const props = {};
 const fields = [
-buildTextProperty(schema, ["log", "Log"], `${unit} - ${action} - ${employee || inspector || ""}
+buildTextProperty(schema, ["log", "Log"], `${unit} - ${action} - ${employee || inspector || ""}`),
 buildDateProperty(schema, ["date", "Date"], todayISO()),
 buildDateProperty(schema, ["time", "Time"], now),
 buildTextProperty(schema, ["unit", "Unit"], unit),
