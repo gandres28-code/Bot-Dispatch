@@ -498,35 +498,31 @@ console.log("■ ERROR guardando Daily Cleaning Log:", error.body || error.messa
 }
 }
 // ■ Evitar duplicados en Payroll Records
-async function payrollRecordAlreadyExists({ cleaner, unit, date }) {
-if (!NOTION_PAYROLL_DATABASE_ID) return false;
-const response = await notion.databases.query({
-database_id: NOTION_PAYROLL_DATABASE_ID,
-filter: {
-and: [
-{
-},
-{
-},
-{
-},
-],
-},
-property: "Date",
-date: {
-equals: date,
-},
-property: "Cleaner",
-rich_text: {
-equals: cleaner || "",
-},
-property: "Unit",
-rich_text: {
-equals: unit || "",
-},
-page_size: 10,
-});
-return response.results.length > 0;
+async function payrollRecordExists({ cleaner, unit, date }) {
+  if (!NOTION_PAYROLL_DATABASE_ID) return false;
+
+  const response = await notion.databases.query({
+    database_id: NOTION_PAYROLL_DATABASE_ID,
+    page_size: 100,
+  });
+
+  return response.results.some((page) => {
+    const props = page.properties;
+
+    const existingDate = props.Date?.date?.start || "";
+
+    const existingCleaner =
+      props.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    const existingUnit =
+      props.Unit?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    return (
+      existingDate === date &&
+      existingCleaner === cleaner &&
+      existingUnit === unit
+    );
+  });
 }
 // ■ Crear registro de nómina cuando se termina una unidad
 async function createPayrollRecord({ cleaner, unit, date }) {
