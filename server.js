@@ -800,764 +800,879 @@ return roomDigits(title) === targetDigits;
 });
 }
 if (matches.length === 0) {
-throw new Error(`No encontré la unidad ${unit} en Notion para hoy`);
+  throw new Error(`No encontré la unidad ${unit} en Notion para hoy`);
 }
-}
+
 const now = new Date().toISOString();
 const label = actionLabel(action);
 const status = notionStatusFromAction(action);
+
 const needsAI = [
-"ISSUE",
-"SUPPLIES",
-"INSPECTION_REPORT",
-"INSPECTION_SUPPLIES",
+  "ISSUE",
+  "SUPPLIES",
+  "INSPECTION_REPORT",
+  "INSPECTION_SUPPLIES",
 ].includes(action);
+
 let ai = null;
+
 if (needsAI) {
-ai = await analyzeNoteWithAI(action, note);
+  ai = await analyzeNoteWithAI(action, note);
 }
+
 for (const page of matches) {
-const assignedCleaner = getAssignedCleaner(page);
-const historyLine =
-`${localTime()} - ${employee} - ${label}` +
-`${assignedCleaner && mode === "inspector" ? ` - Cleaner: ${assignedCleaner}` : ""}` +
-`${note ? ` - ${note}` : ""}` +
-`${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
-const oldLastMessage =
-page.properties["Last Message"]?.rich_text?.map((t) => t.plain_text).join("") || "";
-const newLastMessage =
-oldLastMessage
-? `${oldLastMessage}\n${historyLine}`
-: historyLine;
-const props = {
-"Last Whatsapp Update ": {
-date: {
-start: now,
-},
-},
-"Last Message": {
-rich_text: [
-{
-text: {
-content: newLastMessage.slice(-1900),
-},
-},
-],
-},
-"Last Update By": {
-rich_text: [
-{
-text: {
-content: employee,
-},
-},
-],
-},
-};
-if (status) {
-props["Cleaning Status"] = {
-status: {
-name: status,
-},
-};
+  const assignedCleaner = getAssignedCleaner(page);
+
+  const historyLine =
+    `${localTime()} - ${employee} - ${label}` +
+    `${assignedCleaner && mode === "inspector" ? ` - Cleaner: ${assignedCleaner}` : ""}` +
+    `${note ? ` - ${note}` : ""}` +
+    `${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
+
+  const oldLastMessage =
+    page.properties["Last Message"]?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+  const newLastMessage = oldLastMessage
+    ? `${oldLastMessage}\n${historyLine}`
+    : historyLine;
+
+  const props = {
+    "Last Whatsapp Update ": {
+      date: {
+        start: now,
+      },
+    },
+    "Last Message": {
+      rich_text: [
+        {
+          text: {
+            content: newLastMessage.slice(-1900),
+          },
+        },
+      ],
+    },
+    "Last Update By": {
+      rich_text: [
+        {
+          text: {
+            content: employee,
+          },
+        },
+      ],
+    },
+  };
+
+  if (status) {
+    props["Cleaning Status"] = {
+      status: {
+        name: status,
+      },
+    };
+  }
+
+  if (action === "START") {
+    props["Started At"] = {
+      date: {
+        start: now,
+      },
+    };
+  }
+
+  if (action === "DONE") {
+    props["Finished At"] = {
+      date: {
+        start: now,
+      },
+    };
+  }
+
+  if (needsAI) {
+    props["Issues Notes"] = {
+      rich_text: [
+        {
+          text: {
+            content: ai ? ai.summary : note || label,
+          },
+        },
+      ],
+    };
+
+    props["Issue Category"] = {
+      select: {
+        name: ai ? ai.category : "Other",
+      },
+    };
+
+    props["Priority"] = {
+      select: {
+        name: ai ? ai.priority : "Normal",
+      },
+    };
+  }
+
+  await notion.pages.update({
+    page_id: page.id,
+    properties: props,
+  });
+
+  await saveDailyLog({
+    action,
+    unit,
+    employee: mode === "cleaner" ? employee : assignedCleaner,
+    inspector: mode === "inspector" ? employee : "",
+    assignedCleaner: mode === "inspector" ? assignedCleaner : "",
+    note,
+    ai,
+  });
+
+  if (mode === "cleaner" && action === "DONE") {
+    const fullUnitTitle = getRoomTitleFromPage(page) || unit;
+
+    await createPayrollRecord({
+      cleaner: employee,
+      unit: fullUnitTitle,
+      date: todayISO(),
+    });
+  }
 }
-if (action === "START") {
-props["Started At"] = {
-date: {
-start: now,
-},
-};
-}
-if (action === "DONE") {
-props["Finished At"] = {
-date: {
-start: now,
-},
-};
-}
-if (needsAI) {
-props["Issues Notes"] = {
-rich_text: [
-{
-text: {
-content: ai ? ai.summary : note || label,
-},
-},
-],
-};
-props["Issue Category"] = {
-select: {
-name: ai ? ai.category : "Other",
-},
-};
-props["Priority"] = {
-select: {
-name: ai ? ai.priority : "Normal",
-},
-};
-}
-await notion.pages.update({
-page_id: page.id,
-properties: props,
-});
-await saveDailyLog({
-action,
-unit,
-employee: mode === "cleaner" ? employee : assignedCleaner,
-inspector: mode === "inspector" ? employee : "",
-assignedCleaner: mode === "inspector" ? assignedCleaner : "",
-note,
-ai,
-});
-// ■ Nómina automática:
-// Solo se paga cuando el cleaner marca DONE.
-// Usa el título real de Notion para leer el tipo entre paréntesis: 331A (2), 405 (S), etc.
-if (mode === "cleaner" && action === "DONE") {
-const fullUnitTitle = getRoomTitleFromPage(page) || unit;
-await createPayrollRecord({
-cleaner: employee,
-unit: fullUnitTitle,
-date: todayISO(),
-});
-}
-}
+
 return {
-label,
-ai,
+  label,
+  ai,
 };
 }
-// ■ Helpers para PDF
+
+// Helpers para PDF
 function getProp(page, names) {
-for (const name of names) {
-if (page.properties[name]) return page.properties[name];
+  for (const name of names) {
+    if (page.properties[name]) return page.properties[name];
+  }
+
+  return null;
 }
-return null;
-}
+
 function readText(page, names) {
-const prop = getProp(page, names);
-if (!prop) return "";
-if (prop.title) return prop.title.map((t) => t.plain_text).join("");
-if (prop.rich_text) return prop.rich_text.map((t) => t.plain_text).join("");
-if (prop.select) return prop.select.name || "";
-if (prop.status) return prop.status.name || "";
-if (prop.date) return prop.date.start || "";
-if (prop.number !== null && prop.number !== undefined) return String(prop.number);
-if (prop.checkbox !== undefined) return prop.checkbox ? "Yes" : "No";
-return "";
+  const prop = getProp(page, names);
+
+  if (!prop) return "";
+
+  if (prop.title) return prop.title.map((t) => t.plain_text).join("");
+  if (prop.rich_text) return prop.rich_text.map((t) => t.plain_text).join("");
+  if (prop.select) return prop.select.name || "";
+  if (prop.status) return prop.status.name || "";
+  if (prop.date) return prop.date.start || "";
+  if (prop.number !== null && prop.number !== undefined) return String(prop.number);
+  if (prop.checkbox !== undefined) return prop.checkbox ? "Yes" : "No";
+
+  return "";
 }
+
 function formatReportTime(value) {
-if (!value) return "N/A";
-return new Date(value).toLocaleString("en-US", {
-timeZone: "America/Chicago",
-hour: "2-digit",
-minute: "2-digit",
-hour12: true,
-});
+  if (!value) return "N/A";
+
+  return new Date(value).toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
+
 async function getDailyLogsForReport(date) {
-if (!NOTION_LOG_DATABASE_ID) {
-throw new Error("Falta NOTION_LOG_DATABASE_ID o NOTION_DAILY_CLEANING_LOGS_DB_ID");
+  if (!NOTION_LOG_DATABASE_ID) {
+    throw new Error("Falta NOTION_LOG_DATABASE_ID o NOTION_DAILY_CLEANING_LOGS_DB_ID");
+  }
+
+  const response = await notion.databases.query({
+    database_id: NOTION_LOG_DATABASE_ID,
+    filter: {
+      property: "Date",
+      date: {
+        equals: date,
+      },
+    },
+    sorts: [
+      {
+        property: "Time",
+        direction: "ascending",
+      },
+    ],
+  });
+
+  return response.results;
 }
-const response = await notion.databases.query({
-database_id: NOTION_LOG_DATABASE_ID,
-filter: {
-property: "Date",
-date: {
-equals: date,
-},
-},
-sorts: [
-{
-property: "Time",
-direction: "ascending",
-},
-],
-});
-return response.results;
-}
+
 async function generateDailyReport(date = todayISO()) {
-const logs = await getDailyLogsForReport(date);
-const fileName = `daily-housekeeping-report-${date}.pdf`;
-const filePath = path.join(reportsDir, fileName);
-const doc = new PDFDocument({ margin: 50 });
-doc.pipe(fs.createWriteStream(filePath));
-const units = new Set();
-const cleaners = new Set();
-const inspectors = new Set();
-const productivity = {};
-const issuesByUnit = {};
-const errorsByCleaner = {};
-let issues = 0;
-let cleanerErrors = 0;
-let highPriority = 0;
-let completed = 0;
-logs.forEach((log) => {
-const unit = readText(log, ["Unit", "unit"]);
-const cleaner = readText(log, ["Cleaner", "cleaner"]);
-const inspector = readText(log, ["Inspector", "inspector"]);
-const action = readText(log, ["Action", "action"]);
-const category = readText(log, ["Category", "category"]);
-const priority = readText(log, ["Priority", "priority"]);
-const status = readText(log, ["Status", "status"]);
-const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
-if (unit) units.add(unit);
-if (cleaner) cleaners.add(cleaner);
-if (inspector) inspectors.add(inspector);
-const actionLower = action.toLowerCase();
-const categoryLower = category.toLowerCase();
-const priorityLower = priority.toLowerCase();
-const statusLower = status.toLowerCase();
-const cleanerErrorLower = cleanerError.toLowerCase();
-if (
-(
-cleaner &&
-actionLower.includes("done") ||
-actionLower.includes("finished") ||
-actionLower.includes("completed") ||
-actionLower.includes("terminada") ||
-actionLower.includes("terminado") ||
-actionLower.includes("lista") ||
-actionLower.includes("ready")
-)
-) {
-productivity[cleaner] = (productivity[cleaner] || 0) + 1;
+  const logs = await getDailyLogsForReport(date);
+
+  const fileName = `daily-housekeeping-report-${date}.pdf`;
+  const filePath = path.join(reportsDir, fileName);
+
+  const doc = new PDFDocument({ margin: 50 });
+  doc.pipe(fs.createWriteStream(filePath));
+
+  const units = new Set();
+  const cleaners = new Set();
+  const inspectors = new Set();
+
+  const productivity = {};
+  const issuesByUnit = {};
+  const errorsByCleaner = {};
+
+  let issues = 0;
+  let cleanerErrors = 0;
+  let highPriority = 0;
+  let completed = 0;
+
+  logs.forEach((log) => {
+    const unit = readText(log, ["Unit", "unit"]);
+    const cleaner = readText(log, ["Cleaner", "cleaner"]);
+    const inspector = readText(log, ["Inspector", "inspector"]);
+    const action = readText(log, ["Action", "action"]);
+    const category = readText(log, ["Category", "category"]);
+    const priority = readText(log, ["Priority", "priority"]);
+    const status = readText(log, ["Status", "status"]);
+    const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
+
+    if (unit) units.add(unit);
+    if (cleaner) cleaners.add(cleaner);
+    if (inspector) inspectors.add(inspector);
+
+    const actionLower = action.toLowerCase();
+    const categoryLower = category.toLowerCase();
+    const priorityLower = priority.toLowerCase();
+    const statusLower = status.toLowerCase();
+    const cleanerErrorLower = cleanerError.toLowerCase();
+
+    if (
+      cleaner &&
+      (
+        actionLower.includes("done") ||
+        actionLower.includes("finished") ||
+        actionLower.includes("completed") ||
+        actionLower.includes("terminada") ||
+        actionLower.includes("terminado") ||
+        actionLower.includes("lista") ||
+        actionLower.includes("ready")
+      )
+    ) {
+      productivity[cleaner] = (productivity[cleaner] || 0) + 1;
+    }
+
+    if (
+      actionLower.includes("issue") ||
+      actionLower.includes("problem") ||
+      actionLower.includes("problema") ||
+      actionLower.includes("report") ||
+      categoryLower.includes("issue") ||
+      categoryLower.includes("problem") ||
+      categoryLower.includes("problema")
+    ) {
+      issues++;
+      if (unit) issuesByUnit[unit] = (issuesByUnit[unit] || 0) + 1;
+    }
+
+    if (
+      cleanerErrorLower &&
+      cleanerErrorLower !== "no" &&
+      cleanerErrorLower !== "none" &&
+      cleanerErrorLower !== "n/a"
+    ) {
+      cleanerErrors++;
+      const cleanerName = cleaner || cleanerError || "Unknown";
+      errorsByCleaner[cleanerName] = (errorsByCleaner[cleanerName] || 0) + 1;
+    }
+
+    if (
+      priorityLower.includes("high") ||
+      priorityLower.includes("urgent") ||
+      priorityLower.includes("alta") ||
+      priorityLower.includes("urgente")
+    ) {
+      highPriority++;
+    }
+
+    if (
+      statusLower.includes("complete") ||
+      statusLower.includes("completed") ||
+      statusLower.includes("ready") ||
+      statusLower.includes("lista") ||
+      actionLower.includes("ready_guest")
+    ) {
+      completed++;
+    }
+  });
+
+  doc.fontSize(20).text("DAILY REPORT", {
+    align: "center",
+  });
+
+  doc.moveDown();
+  doc.fontSize(12).text(`Date: ${date}`);
+  doc.text(`Company: ${process.env.COMPANY_NAME || "417 Maid Cleaning Services "}`);
+  doc.moveDown();
+
+  doc.fontSize(16).text("1. Executive Summary");
+  doc.moveDown(0.5);
+  doc.fontSize(12).text(`Total Records: ${logs.length}`);
+  doc.text(`Total Units Registered: ${units.size}`);
+  doc.text(`Completed / Ready Records: ${completed}`);
+  doc.text(`Issues Reported: ${issues}`);
+  doc.text(`High Priority Records: ${highPriority}`);
+  doc.text(`Cleaner Errors: ${cleanerErrors}`);
+  doc.text(`Active Cleaners: ${cleaners.size}`);
+  doc.text(`Active Inspectors: ${inspectors.size}`);
+
+  doc.moveDown();
+
+  doc.fontSize(16).text("2. Productivity by Cleaner");
+  doc.moveDown(0.5);
+
+  if (Object.keys(productivity).length === 0) {
+    doc.fontSize(12).text("No completed cleaning records found.");
+  } else {
+    Object.entries(productivity).forEach(([cleaner, count]) => {
+      doc.fontSize(12).text(`${cleaner}: ${count} completed unit(s)`);
+    });
+  }
+
+  doc.moveDown();
+
+  doc.fontSize(16).text("3. Issues & Cleaner Errors");
+  doc.moveDown(0.5);
+
+  doc.fontSize(12).text("Issues by Unit:");
+
+  if (Object.keys(issuesByUnit).length === 0) {
+    doc.text("No issues reported.");
+  } else {
+    Object.entries(issuesByUnit).forEach(([unit, count]) => {
+      doc.text(`Unit ${unit}: ${count} issue(s)`);
+    });
+  }
+
+  doc.moveDown(0.5);
+  doc.text("Cleaner Errors:");
+
+  if (Object.keys(errorsByCleaner).length === 0) {
+    doc.text("No cleaner errors reported.");
+  } else {
+    Object.entries(errorsByCleaner).forEach(([cleaner, count]) => {
+      doc.text(`${cleaner}: ${count} error(s)`);
+    });
+  }
+
+  const cleanersActivity = {};
+  const inspectorsActivity = {};
+
+  logs.forEach((log) => {
+    const time = readText(log, ["Time", "time"]);
+    const unit = readText(log, ["Unit", "unit"]);
+    const cleaner = readText(log, ["Cleaner", "cleaner"]);
+    const inspector = readText(log, ["Inspector", "inspector"]);
+    const action = readText(log, ["Action", "action"]);
+    const note = readText(log, ["Note", "note"]);
+    const category = readText(log, ["Category", "category"]);
+    const priority = readText(log, ["Priority", "priority"]);
+
+    const actionLower = action.toLowerCase();
+    const categoryLower = category.toLowerCase();
+
+    if (cleaner) {
+      if (!cleanersActivity[cleaner]) {
+        cleanersActivity[cleaner] = {};
+      }
+
+      if (!cleanersActivity[cleaner][unit]) {
+        cleanersActivity[cleaner][unit] = {
+          start: "",
+          finish: "",
+          requests: [],
+          issues: [],
+        };
+      }
+
+      if (actionLower.includes("start")) {
+        cleanersActivity[cleaner][unit].start = formatReportTime(time);
+      }
+
+      if (
+        actionLower.includes("done") ||
+        actionLower.includes("finish") ||
+        actionLower.includes("terminada") ||
+        actionLower.includes("terminado")
+      ) {
+        cleanersActivity[cleaner][unit].finish = formatReportTime(time);
+      }
+
+      if (
+        actionLower.includes("supplies") ||
+        categoryLower.includes("supplies")
+      ) {
+        cleanersActivity[cleaner][unit].requests.push(
+          `${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
+        );
+      }
+
+      if (
+        actionLower.includes("issue") ||
+        actionLower.includes("problem") ||
+        categoryLower.includes("maintenance") ||
+        categoryLower.includes("damage")
+      ) {
+        cleanersActivity[cleaner][unit].issues.push(
+          `${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
+        );
+      }
+    }
+
+    if (inspector) {
+      if (!inspectorsActivity[inspector]) {
+        inspectorsActivity[inspector] = {};
+      }
+
+      if (!inspectorsActivity[inspector][unit]) {
+        inspectorsActivity[inspector][unit] = {
+          inspectionStart: "",
+          ready: "",
+          requests: [],
+          issues: [],
+        };
+      }
+
+      if (actionLower.includes("inspection_start")) {
+        inspectorsActivity[inspector][unit].inspectionStart = formatReportTime(time);
+      }
+
+      if (
+        actionLower.includes("ready_guest") ||
+        actionLower.includes("ready")
+      ) {
+        inspectorsActivity[inspector][unit].ready = formatReportTime(time);
+      }
+
+      if (
+        actionLower.includes("inspection_supplies") ||
+        actionLower.includes("supplies") ||
+        categoryLower.includes("supplies")
+      ) {
+        inspectorsActivity[inspector][unit].requests.push(
+          `${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
+        );
+      }
+
+      if (
+        actionLower.includes("inspection_report") ||
+        actionLower.includes("issue") ||
+        actionLower.includes("problem") ||
+        categoryLower.includes("maintenance") ||
+        categoryLower.includes("damage")
+      ) {
+        inspectorsActivity[inspector][unit].issues.push(
+          `${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
+        );
+      }
+    }
+  });
+
+  doc.addPage();
+
+  doc.fontSize(13).text("Cleaners Activity", {
+    align: "center",
+  });
+
+  doc.moveDown();
+
+  Object.entries(cleanersActivity)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([cleaner, units]) => {
+      doc.fontSize(11).text(cleaner);
+      doc.moveDown(0.3);
+
+      Object.entries(units)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([unit, data]) => {
+          doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
+          if (data.start) doc.text(`Start: ${data.start}`);
+          if (data.finish) doc.text(`Finished: ${data.finish}`);
+
+          if (data.requests.length > 0) {
+            doc.text("Requests:");
+            data.requests.forEach((item) => {
+              doc.text(`- ${item}`);
+            });
+          }
+
+          if (data.issues.length > 0) {
+            doc.text("Issues:");
+            data.issues.forEach((item) => {
+              doc.text(`- ${item}`);
+            });
+          }
+
+          doc.moveDown(0.3);
+          doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
+          doc.moveDown(0.4);
+        });
+
+      doc.moveDown(0.5);
+    });
+
+  doc.addPage();
+
+  doc.fontSize(13).text("Inspectors Activity", {
+    align: "center",
+  });
+
+  doc.moveDown();
+
+  Object.entries(inspectorsActivity)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([inspector, units]) => {
+      doc.fontSize(11).text(inspector);
+      doc.moveDown(0.3);
+
+      Object.entries(units)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([unit, data]) => {
+          doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
+          if (data.inspectionStart) doc.text(`Inspection Started: ${data.inspectionStart}`);
+          if (data.ready) doc.text(`Ready for Guest: ${data.ready}`);
+
+          if (data.requests.length > 0) {
+            doc.text("Requests:");
+            data.requests.forEach((item) => {
+              doc.text(`- ${item}`);
+            });
+          }
+
+          if (data.issues.length > 0) {
+            doc.text("Issues:");
+            data.issues.forEach((item) => {
+              doc.text(`- ${item}`);
+            });
+          }
+
+          doc.moveDown(0.3);
+          doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
+          doc.moveDown(0.4);
+        });
+
+      doc.moveDown(0.5);
+    });
+
+  doc.addPage();
+
+  doc.fontSize(18).text("Activity Ledger", {
+    align: "center",
+  });
+
+  doc.moveDown();
+
+  logs.forEach((log, index) => {
+    const logTitle = readText(log, ["Log", "log"]);
+    const time = readText(log, ["Time", "time"]);
+    const unit = readText(log, ["Unit", "unit"]);
+    const cleaner = readText(log, ["Cleaner", "cleaner"]);
+    const action = readText(log, ["Action", "action"]);
+    const note = readText(log, ["Note", "note"]);
+    const inspector = readText(log, ["Inspector", "inspector"]);
+    const category = readText(log, ["Category", "category"]);
+    const priority = readText(log, ["Priority", "priority"]);
+    const status = readText(log, ["Status", "status"]);
+    const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
+
+    doc.fontSize(11).text(
+      `${index + 1}. ${formatReportTime(time)} | Unit: ${unit || "N/A"} | Action: ${action || "N/A"}`
+    );
+
+    if (logTitle) doc.text(`   Log: ${logTitle}`);
+    if (cleaner) doc.text(`   Cleaner: ${cleaner}`);
+    if (inspector) doc.text(`   Inspector: ${inspector}`);
+    if (category) doc.text(`   Category: ${category}`);
+    if (priority) doc.text(`   Priority: ${priority}`);
+    if (status) doc.text(`   Status: ${status}`);
+    if (cleanerError) doc.text(`   Cleaner Error: ${cleanerError}`);
+    if (note) doc.text(`   Note: ${note}`);
+
+    doc.moveDown(0.6);
+  });
+
+  doc.end();
+
+  return {
+    fileName,
+    fileUrl: `/reports/${fileName}`,
+    totalRecords: logs.length,
+  };
 }
-if (
-actionLower.includes("issue") ||
-actionLower.includes("problem") ||
-actionLower.includes("problema") ||
-actionLower.includes("report") ||
-categoryLower.includes("issue") ||
-categoryLower.includes("problem") ||
-categoryLower.includes("problema")
-) {
-issues++;
-if (unit) issuesByUnit[unit] = (issuesByUnit[unit] || 0) + 1;
-}
-if (
-cleanerErrorLower &&
-cleanerErrorLower !== "no" &&
-cleanerErrorLower !== "none" &&
-cleanerErrorLower !== "n/a"
-) {
-cleanerErrors++;
-const cleanerName = cleaner || cleanerError || "Unknown";
-errorsByCleaner[cleanerName] = (errorsByCleaner[cleanerName] || 0) + 1;
-}
-if (
-priorityLower.includes("high") ||
-priorityLower.includes("urgent") ||
-priorityLower.includes("alta") ||
-priorityLower.includes("urgente")
-) {
-highPriority++;
-}
-if (
-statusLower.includes("complete") ||
-statusLower.includes("completed") ||
-statusLower.includes("ready") ||
-statusLower.includes("lista") ||
-actionLower.includes("ready_guest")
-) {
-completed++;
-}
-});
-doc.fontSize(20).text("DAILY REPORT", {
-align: "center",
-});
-doc.moveDown();
-doc.fontSize(12).text(`Date: ${date}`);
-doc.text(`Company: ${process.env.COMPANY_NAME || "417 Maid Cleaning Services "}`);
-doc.moveDown();
-doc.fontSize(16).text("1. Executive Summary");
-doc.moveDown(0.5);
-doc.fontSize(12).text(`Total Records: ${logs.length}`);
-doc.text(`Total Units Registered: ${units.size}`);
-doc.text(`Completed / Ready Records: ${completed}`);
-doc.text(`Issues Reported: ${issues}`);
-doc.text(`High Priority Records: ${highPriority}`);
-doc.text(`Cleaner Errors: ${cleanerErrors}`);
-doc.text(`Active Cleaners: ${cleaners.size}`);
-doc.text(`Active Inspectors: ${inspectors.size}`);
-doc.moveDown();
-doc.fontSize(16).text("2. Productivity by Cleaner");
-doc.moveDown(0.5);
-if (Object.keys(productivity).length === 0) {
-doc.fontSize(12).text("No completed cleaning records found.");
-} else {
-Object.entries(productivity).forEach(([cleaner, count]) => {
-doc.fontSize(12).text(`${cleaner}: ${count} completed unit(s)`);
-});
-}
-doc.moveDown();
-doc.fontSize(16).text("3. Issues & Cleaner Errors");
-doc.moveDown(0.5);
-doc.fontSize(12).text("Issues by Unit:");
-if (Object.keys(issuesByUnit).length === 0) {
-doc.text("No issues reported.");
-} else {
-Object.entries(issuesByUnit).forEach(([unit, count]) => {
-doc.text(`Unit ${unit}: ${count} issue(s)`);
-});
-}
-doc.moveDown(0.5);
-doc.text("Cleaner Errors:");
-if (Object.keys(errorsByCleaner).length === 0) {
-doc.text("No cleaner errors reported.");
-} else {
-Object.entries(errorsByCleaner).forEach(([cleaner, count]) => {
-doc.text(`${cleaner}: ${count} error(s)`);
-});
-}
-// ■ Agrupar actividad por limpiador e inspector
-const cleanersActivity = {};
-const inspectorsActivity = {};
-logs.forEach((log) => {
-const time = readText(log, ["Time", "time"]);
-const unit = readText(log, ["Unit", "unit"]);
-const cleaner = readText(log, ["Cleaner", "cleaner"]);
-const inspector = readText(log, ["Inspector", "inspector"]);
-const action = readText(log, ["Action", "action"]);
-const note = readText(log, ["Note", "note"]);
-const category = readText(log, ["Category", "category"]);
-const priority = readText(log, ["Priority", "priority"]);
-const actionLower = action.toLowerCase();
-if (cleaner) {
-if (!cleanersActivity[cleaner]) {
-cleanersActivity[cleaner] = {};
-}
-if (!cleanersActivity[cleaner][unit]) {
-cleanersActivity[cleaner][unit] = {
-start: "",
-finish: "",
-requests: [],
-issues: [],
-};
-}
-if (
-) {
-actionLower.includes("start")
-cleanersActivity[cleaner][unit].start = formatReportTime(time);
-}
-if (
-actionLower.includes("done") ||
-actionLower.includes("finish") ||
-actionLower.includes("terminada") ||
-actionLower.includes("terminado")
-) {
-cleanersActivity[cleaner][unit].finish = formatReportTime(time);
-}
-if (
-) {
-actionLower.includes("supplies") ||
-category.toLowerCase().includes("supplies")
-cleanersActivity[cleaner][unit].requests.push(
-`${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
-);
-}
-if (
-actionLower.includes("issue") ||
-actionLower.includes("problem") ||
-category.toLowerCase().includes("maintenance") ||
-category.toLowerCase().includes("damage")
-) {
-cleanersActivity[cleaner][unit].issues.push(
-`${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
-);
-}
-}
-if (inspector) {
-if (!inspectorsActivity[inspector]) {
-inspectorsActivity[inspector] = {};
-}
-if (!inspectorsActivity[inspector][unit]) {
-inspectorsActivity[inspector][unit] = {
-inspectionStart: "",
-ready: "",
-requests: [],
-issues: [],
-};
-}
-if (
-actionLower.includes("inspection_start")
-) {
-inspectorsActivity[inspector][unit].inspectionStart = formatReportTime(time);
-}
-if (
-) {
-actionLower.includes("ready_guest") ||
-actionLower.includes("ready")
-inspectorsActivity[inspector][unit].ready = formatReportTime(time);
-}
-if (
-actionLower.includes("inspection_supplies") ||
-actionLower.includes("supplies") ||
-category.toLowerCase().includes("supplies")
-) {
-inspectorsActivity[inspector][unit].requests.push(
-`${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
-);
-}
-if (
-actionLower.includes("inspection_report") ||
-actionLower.includes("issue") ||
-actionLower.includes("problem") ||
-category.toLowerCase().includes("maintenance") ||
-category.toLowerCase().includes("damage")
-) {
-inspectorsActivity[inspector][unit].issues.push(
-`${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
-);
-}
-}
-});
-// ■ Sección por limpiador
-doc.addPage();
-doc.fontSize(13).text("Cleaners Activity", {
-align: "center",
-});
-doc.moveDown();
-Object.entries(cleanersActivity)
-.sort(([a], [b]) => a.localeCompare(b))
-.forEach(([cleaner, units]) => {
-doc.fontSize(11).text(cleaner);
-doc.moveDown(0.3);
-Object.entries(units)
-.sort(([a], [b]) => a.localeCompare(b))
-.forEach(([unit, data]) => {
-doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
-if (data.start) doc.text(`Start: ${data.start}`);
-if (data.finish) doc.text(`Finished: ${data.finish}`);
-if (data.requests.length > 0) {
-doc.text("Requests:");
-data.requests.forEach((item) => {
-doc.text(`- ${item}`);
-});
-}
-if (data.issues.length > 0) {
-doc.text("Issues:");
-data.issues.forEach((item) => {
-doc.text(`- ${item}`);
-});
-}
-doc.moveDown(0.3);
-doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
-doc.moveDown(0.4);
-});
-doc.moveDown(0.5);
-});
-// ■ Sección por inspector
-doc.addPage();
-doc.fontSize(13).text("Inspectors Activity", {
-align: "center",
-});
-doc.moveDown();
-Object.entries(inspectorsActivity)
-.sort(([a], [b]) => a.localeCompare(b))
-.forEach(([inspector, units]) => {
-doc.fontSize(11).text(inspector);
-doc.moveDown(0.3);
-Object.entries(units)
-.sort(([a], [b]) => a.localeCompare(b))
-.forEach(([unit, data]) => {
-doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
-if (data.inspectionStart) doc.text(`Inspection Started: ${data.inspectionStart}`);
-if (data.ready) doc.text(`Ready for Guest: ${data.ready}`);
-if (data.requests.length > 0) {
-doc.text("Requests:");
-data.requests.forEach((item) => {
-doc.text(`- ${item}`);
-});
-}
-if (data.issues.length > 0) {
-doc.text("Issues:");
-data.issues.forEach((item) => {
-doc.text(`- ${item}`);
-});
-}
-});
-doc.moveDown(0.5);
-doc.moveDown(0.3);
-doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
-doc.moveDown(0.4);
-});
-doc.addPage();
-doc.fontSize(18).text("Activity Ledger", {
-align: "center",
-});
-doc.moveDown();
-logs.forEach((log, index) => {
-const logTitle = readText(log, ["Log", "log"]);
-const time = readText(log, ["Time", "time"]);
-const unit = readText(log, ["Unit", "unit"]);
-const cleaner = readText(log, ["Cleaner", "cleaner"]);
-const action = readText(log, ["Action", "action"]);
-const note = readText(log, ["Note", "note"]);
-const inspector = readText(log, ["Inspector", "inspector"]);
-const category = readText(log, ["Category", "category"]);
-const priority = readText(log, ["Priority", "priority"]);
-const status = readText(log, ["Status", "status"]);
-const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
-doc.fontSize(11).text(
-`${index + 1}. ${formatReportTime(time)} | Unit: ${unit || "N/A"} | Action: ${action || "N/A"}`
-);
-if (logTitle) doc.text(` Log: ${logTitle}`);
-if (cleaner) doc.text(` Cleaner: ${cleaner}`);
-if (inspector) doc.text(` Inspector: ${inspector}`);
-if (category) doc.text(` Category: ${category}`);
-if (priority) doc.text(` Priority: ${priority}`);
-if (status) doc.text(` Status: ${status}`);
-if (cleanerError) doc.text(` if (note) doc.text(` Note: ${note}`);
-Cleaner Error: ${cleanerError}`);
-doc.moveDown(0.6);
-});
-doc.end();
-return {
-fileName,
-fileUrl: `/reports/${fileName}`,
-totalRecords: logs.length,
-};
-}
-// ■ Ruta limpiadores
+
 app.post("/action", async (req, res) => {
-try {
-const { action, unit, note, name } = req.body;
-if (!action || !unit || !name) {
-return res.status(400).json({
-success: false,
-message: "■ Faltan datos: nombre, unidad o acción",
+  try {
+    const { action, unit, note, name } = req.body;
+
+    if (!action || !unit || !name) {
+      return res.status(400).json({
+        success: false,
+        message: "Faltan datos: nombre, unidad o acción",
+      });
+    }
+
+    if (isDuplicateAction(action, unit, name)) {
+      return res.status(400).json({
+        success: false,
+        message: "Acción ya registrada recientemente",
+      });
+    }
+
+    if ((action === "ISSUE" || action === "SUPPLIES") && !String(note || "").trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Debes escribir una nota",
+      });
+    }
+
+    const result = await updateNotionRoom(unit, action, name, note, "cleaner");
+
+    if (action === "DONE") {
+      await notifyInspectors(unit);
+    }
+
+    res.json({
+      success: true,
+      message: `Enviado correctamente: ${result.label} - ${unit}`,
+    });
+  } catch (error) {
+    console.error("Error en /action:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: `Error: ${error.message}`,
+    });
+  }
 });
-}
-if (isDuplicateAction(action, unit, name)) {
-return res.status(400).json({
-success: false,
-message: "■■ Acción ya registrada recientemente",
-});
-}
-if ((action === "ISSUE" || action === "SUPPLIES") && !String(note || "").trim()) {
-return res.status(400).json({
-success: false,
-message: "■ Debes escribir una nota",
-});
-}
-const result = await updateNotionRoom(unit, action, name, note, "cleaner");
-if (action === "DONE") {
-await notifyInspectors(unit);
-}
-res.json({
-success: true,
-message: `■ Enviado correctamente: ${result.label} - ${unit}`,
-});
-} catch (error) {
-console.error("■ Error en /action:", error.message);
-res.status(500).json({
-success: false,
-message: `■ Error: ${error.message}`,
-});
-}
-});
-// ■ Ruta inspectores
+
 app.post("/inspector-action", async (req, res) => {
-try {
-const { action, unit, note, name } = req.body;
-if (!action || !unit || !name) {
-return res.status(400).json({
-success: false,
-message: "■ Faltan datos: inspector, unidad o acción",
+  try {
+    const { action, unit, note, name } = req.body;
+
+    if (!action || !unit || !name) {
+      return res.status(400).json({
+        success: false,
+        message: "Faltan datos: inspector, unidad o acción",
+      });
+    }
+
+    if (isDuplicateAction(action, unit, name)) {
+      return res.status(400).json({
+        success: false,
+        message: "Acción ya registrada recientemente",
+      });
+    }
+
+    if (
+      (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES") &&
+      !String(note || "").trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Debes escribir una nota",
+      });
+    }
+
+    const result = await updateNotionRoom(unit, action, name, note, "inspector");
+
+    res.json({
+      success: true,
+      message: `Inspector: ${result.label} - ${unit}`,
+    });
+  } catch (error) {
+    console.error("Error inspector:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: `Error: ${error.message}`,
+    });
+  }
 });
-}
-if (isDuplicateAction(action, unit, name)) {
-return res.status(400).json({
-success: false,
-message: "■■ Acción ya registrada recientemente",
-});
-}
-if (
-(action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES") &&
-!String(note || "").trim()
-) {
-return res.status(400).json({
-success: false,
-message: "■ Debes escribir una nota",
-});
-}
-const result = await updateNotionRoom(unit, action, name, note, "inspector");
-res.json({
-success: true,
-message: `■ Inspector: ${result.label} - ${unit}`,
-});
-} catch (error) {
-console.error("■ Error inspector:", error.message);
-res.status(500).json({
-success: false,
-message: `■ Error: ${error.message}`,
-});
-}
-});
-// ■ Eventos para Centro de Operaciones
+
 app.get("/operations-events", async (req, res) => {
-try {
-if (!NOTION_LOG_DATABASE_ID) {
-return res.json({
-count: 0,
-events: [],
+  try {
+    if (!NOTION_LOG_DATABASE_ID) {
+      return res.json({
+        count: 0,
+        events: [],
+      });
+    }
+
+    const response = await notion.databases.query({
+      database_id: NOTION_LOG_DATABASE_ID,
+      page_size: 20,
+      sorts: [
+        {
+          property: "Time",
+          direction: "descending",
+        },
+      ],
+    });
+
+    const events = response.results.map((page) => {
+      const props = page.properties;
+
+      return {
+        id: page.id,
+
+        time:
+          props.Time?.date?.start
+            ? new Date(props.Time.date.start).toLocaleString("en-US", {
+                timeZone: "America/Chicago",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })
+            : "",
+
+        unit:
+          props.Unit?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") || "",
+
+        action:
+          props.Action?.select?.name || "",
+
+        person:
+          props.Cleaner?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") ||
+          props.Inspector?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") ||
+          "",
+
+        note:
+          props.Note?.rich_text
+            ?.map((t) => t.plain_text)
+            .join("") || "",
+      };
+    });
+
+    res.json({
+      count: events.length,
+      events,
+    });
+  } catch (error) {
+    console.error("Error en /operations-events:", error.message);
+
+    res.status(500).json({
+      count: 0,
+      events: [],
+      error: error.message,
+    });
+  }
 });
-}
-const response = await notion.databases.query({
-database_id: NOTION_LOG_DATABASE_ID,
-page_size: 20,
-sorts: [
-{
-property: "Time",
-direction: "descending",
-},
-],
-});
-const events = response.results.map((page) => {
-const props = page.properties;
-return {
-id: page.id,
-time:
-props.Time?.date?.start
-? new Date(props.Time.date.start).toLocaleString("en-US", {
-timeZone: "America/Chicago",
-hour: "2-digit",
-minute: "2-digit",
-hour12: true,
-})
-: "",
-unit:
-props.Unit?.rich_text
-?.map((t) => t.plain_text)
-.join("") || "",
-action:
-props.Action?.select?.name || "",
-person:
-props.Cleaner?.rich_text
-?.map((t) => t.plain_text)
-.join("") ||
-props.Inspector?.rich_text
-?.map((t) => t.plain_text)
-.join("") ||
-"",
-note:
-props.Note?.rich_text
-?.map((t) => t.plain_text)
-.join("") || "",
-};
-});
-res.json({
-count: events.length,
-events,
-});
-} catch (error) {
-console.error("■ Error en /operations-events:", error.message);
-res.status(500).json({
-count: 0,
-events: [],
-error: error.message,
-});
-}
-});
-// ■ Generar Daily Report PDF
+
 app.post("/generate-daily-report", async (req, res) => {
-try {
-const date = req.body.date || todayISO();
-const report = await generateDailyReport(date);
-res.json({
-ok: true,
-message: "Daily report generated successfully",
-date,
-totalRecords: report.totalRecords,
-file: report.fileName,
-url: report.fileUrl,
-fullUrl: `${req.protocol}://${req.get("host")}${report.fileUrl}`,
+  try {
+    const date = req.body.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    res.json({
+      ok: true,
+      message: "Daily report generated successfully",
+      date,
+      totalRecords: report.totalRecords,
+      file: report.fileName,
+      url: report.fileUrl,
+      fullUrl: `${req.protocol}://${req.get("host")}${report.fileUrl}`,
+    });
+  } catch (error) {
+    console.error("Error generating daily report:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
 });
-} catch (error) {
-console.error("■ Error generating daily report:", error.message);
-res.status(500).json({
-ok: false,
-error: error.message,
-});
-}
-});
-// ■ Abrir reporte desde navegador
+
 app.get("/generate-daily-report", async (req, res) => {
-try {
-const date = req.query.date || todayISO();
-const report = await generateDailyReport(date);
-res.redirect(report.fileUrl);
-} catch (error) {
-console.error("■ Error generating daily report:", error.message);
-res.status(500).send(`Error generating report: ${error.message}`);
-}
-// ■ Descargar reporte al finalizar el día
+  try {
+    const date = req.query.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    res.redirect(report.fileUrl);
+  } catch (error) {
+    console.error("Error generating daily report:", error.message);
+    res.status(500).send(`Error generating report: ${error.message}`);
+  }
+});
+
 app.get("/finalizar-dia", async (req, res) => {
-try {
-const date = req.query.date || todayISO();
-const report = await generateDailyReport(date);
-const filePath = path.join(reportsDir, report.fileName);
-res.download(filePath, report.fileName);
-} catch (error) {
-console.error("■ Error finalizando día:", error.message);
-res.status(500).send(`Error finalizando día: ${error.message}`);
-}
+  try {
+    const date = req.query.date || todayISO();
+
+    const report = await generateDailyReport(date);
+
+    const filePath = path.join(reportsDir, report.fileName);
+
+    setTimeout(() => {
+      res.download(filePath, report.fileName);
+    }, 1500);
+  } catch (error) {
+    console.error("Error finalizando día:", error.message);
+    res.status(500).send(`Error finalizando día: ${error.message}`);
+  }
 });
-});
-app.get("/finalizar-dia", async (req, res) => {
-try {
-const date = req.query.date || todayISO();
-const report = await generateDailyReport(date);
-const filePath = path.join(reportsDir, report.fileName);
-setTimeout(() => {
-res.download(filePath, report.fileName);
-}, 1500);
-} catch (error) {
-console.error("■ Error finalizando día:", error.message);
-res.status(500).send(`Error finalizando día: ${error.message}`);
-}
-});
-// ■ Generar / actualizar Excel de nómina semanal
+
 app.post("/generate-payroll-excel", async (req, res) => {
-try {
-const selectedDate = req.body.date || todayISO();
-const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
-const payroll = await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
-res.json({
-ok: true,
-message: "Payroll Excel updated successfully",
-weekStart: week.weekStart,
-weekEnd: week.weekEnd,
-totalRecords: payroll.totalRecords,
-file: payroll.fileName,
-url: payroll.fileUrl,
-fullUrl: `${req.protocol}://${req.get("host")}${payroll.fileUrl}`,
+  try {
+    const selectedDate = req.body.date || todayISO();
+    const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
+
+    const payroll = await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+
+    res.json({
+      ok: true,
+      message: "Payroll Excel updated successfully",
+      weekStart: week.weekStart,
+      weekEnd: week.weekEnd,
+      totalRecords: payroll.totalRecords,
+      file: payroll.fileName,
+      url: payroll.fileUrl,
+      fullUrl: `${req.protocol}://${req.get("host")}${payroll.fileUrl}`,
+    });
+  } catch (error) {
+    console.error("Error generating payroll Excel:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
 });
-} catch (error) {
-console.error("■ Error generating payroll Excel:", error.message);
-res.status(500).json({
-ok: false,
-error: error.message,
-});
-}
-});
-// ■ Descargar Excel de nómina de la semana actual o de una fecha específica
+
 app.get("/payroll-excel", async (req, res) => {
-try {
-const selectedDate = req.query.date || todayISO();
-const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
-const payroll = await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
-res.download(payroll.filePath, payroll.fileName);
-} catch (error) {
-console.error("■ Error descargando Payroll Excel:", error.message);
-res.status(500).send(`Error descargando Payroll Excel: ${error.message}`);
-}
+  try {
+    const selectedDate = req.query.date || todayISO();
+    const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
+
+    const payroll = await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+
+    res.download(payroll.filePath, payroll.fileName);
+  } catch (error) {
+    console.error("Error descargando Payroll Excel:", error.message);
+    res.status(500).send(`Error descargando Payroll Excel: ${error.message}`);
+  }
 });
-// ❤■ Health check para Render
+
 app.get("/health", (req, res) => {
-res.send("OK");
+  res.send("OK");
 });
+
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-console.log(`■ Panel web activo en puerto ${PORT}`);
+  console.log(`Panel web activo en puerto ${PORT}`);
 });
