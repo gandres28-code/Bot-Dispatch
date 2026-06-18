@@ -49,6 +49,7 @@ console.log("NOTION_DATABASE_ID existe:", !!NOTION_DATABASE_ID);
 console.log("NOTION_LOG_DATABASE_ID existe:", !!NOTION_LOG_DATABASE_ID);
 console.log("NOTION_PAYROLL_DATABASE_ID existe:", !!NOTION_PAYROLL_DATABASE_ID);
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
+console.log("PAYROLL RAW:", process.env.NOTION_PAYROLL_DATABASE_ID);
 const notion = new Client({ auth: NOTION_API_KEY });
 const openai = new OpenAI({
 apiKey: OPENAI_API_KEY || "no-key",
