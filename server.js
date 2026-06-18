@@ -1667,6 +1667,9 @@ app.get("/payroll-excel", async (req, res) => {
     res.status(500).send(`Error descargando Payroll Excel: ${error.message}`);
   }
 });
+app.get("/backfill-payroll", async (req, res) => {
+  ...
+});
 
 app.get("/health", (req, res) => {
   res.send("OK");
