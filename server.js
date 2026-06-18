@@ -1672,49 +1672,62 @@ app.get("/backfill-payroll", async (req, res) => {
     const start = req.query.start || "2026-06-15";
     const end = req.query.end || todayISO();
 
-    const response = await fetch(
-      `https://api.notion.com/v1/databases/${NOTION_DATABASE_ID}/query`,
-      {
+    let pages = [];
+    let cursor = undefined;
+
+    do {
+      const body = {
+        page_size: 100,
+        query: "",
+        filter: {
+          property: "object",
+          value: "page",
+        },
+      };
+
+      if (cursor) body.start_cursor = cursor;
+
+      const response = await fetch("https://api.notion.com/v1/search", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${NOTION_API_KEY}`,
           "Content-Type": "application/json",
-          "Notion-Version": "2025-09-03",
+          "Notion-Version": "2022-06-28",
         },
-        body: JSON.stringify({
-          filter: {
-            and: [
-              {
-                property: "Date",
-                date: {
-                  on_or_after: start,
-                },
-              },
-              {
-                property: "Date",
-                date: {
-                  on_or_before: end,
-                },
-              },
-            ],
-          },
-          page_size: 100,
-        }),
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.log("NOTION BACKFILL SEARCH ERROR:", data);
+        throw new Error(data.message || "Error buscando páginas en Notion");
       }
-    );
 
-    const data = await response.json();
+      const filtered = (data.results || []).filter((page) => {
+        const props = page.properties || {};
 
-    if (!response.ok) {
-      console.log("NOTION BACKFILL ERROR:", data);
-      throw new Error(data.message || "Error consultando Notion");
-    }
+        const date = props.Date?.date?.start || "";
+        const unit =
+          props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+
+        const cleaner =
+          props["Assigned Cleaner"]?.select?.name ||
+          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+          "";
+
+        return date >= start && date <= end && unit && cleaner;
+      });
+
+      pages = pages.concat(filtered);
+      cursor = data.has_more ? data.next_cursor : undefined;
+    } while (cursor);
 
     let created = 0;
     let skipped = 0;
     let errors = [];
 
-    for (const page of data.results || []) {
+    for (const page of pages) {
       const props = page.properties;
 
       const date = props.Date?.date?.start || "";
@@ -1758,6 +1771,7 @@ app.get("/backfill-payroll", async (req, res) => {
       message: "Backfill payroll completed",
       start,
       end,
+      found: pages.length,
       created,
       skipped,
       errors,
@@ -1771,7 +1785,6 @@ app.get("/backfill-payroll", async (req, res) => {
     });
   }
 });
-
 app.get("/health", (req, res) => {
   res.send("OK");
 });
