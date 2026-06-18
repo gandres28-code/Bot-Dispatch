@@ -783,7 +783,6 @@ const allowedActions = [
 ];
 if (!allowedActions.includes(action)) {
 throw new Error("Acción no permitida");
-];
 }
 const pages = await queryTodayRooms();
 const normalizedTarget = normalizeRoom(unit);
@@ -799,6 +798,7 @@ const title =
 page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
 return roomDigits(title) === targetDigits;
 });
+}
 if (matches.length === 0) {
 throw new Error(`No encontré la unidad ${unit} en Notion para hoy`);
 }
