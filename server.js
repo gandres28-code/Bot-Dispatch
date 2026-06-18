@@ -220,8 +220,8 @@ Authorization: `Bearer ${NOTION_API_KEY}`,
 "Content-Type": "application/json",
 "Notion-Version": "2022-06-28",
 },
-});
 body: JSON.stringify(body),
+});
 const data = await response.json();
 if (!response.ok) {
 console.log("■ NOTION SEARCH ERROR:", data);
