@@ -525,90 +525,134 @@ async function payrollRecordExists({ cleaner, unit, date }) {
   });
 }
 // ■ Crear registro de nómina cuando se termina una unidad
+async function payrollRecordAlreadyExists({ cleaner, unit, date }) {
+  if (!NOTION_PAYROLL_DATABASE_ID) return false;
+
+  const response = await notion.databases.query({
+    database_id: NOTION_PAYROLL_DATABASE_ID,
+    page_size: 100,
+  });
+
+  return response.results.some((page) => {
+    const props = page.properties;
+
+    const existingDate = props.Date?.date?.start || "";
+
+    const existingCleaner =
+      props.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    const existingUnit =
+      props.Unit?.rich_text?.map((t) => t.plain_text).join("") || "";
+
+    return (
+      existingDate === date &&
+      existingCleaner === cleaner &&
+      existingUnit === unit
+    );
+  });
+}
+
 async function createPayrollRecord({ cleaner, unit, date }) {
-if (!NOTION_PAYROLL_DATABASE_ID) {
-console.log("■■ NOTION_PAYROLL_DATABASE_ID faltante, no se guardó Payroll Record");
-return;
-}
-if (!cleaner || !unit) {
-console.log("■■ Payroll incompleto, falta cleaner o unit:", { cleaner, unit });
-return;
-}
-const pay = getUnitPay(unit);
-if (pay.error) {
-console.log("■■ Payroll error:", pay.error, unit);
-return;
-}
-const exists = await payrollRecordAlreadyExists({ cleaner, unit, date });
-if (exists) {
-return;
-console.log("■■ Payroll duplicado ignorado:", cleaner, unit, date);
-}
-const week = getPayrollWeek(new Date(`${date}T12:00:00`));
-await notion.pages.create({
-parent: {
-database_id: NOTION_PAYROLL_DATABASE_ID,
-},
-properties: {
-Payroll: {
-title: [
-{
-text: {
-content: `${cleaner} - ${unit} - $${pay.amount}`,
-},
-},
-],
-},
-Date: {
-date: {
-start: date,
-},
-},
-Cleaner: {
-rich_text: [
-{
-text: {
-content: cleaner,
-},
-},
-],
-},
-Unit: {
-rich_text: [
-{
-text: {
-content: unit,
-},
-},
-],
-},
-"Room Type": {
-select: {
-name: pay.roomType,
-},
-},
-Amount: {
-number: pay.amount,
-},
-"Week Start": {
-date: {
-start: week.weekStart,
-},
-},
-"Week End": {
-date: {
-start: week.weekEnd,
-},
-},
-Status: {
-select: {
-name: "Pending",
-},
-},
-},
-});
-console.log("■ Payroll Record guardado:", cleaner, unit, `$${pay.amount}`);
-await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+  if (!NOTION_PAYROLL_DATABASE_ID) {
+    console.log("NOTION_PAYROLL_DATABASE_ID faltante, no se guardó Payroll Record");
+    return;
+  }
+
+  if (!cleaner || !unit || !date) {
+    console.log("Payroll incompleto, falta cleaner, unit o date:", {
+      cleaner,
+      unit,
+      date,
+    });
+    return;
+  }
+
+  const pay = getUnitPay(unit);
+
+  if (pay.error) {
+    console.log("Payroll error:", pay.error, unit);
+    return;
+  }
+
+  const exists = await payrollRecordAlreadyExists({
+    cleaner,
+    unit,
+    date,
+  });
+
+  if (exists) {
+    console.log("Payroll duplicado ignorado:", cleaner, unit, date);
+    return;
+  }
+
+  const week = getPayrollWeek(new Date(`${date}T12:00:00`));
+
+  await notion.pages.create({
+    parent: {
+      database_id: NOTION_PAYROLL_DATABASE_ID,
+    },
+    properties: {
+      Payroll: {
+        title: [
+          {
+            text: {
+              content: `${cleaner} - ${unit} - $${pay.amount}`,
+            },
+          },
+        ],
+      },
+      Date: {
+        date: {
+          start: date,
+        },
+      },
+      Cleaner: {
+        rich_text: [
+          {
+            text: {
+              content: cleaner,
+            },
+          },
+        ],
+      },
+      Unit: {
+        rich_text: [
+          {
+            text: {
+              content: unit,
+            },
+          },
+        ],
+      },
+      "Room Type": {
+        select: {
+          name: pay.roomType,
+        },
+      },
+      Amount: {
+        number: pay.amount,
+      },
+      "Week Start": {
+        date: {
+          start: week.weekStart,
+        },
+      },
+      "Week End": {
+        date: {
+          start: week.weekEnd,
+        },
+      },
+      Status: {
+        select: {
+          name: "Pending",
+        },
+      },
+    },
+  });
+
+  console.log("Payroll Record guardado:", cleaner, unit, `$${pay.amount}`);
+
+  await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
 }
 // ■ Leer Payroll Records desde Notion
 async function getPayrollRecords(weekStart, weekEnd) {
