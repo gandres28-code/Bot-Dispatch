@@ -1668,7 +1668,90 @@ app.get("/payroll-excel", async (req, res) => {
   }
 });
 app.get("/backfill-payroll", async (req, res) => {
-  ...
+  try {
+    const start = req.query.start || "2026-06-15";
+    const end = req.query.end || todayISO();
+
+    const response = await notion.databases.query({
+      database_id: NOTION_DATABASE_ID,
+      filter: {
+        and: [
+          {
+            property: "Date",
+            date: {
+              on_or_after: start,
+            },
+          },
+          {
+            property: "Date",
+            date: {
+              on_or_before: end,
+            },
+          },
+        ],
+      },
+      page_size: 100,
+    });
+
+    let created = 0;
+    let skipped = 0;
+    let errors = [];
+
+    for (const page of response.results) {
+      const props = page.properties;
+
+      const date = props.Date?.date?.start || "";
+      const unit =
+        props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+
+      const cleaner =
+        props["Assigned Cleaner"]?.select?.name ||
+        props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+        "";
+
+      if (!date || !unit || !cleaner) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await createPayrollRecord({
+          cleaner,
+          unit,
+          date,
+        });
+
+        created++;
+      } catch (error) {
+        errors.push({
+          unit,
+          cleaner,
+          date,
+          error: error.message,
+        });
+      }
+    }
+
+    const week = getPayrollWeek(new Date(`${start}T12:00:00`));
+    await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+
+    res.json({
+      ok: true,
+      message: "Backfill payroll completed",
+      start,
+      end,
+      created,
+      skipped,
+      errors,
+    });
+  } catch (error) {
+    console.error("Error en backfill payroll:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
 });
 
 app.get("/health", (req, res) => {
