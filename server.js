@@ -780,6 +780,7 @@ const allowedActions = [
 "READY_GUEST",
 "INSPECTION_REPORT",
 "INSPECTION_SUPPLIES",
+];
 if (!allowedActions.includes(action)) {
 throw new Error("Acción no permitida");
 ];
