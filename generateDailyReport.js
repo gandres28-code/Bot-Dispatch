@@ -120,6 +120,7 @@ async function getDailyLogs(date) {
 
   return response.results;
 }
+console.log("USANDO NUEVA VERSION DEL REPORTE");
 
 async function generateDailyReport(date = dayjs().format("YYYY-MM-DD")) {
   const logs = await getDailyLogs(date);
