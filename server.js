@@ -1883,6 +1883,9 @@ app.post("/clock-in", async (req, res) => {
     const role =
       props.Role?.select?.name || "";
 
+    const hourlyRate =
+  props["Hourly Rate"]?.number || 0;
+
     await notion.pages.create({
       parent: {
         database_id: NOTION_TIME_CLOCK_DATABASE_ID,
@@ -1924,6 +1927,10 @@ app.post("/clock-in", async (req, res) => {
           },
         },
 
+        "Hourly Rate": {
+          number: hourlyRate,
+        },
+        
         "Clock In": {
           date: {
             start: new Date().toISOString(),
