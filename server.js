@@ -1187,6 +1187,7 @@ async function getDailyLogsForReport(date) {
 }
 
 async function generateDailyReport(date = todayISO()) {
+  console.log("USANDO REPORTE DESDE SERVER.JS VERSION NUEVA");
   const logs = await getDailyLogsForReport(date);
 
   const fileName = `daily-housekeeping-report-${date}.pdf`;
