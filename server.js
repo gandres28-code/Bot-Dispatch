@@ -1212,6 +1212,7 @@ async function generateDailyReport(date = todayISO()) {
   doc.pipe(fs.createWriteStream(filePath));
 
   const units = new Set();
+  const completedUnitKeys = new Set();
   const cleaners = new Set();
   const inspectors = new Set();
 
@@ -1227,15 +1228,17 @@ async function generateDailyReport(date = todayISO()) {
 
   logs.forEach((log) => {
     const unit = readText(log, ["Unit", "unit"]);
-    const cleaner = readText(log, ["Cleaner", "cleaner"]);
-    const inspector = readText(log, ["Inspector", "inspector"]);
+    const cleaner = normalizeCleaner(readText(log, ["Cleaner", "cleaner"]));
+    const inspector = normalizeCleaner(readText(log, ["Inspector", "inspector"]));
     const action = readText(log, ["Action", "action"]);
     const category = readText(log, ["Category", "category"]);
     const priority = readText(log, ["Priority", "priority"]);
     const status = readText(log, ["Status", "status"]);
     const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
 
-    if (unit) units.add(unit);
+   if (unit && actionLower === "done") {
+  completedUnitKeys.add(unit);
+}
     if (cleaner) cleaners.add(cleaner);
     if (inspector) inspectors.add(inspector);
 
@@ -1287,11 +1290,9 @@ async function generateDailyReport(date = todayISO()) {
       highPriority++;
     }
 
-    if (actionLower === "done") {
-  completed++;
-}
+  
   });
-
+  completed = completedUnitKeys.size;
   doc.fontSize(20).text("DAILY REPORT", {
     align: "center",
   });
@@ -1304,7 +1305,7 @@ async function generateDailyReport(date = todayISO()) {
   doc.fontSize(16).text("1. Executive Summary");
   doc.moveDown(0.5);
   doc.fontSize(12).text(`Total Records: ${logs.length}`);
-  doc.text(`Total Units Registered: ${units.size}`);
+  doc.text(`Total Units Completed: ${completedUnitKeys.size}`);
   doc.text(`Completed / Ready Records: ${completed}`);
   doc.text(`Issues Reported: ${issues}`);
   doc.text(`High Priority Records: ${highPriority}`);
