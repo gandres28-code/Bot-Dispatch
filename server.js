@@ -1185,7 +1185,22 @@ async function getDailyLogsForReport(date) {
 
   return response.results;
 }
+function normalizeCleaner(name) {
+  const n = String(name || "").trim().toLowerCase();
 
+  if (n === "steve") return "Steve Soto";
+  if (n === "steve soto") return "Steve Soto";
+
+  return String(name || "").trim();
+}
+
+function normalizeReportUnit(unit) {
+  return String(unit || "")
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "")
+    .trim();
+}
 async function generateDailyReport(date = todayISO()) {
   console.log("USANDO REPORTE DESDE SERVER.JS VERSION NUEVA");
   const logs = await getDailyLogsForReport(date);
