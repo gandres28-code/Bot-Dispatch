@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Time Clock</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+    }
+    h2 { text-align: center; }
+    input {
+      width: 100%;
+      padding: 18px;
+      font-size: 22px;
+      margin: 15px 0;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      padding: 20px;
+      font-size: 22px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .in { background: #059669; }
+    .out { background: #dc2626; }
+    #msg {
+      margin-top: 20px;
+      font-size: 18px;
+      text-align: center;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h2>Employee Time Clock</h2>
+
+  <input id="code" placeholder="Enter your code" inputmode="numeric">
+
+  <button class="in" onclick="sendClock('clock-in')">CLOCK IN</button>
+  <button class="out" onclick="sendClock('clock-out')">CLOCK OUT</button>
+
+  <div id="msg"></div>
+
+  <script>
+    async function sendClock(type) {
+      const code = document.getElementById("code").value.trim();
+      const msg = document.getElementById("msg");
+
+      if (!code) {
+        msg.innerText = "Enter your code first";
+        return;
+      }
+
+      msg.innerText = "Sending...";
+
+      const res = await fetch("/" + type, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ code })
+      });
+
+      const data = await res.json();
+
+      msg.innerText = data.message || data.error || "Done";
+    }
+  </script>
+</body>
+</html>
