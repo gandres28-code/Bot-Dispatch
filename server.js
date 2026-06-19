@@ -719,107 +719,35 @@ amount: p.Amount?.number || 0,
 });
 }
 // ■ Generar / actualizar Excel semanal con hoja por limpiador
-async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
-const records = await getPayrollRecords(weekStart, weekEnd);
-const workbook = new ExcelJS.Workbook();
-workbook.creator = process.env.COMPANY_NAME || "Housekeeping Payroll System";
-workbook.created = new Date();
-const summarySheet = workbook.addWorksheet("Payroll Summary");
-const quickbooksSheet = workbook.addWorksheet("QuickBooks Upload");
-const dailySheet = workbook.addWorksheet("Daily Payroll");
-dailySheet.columns = [
-{ header: "Date", key: "date", width: 15 },
-{ header: "Cleaner", key: "cleaner", width: 22 },
-{ header: "Unit", key: "unit", width: 22 },
-{ header: "Room Type", key: "roomType", width: 15 },
-{ header: "Amount", key: "amount", width: 15 },
-];
-records.forEach((r) => {
-dailySheet.addRow({
-date: r.date,
-cleaner: r.cleaner,
-unit: r.unit,
-roomType: r.roomType,
-amount: Number(r.amount || 0),
-});
-});
-const totals = {};
-records.forEach((r) => {
-const cleaner = r.cleaner || "Unknown";
-if (!totals[cleaner]) {
-totals[cleaner] = {
-cleaner,
-totalUnits: 0,
-totalAmount: 0,
-records: [],
-};
-}
-totals[cleaner].totalUnits += 1;
-totals[cleaner].totalAmount += Number(r.amount || 0);
-totals[cleaner].records.push(r);
-});
-summarySheet.columns = [
-{ header: "Cleaner", key: "cleaner", width: 22 },
-{ header: "Total Units", key: "totalUnits", width: 15 },
-{ header: "Weekly Total", key: "totalAmount", width: 15 },
-];
-quickbooksSheet.columns = [
-{ header: "Employee", key: "cleaner", width: 22 },
-{ header: "Pay Period", key: "payPeriod", width: 25 },
-{ header: "Amount", key: "amount", width: 15 },
-];
-Object.values(totals)
-.sort((a, b) => a.cleaner.localeCompare(b.cleaner))
-.forEach((t) => {
-summarySheet.addRow({
-cleaner: t.cleaner,
-totalUnits: t.totalUnits,
-totalAmount: t.totalAmount,
-});
-quickbooksSheet.addRow({
-cleaner: t.cleaner,
-payPeriod: `${weekStart} to ${weekEnd}`,
-amount: t.totalAmount,
-});
-const cleanerSheet = workbook.addWorksheet(cleanSheetName(t.cleaner));
-cleanerSheet.columns = [
-{ header: "Date", key: "date", width: 15 },
-{ header: "Unit", key: "unit", width: 22 },
-{ header: "Room Type", key: "roomType", width: 15 },
-{ header: "Amount", key: "amount", width: 15 },
-];
-t.records.forEach((r) => {
-cleanerSheet.addRow({
-date: r.date,
-unit: r.unit,
-roomType: r.roomType,
-amount: Number(r.amount || 0),
-});
-});
-cleanerSheet.addRow({});
-cleanerSheet.addRow({
-date: "TOTAL",
-amount: t.totalAmount,
-});
-});
-[summarySheet, quickbooksSheet, dailySheet, ...workbook.worksheets.slice(3)].forEach((sheet) => {
-const header = sheet.getRow(1);
-header.font = { bold: true };
-sheet.eachRow((row) => {
-row.eachCell((cell) => {
-cell.alignment = { vertical: "middle" };
-});
-});
-});
-const filePath = path.join(payrollDir, payrollFileName(weekStart, weekEnd));
-await workbook.xlsx.writeFile(filePath);
-console.log("■ Excel de nómina actualizado:", filePath);
-return {
-fileName: payrollFileName(weekStart, weekEnd),
-filePath,
-fileUrl: `/payroll_exports/${payrollFileName(weekStart, weekEnd)}`,
-totalRecords: records.length,
-};
+async function getHourlyPayrollRecords(weekStart, weekEnd) {
+  if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
+
+  const response = await notion.databases.query({
+    database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+    page_size: 100,
+  });
+
+  return response.results
+    .map((page) => {
+      const p = page.properties;
+
+      return {
+        employee: p.Employee?.rich_text?.map((t) => t.plain_text).join("") || "",
+        code: p.Code?.rich_text?.map((t) => t.plain_text).join("") || "",
+        role: p.Role?.select?.name || "",
+        clockIn: p["Clock In"]?.date?.start || "",
+        clockOut: p["Clock Out"]?.date?.start || "",
+        hours: p.Hours?.number || 0,
+        hourlyRate: p["Hourly Rate"]?.number || 0,
+        total: p.Total?.number || 0,
+        status: p.Status?.select?.name || "",
+      };
+    })
+    .filter((r) => {
+      if (!r.clockIn) return false;
+      const day = r.clockIn.slice(0, 10);
+      return day >= weekStart && day <= weekEnd && r.status === "Completed";
+    });
 }
 async function findEmployeeByCode(code) {
   const response = await notion.databases.query({
@@ -835,6 +763,192 @@ async function findEmployeeByCode(code) {
 
     return employeeCode.trim() === String(code).trim();
   });
+}
+async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
+  const records = await getPayrollRecords(weekStart, weekEnd);
+  const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = process.env.COMPANY_NAME || "Housekeeping Payroll System";
+  workbook.created = new Date();
+
+  const summarySheet = workbook.addWorksheet("Payroll Summary");
+  const quickbooksSheet = workbook.addWorksheet("QuickBooks Upload");
+  const dailySheet = workbook.addWorksheet("Daily Payroll");
+  const hourlySheet = workbook.addWorksheet("Hourly Payroll");
+
+  dailySheet.columns = [
+    { header: "Date", key: "date", width: 15 },
+    { header: "Cleaner", key: "cleaner", width: 22 },
+    { header: "Unit", key: "unit", width: 22 },
+    { header: "Room Type", key: "roomType", width: 15 },
+    { header: "Amount", key: "amount", width: 15 },
+  ];
+
+  records.forEach((r) => {
+    dailySheet.addRow({
+      date: r.date,
+      cleaner: r.cleaner,
+      unit: r.unit,
+      roomType: r.roomType,
+      amount: Number(r.amount || 0),
+    });
+  });
+
+  const totals = {};
+
+  records.forEach((r) => {
+    const cleaner = r.cleaner || "Unknown";
+
+    if (!totals[cleaner]) {
+      totals[cleaner] = {
+        cleaner,
+        totalUnits: 0,
+        totalAmount: 0,
+        records: [],
+      };
+    }
+
+    totals[cleaner].totalUnits += 1;
+    totals[cleaner].totalAmount += Number(r.amount || 0);
+    totals[cleaner].records.push(r);
+  });
+
+  const hourlyTotals = {};
+
+  hourlyRecords.forEach((r) => {
+    const employee = r.employee || "Unknown";
+
+    if (!hourlyTotals[employee]) {
+      hourlyTotals[employee] = {
+        employee,
+        role: r.role,
+        hours: 0,
+        total: 0,
+      };
+    }
+
+    hourlyTotals[employee].hours += Number(r.hours || 0);
+    hourlyTotals[employee].total += Number(r.total || 0);
+  });
+
+  summarySheet.columns = [
+    { header: "Employee", key: "employee", width: 22 },
+    { header: "Pay Type", key: "payType", width: 15 },
+    { header: "Units", key: "units", width: 12 },
+    { header: "Hours", key: "hours", width: 12 },
+    { header: "Weekly Total", key: "total", width: 15 },
+  ];
+
+  quickbooksSheet.columns = [
+    { header: "Employee", key: "employee", width: 22 },
+    { header: "Pay Type", key: "payType", width: 15 },
+    { header: "Pay Period", key: "payPeriod", width: 25 },
+    { header: "Amount", key: "amount", width: 15 },
+  ];
+
+  Object.values(totals)
+    .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
+    .forEach((t) => {
+      summarySheet.addRow({
+        employee: t.cleaner,
+        payType: "Unit Pay",
+        units: t.totalUnits,
+        hours: "",
+        total: t.totalAmount,
+      });
+
+      quickbooksSheet.addRow({
+        employee: t.cleaner,
+        payType: "Unit Pay",
+        payPeriod: `${weekStart} to ${weekEnd}`,
+        amount: t.totalAmount,
+      });
+
+      const cleanerSheet = workbook.addWorksheet(cleanSheetName(t.cleaner));
+
+      cleanerSheet.columns = [
+        { header: "Date", key: "date", width: 15 },
+        { header: "Unit", key: "unit", width: 22 },
+        { header: "Room Type", key: "roomType", width: 15 },
+        { header: "Amount", key: "amount", width: 15 },
+      ];
+
+      t.records.forEach((r) => {
+        cleanerSheet.addRow({
+          date: r.date,
+          unit: r.unit,
+          roomType: r.roomType,
+          amount: Number(r.amount || 0),
+        });
+      });
+
+      cleanerSheet.addRow({});
+      cleanerSheet.addRow({
+        date: "TOTAL",
+        amount: t.totalAmount,
+      });
+    });
+
+  hourlySheet.columns = [
+    { header: "Employee", key: "employee", width: 22 },
+    { header: "Role", key: "role", width: 18 },
+    { header: "Clock In", key: "clockIn", width: 25 },
+    { header: "Clock Out", key: "clockOut", width: 25 },
+    { header: "Hours", key: "hours", width: 12 },
+    { header: "Hourly Rate", key: "hourlyRate", width: 15 },
+    { header: "Total", key: "total", width: 15 },
+  ];
+
+  hourlyRecords.forEach((r) => {
+    hourlySheet.addRow({
+      employee: r.employee,
+      role: r.role,
+      clockIn: r.clockIn,
+      clockOut: r.clockOut,
+      hours: Number(r.hours || 0),
+      hourlyRate: Number(r.hourlyRate || 0),
+      total: Number(r.total || 0),
+    });
+  });
+
+  Object.values(hourlyTotals)
+    .sort((a, b) => a.employee.localeCompare(b.employee))
+    .forEach((t) => {
+      summarySheet.addRow({
+        employee: t.employee,
+        payType: "Hourly",
+        units: "",
+        hours: Number(t.hours.toFixed(2)),
+        total: Number(t.total.toFixed(2)),
+      });
+
+      quickbooksSheet.addRow({
+        employee: t.employee,
+        payType: "Hourly",
+        payPeriod: `${weekStart} to ${weekEnd}`,
+        amount: Number(t.total.toFixed(2)),
+      });
+    });
+
+  const folder = path.join(__dirname, "payroll_exports");
+
+  if (!fs.existsSync(folder)) {
+    fs.mkdirSync(folder);
+  }
+
+  const filePath = path.join(folder, payrollFileName(weekStart, weekEnd));
+
+  await workbook.xlsx.writeFile(filePath);
+
+  console.log("Excel de nómina actualizado:", filePath);
+
+  return {
+    fileName: payrollFileName(weekStart, weekEnd),
+    filePath,
+    fileUrl: `/payroll_exports/${payrollFileName(weekStart, weekEnd)}`,
+    totalRecords: records.length + hourlyRecords.length,
+  };
 }
 // ■ Actualizar habitación principal
 async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") {
