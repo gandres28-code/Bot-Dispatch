@@ -1226,38 +1226,36 @@ async function generateDailyReport(date = todayISO()) {
   let highPriority = 0;
   let completed = 0;
 
-  logs.forEach((log) => {
-    const unit = readText(log, ["Unit", "unit"]);
-    const cleaner = normalizeCleaner(readText(log, ["Cleaner", "cleaner"]));
-    const inspector = normalizeCleaner(readText(log, ["Inspector", "inspector"]));
-    const action = readText(log, ["Action", "action"]);
-    const category = readText(log, ["Category", "category"]);
-    const priority = readText(log, ["Priority", "priority"]);
-    const status = readText(log, ["Status", "status"]);
-    const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
-}
-    if (cleaner) cleaners.add(cleaner);
-    if (inspector) inspectors.add(inspector);
+logs.forEach((log) => {
+  const unit = readText(log, ["Unit", "unit"]);
+  const cleaner = normalizeCleaner(readText(log, ["Cleaner", "cleaner"]));
+  const inspector = normalizeCleaner(readText(log, ["Inspector", "inspector"]));
+  const action = readText(log, ["Action", "action"]);
+  const category = readText(log, ["Category", "category"]);
+  const priority = readText(log, ["Priority", "priority"]);
+  const status = readText(log, ["Status", "status"]);
+  const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
 
-    const actionLower = action.toLowerCase();
-    const categoryLower = category.toLowerCase();
-    const priorityLower = priority.toLowerCase();
-    const statusLower = status.toLowerCase();
-    const cleanerErrorLower = cleanerError.toLowerCase();
-  
+  if (cleaner) cleaners.add(cleaner);
+  if (inspector) inspectors.add(inspector);
+
+  const actionLower = action.toLowerCase();
+  const categoryLower = category.toLowerCase();
+  const priorityLower = priority.toLowerCase();
+  const statusLower = status.toLowerCase();
+
   if (unit && actionLower === "done") {
-  completedUnitKeys.add(unit);
-
-    if (cleaner && unit && actionLower === "done") {
-  const key = `${cleaner}_${unit}`;
-
-  if (!productivityKeys.has(key)) {
-    productivityKeys.add(key);
-
-    productivity[cleaner] =
-      (productivity[cleaner] || 0) + 1;
+    completedUnitKeys.add(unit);
   }
-}
+
+  if (cleaner && unit && actionLower === "done") {
+    const key = `${cleaner}_${unit}`;
+
+    if (!productivityKeys.has(key)) {
+      productivityKeys.add(key);
+      productivity[cleaner] = (productivity[cleaner] || 0) + 1;
+    }
+  }
 
     if (
       actionLower.includes("issue") ||
