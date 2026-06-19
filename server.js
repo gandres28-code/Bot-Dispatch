@@ -41,6 +41,11 @@ const NOTION_PAYROLL_DATABASE_ID =
 process.env.NOTION_PAYROLL_DATABASE_ID ||
 process.env.NOTION_PAYROLL_RECORDS_DB_ID ||
 "";
+const NOTION_TIME_CLOCK_DATABASE_ID =
+  process.env.NOTION_TIME_CLOCK_DATABASE_ID || "";
+
+const NOTION_EMPLOYEES_DATABASE_ID =
+  process.env.NOTION_EMPLOYEES_DATABASE_ID || "";
 const OPENAI_API_KEY =
 process.env.OPENAI_API_KEY || "";
 console.log("■ ENV CHECK");
@@ -48,6 +53,8 @@ console.log("NOTION_API_KEY existe:", !!NOTION_API_KEY);
 console.log("NOTION_DATABASE_ID existe:", !!NOTION_DATABASE_ID);
 console.log("NOTION_LOG_DATABASE_ID existe:", !!NOTION_LOG_DATABASE_ID);
 console.log("NOTION_PAYROLL_DATABASE_ID existe:", !!NOTION_PAYROLL_DATABASE_ID);
+console.log("NOTION_TIME_CLOCK_DATABASE_ID existe:", !!NOTION_TIME_CLOCK_DATABASE_ID);
+console.log("NOTION_EMPLOYEES_DATABASE_ID existe:", !!NOTION_EMPLOYEES_DATABASE_ID);
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
 console.log("PAYROLL RAW:", process.env.NOTION_PAYROLL_DATABASE_ID);
 const notion = new Client({ auth: NOTION_API_KEY });
