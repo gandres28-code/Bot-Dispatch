@@ -500,12 +500,13 @@ if (field) {
 props[field.name] = field.value;
 }
 });
-await notion.pages.create({
+const response = await notion.pages.create({
 parent: {
-database_id: NOTION_LOG_DATABASE_ID,
+  database_id: NOTION_LOG_DATABASE_ID,
 },
+  properties: props,
 });
-properties: props,
+  
 console.log("■ Daily Cleaning Log guardado");
 } catch (error) {
 console.log("■ ERROR guardando Daily Cleaning Log:", error.body || error.message);
