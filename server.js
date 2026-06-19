@@ -821,6 +821,21 @@ fileUrl: `/payroll_exports/${payrollFileName(weekStart, weekEnd)}`,
 totalRecords: records.length,
 };
 }
+async function findEmployeeByCode(code) {
+  const response = await notion.databases.query({
+    database_id: NOTION_EMPLOYEES_DATABASE_ID,
+    page_size: 100,
+  });
+
+  return response.results.find((page) => {
+    const employeeCode =
+      page.properties.Code?.rich_text
+        ?.map((t) => t.plain_text)
+        .join("") || "";
+
+    return employeeCode.trim() === String(code).trim();
+  });
+}
 // ■ Actualizar habitación principal
 async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") {
 if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
@@ -1841,6 +1856,100 @@ app.get("/backfill-payroll", async (req, res) => {
 });
 app.get("/time-clock", (req, res) => {
   res.sendFile(__dirname + "/public/time-clock.html");
+});
+app.post("/clock-in", async (req, res) => {
+  try {
+    const code = String(req.body.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        error: "Employee code required",
+      });
+    }
+
+    const employee = await findEmployeeByCode(code);
+
+    if (!employee) {
+      return res.status(404).json({
+        error: "Employee not found",
+      });
+    }
+
+    const props = employee.properties;
+
+    const employeeName =
+      props.Employee?.title?.map((t) => t.plain_text).join("") || "";
+
+    const role =
+      props.Role?.select?.name || "";
+
+    await notion.pages.create({
+      parent: {
+        database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+      },
+      properties: {
+        Entry: {
+          title: [
+            {
+              text: {
+                content: `${employeeName} Clock In`,
+              },
+            },
+          ],
+        },
+
+        Employee: {
+          rich_text: [
+            {
+              text: {
+                content: employeeName,
+              },
+            },
+          ],
+        },
+
+        Code: {
+          rich_text: [
+            {
+              text: {
+                content: code,
+              },
+            },
+          ],
+        },
+
+        Role: {
+          select: {
+            name: role,
+          },
+        },
+
+        "Clock In": {
+          date: {
+            start: new Date().toISOString(),
+          },
+        },
+
+        Status: {
+          select: {
+            name: "Working",
+          },
+        },
+      },
+    });
+
+    res.json({
+      ok: true,
+      message: `${employeeName} clocked in`,
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 app.get("/health", (req, res) => {
   res.send("OK");
