@@ -1269,16 +1269,14 @@ async function generateDailyReport(date = todayISO()) {
       if (unit) issuesByUnit[unit] = (issuesByUnit[unit] || 0) + 1;
     }
 
-    if (
-      cleanerErrorLower &&
-      cleanerErrorLower !== "no" &&
-      cleanerErrorLower !== "none" &&
-      cleanerErrorLower !== "n/a"
-    ) {
-      cleanerErrors++;
-      const cleanerName = cleaner || cleanerError || "Unknown";
-      errorsByCleaner[cleanerName] = (errorsByCleaner[cleanerName] || 0) + 1;
-    }
+    if (actionLower === "inspection_report") {
+  cleanerErrors++;
+
+  const cleanerName = normalizeCleaner(cleanerError || cleaner || "Unknown");
+
+  errorsByCleaner[cleanerName] =
+    (errorsByCleaner[cleanerName] || 0) + 1;
+}
 
     if (
       priorityLower.includes("high") ||
@@ -1289,15 +1287,9 @@ async function generateDailyReport(date = todayISO()) {
       highPriority++;
     }
 
-    if (
-      statusLower.includes("complete") ||
-      statusLower.includes("completed") ||
-      statusLower.includes("ready") ||
-      statusLower.includes("lista") ||
-      actionLower.includes("ready_guest")
-    ) {
-      completed++;
-    }
+    if (actionLower === "done") {
+  completed++;
+}
   });
 
   doc.fontSize(20).text("DAILY REPORT", {
