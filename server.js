@@ -1216,6 +1216,7 @@ async function generateDailyReport(date = todayISO()) {
   const inspectors = new Set();
 
   const productivity = {};
+  const productivityKeys = new Set();
   const issuesByUnit = {};
   const errorsByCleaner = {};
 
@@ -1244,20 +1245,16 @@ async function generateDailyReport(date = todayISO()) {
     const statusLower = status.toLowerCase();
     const cleanerErrorLower = cleanerError.toLowerCase();
 
-    if (
-      cleaner &&
-      (
-        actionLower.includes("done") ||
-        actionLower.includes("finished") ||
-        actionLower.includes("completed") ||
-        actionLower.includes("terminada") ||
-        actionLower.includes("terminado") ||
-        actionLower.includes("lista") ||
-        actionLower.includes("ready")
-      )
-    ) {
-      productivity[cleaner] = (productivity[cleaner] || 0) + 1;
-    }
+    if (cleaner && unit && actionLower === "done") {
+  const key = `${cleaner}_${unit}`;
+
+  if (!productivityKeys.has(key)) {
+    productivityKeys.add(key);
+
+    productivity[cleaner] =
+      (productivity[cleaner] || 0) + 1;
+  }
+}
 
     if (
       actionLower.includes("issue") ||
