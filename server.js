@@ -1839,6 +1839,9 @@ app.get("/backfill-payroll", async (req, res) => {
     });
   }
 });
+app.get("/time-clock", (req, res) => {
+  res.sendFile(__dirname + "/public/time-clock.html");
+});
 app.get("/health", (req, res) => {
   res.send("OK");
 });
