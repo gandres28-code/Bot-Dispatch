@@ -1235,9 +1235,6 @@ async function generateDailyReport(date = todayISO()) {
     const priority = readText(log, ["Priority", "priority"]);
     const status = readText(log, ["Status", "status"]);
     const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
-
-   if (unit && actionLower === "done") {
-  completedUnitKeys.add(unit);
 }
     if (cleaner) cleaners.add(cleaner);
     if (inspector) inspectors.add(inspector);
@@ -1247,6 +1244,9 @@ async function generateDailyReport(date = todayISO()) {
     const priorityLower = priority.toLowerCase();
     const statusLower = status.toLowerCase();
     const cleanerErrorLower = cleanerError.toLowerCase();
+  
+  if (unit && actionLower === "done") {
+  completedUnitKeys.add(unit);
 
     if (cleaner && unit && actionLower === "done") {
   const key = `${cleaner}_${unit}`;
