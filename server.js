@@ -1951,6 +1951,96 @@ app.post("/clock-in", async (req, res) => {
     });
   }
 });
+app.post("/clock-out", async (req, res) => {
+  try {
+    const code = String(req.body.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        error: "Employee code required",
+      });
+    }
+
+    const response = await notion.databases.query({
+      database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+      page_size: 100,
+    });
+
+    const activeEntry = response.results.find((page) => {
+      const pageCode =
+        page.properties.Code?.rich_text
+          ?.map((t) => t.plain_text)
+          .join("") || "";
+
+      const status =
+        page.properties.Status?.select?.name || "";
+
+      return pageCode === code && status === "Working";
+    });
+
+    if (!activeEntry) {
+      return res.status(404).json({
+        error: "No active clock-in found",
+      });
+    }
+
+    const clockIn =
+      activeEntry.properties["Clock In"]?.date?.start;
+
+    if (!clockIn) {
+      return res.status(400).json({
+        error: "Clock In not found",
+      });
+    }
+
+    const clockOut = new Date();
+
+    const hours =
+      (clockOut.getTime() - new Date(clockIn).getTime()) /
+      (1000 * 60 * 60);
+
+    const rate =
+      activeEntry.properties["Hourly Rate"]?.number || 0;
+
+    const total = Number((hours * rate).toFixed(2));
+
+    await notion.pages.update({
+      page_id: activeEntry.id,
+      properties: {
+        "Clock Out": {
+          date: {
+            start: clockOut.toISOString(),
+          },
+        },
+
+        Hours: {
+          number: Number(hours.toFixed(2)),
+        },
+
+        Total: {
+          number: total,
+        },
+
+        Status: {
+          select: {
+            name: "Completed",
+          },
+        },
+      },
+    });
+
+    res.json({
+      ok: true,
+      message: `Clock Out successful (${hours.toFixed(2)} hrs)`,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
 app.get("/health", (req, res) => {
   res.send("OK");
 });
