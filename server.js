@@ -1188,12 +1188,17 @@ async function getDailyLogsForReport(date) {
   return response.results;
 }
 function normalizeCleaner(name) {
-  const n = String(name || "").trim().toLowerCase();
+  const n = String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
 
-  if (n === "steve") return "Steve Soto";
-  if (n === "steve soto") return "Steve Soto";
+  const map = {
+    "steve": "Steve Soto",
+    "steve soto": "Steve Soto",
+    "brenda": "Brenda",
+    "yoel": "Yoel",
+    "carolina": "Carolina",
+  };
 
-  return String(name || "").trim();
+  return map[n] || String(name || "").trim().replace(/\s+/g, " ");
 }
 
 function normalizeReportUnit(unit) {
