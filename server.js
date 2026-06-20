@@ -712,7 +712,8 @@ return results.map((page) => {
 const p = page.properties;
 return {
 date: p.Date?.date?.start || "",
-cleaner: p.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "",
+cleaner: normalizeCleaner(
+cleaner: p.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "" ),
 unit: p.Unit?.rich_text?.map((t) => t.plain_text).join("") || "",
 roomType: p["Room Type"]?.select?.name || "",
 amount: p.Amount?.number || 0,
