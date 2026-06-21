@@ -2158,39 +2158,60 @@ app.get("/cleaner-assignments", async (req, res) => {
       });
     }
 
-    const pages = await queryTodayRooms();
+    const response = await notion.databases.query({
+      database_id: NOTION_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: {
+          equals: todayISO(),
+        },
+      },
+    });
 
-    const units = pages
+    const cleanText = (value) => {
+      return String(value || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+    };
+
+    const typedName = cleanText(name);
+
+    const units = response.results
       .map((page) => {
         const props = page.properties;
+
+        const assignedCleaner =
+          props["Assigned Cleaner"]?.select?.name ||
+          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+          "";
 
         return {
           id: page.id,
           unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
           status: props["Cleaning Status"]?.status?.name || "",
-          assignedCleaner: props["Assigned Cleaner"]?.select?.name || "",
+          assignedCleaner,
           arrival: !!props.Arrival?.checkbox,
         };
       })
-.filter((item) => {
-  const typedName = String(name || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+      .filter((item) => {
+        const assignedCleaner = cleanText(item.assignedCleaner);
 
-  const assignedCleaner = String(item.assignedCleaner || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+        if (!typedName || !assignedCleaner) {
+          return false;
+        }
 
-  if (!typedName || !assignedCleaner) {
-    return false;
-  }
+        return assignedCleaner.includes(typedName);
+      });
 
-  return assignedCleaner.includes(typedName);
-});
+    res.json({
+      ok: true,
+      cleaner: name,
+      count: units.length,
+      units,
+    });
 
   } catch (error) {
     console.error("Error en /cleaner-assignments:", error.message);
