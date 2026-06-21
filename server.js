@@ -262,6 +262,54 @@ cursor = data.has_more ? data.next_cursor : undefined;
 } while (cursor);
 return pages;
 }
+// ■ Buscar unidades de cualquier fecha en la página central de Notion
+async function queryRoomsByDate(date) {
+  let pages = [];
+  let cursor = undefined;
+
+  do {
+    const body = {
+      page_size: 100,
+      query: "",
+      filter: {
+        property: "object",
+        value: "page",
+      },
+    };
+
+    if (cursor) body.start_cursor = cursor;
+
+    const response = await fetch("https://api.notion.com/v1/search", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log("■ NOTION SEARCH ERROR:", data);
+      throw new Error(data.message || "Error buscando páginas en Notion");
+    }
+
+    const datePages = (data.results || []).filter((page) => {
+      const pageDate = page.properties?.Date?.date?.start;
+      const roomTitle =
+        page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+
+      return pageDate === date && roomTitle;
+    });
+
+    pages = pages.concat(datePages);
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+
+  return pages;
+}
 // ■ Status de Notion
 function notionStatusFromAction(action) {
 if (action === "START") return "In Progress";
@@ -303,6 +351,8 @@ if (action === "INSPECTION_START") return "■ Inspección iniciada";
 if (action === "READY_GUEST") return "■ Ready for Guest";
 if (action === "INSPECTION_REPORT") return "■ Error de limpieza reportado";
 if (action === "INSPECTION_SUPPLIES") return "■ Solicitud de inspector";
+if (action === "LOST_FOUND") return "■ Lost & Found";
+if (action === "PHOTO") return "■ Foto adjunta";
 return "Actualización";
 }
 // ■ Analizar nota con OpenAI
@@ -353,7 +403,11 @@ summary: safeNote || "Sin nota",
 }
 // ■ Sacar limpiador asignado desde Notion
 function getAssignedCleaner(page) {
-return page.properties?.["Assigned Cleaner"]?.select?.name || "";
+  return (
+    page.properties?.["Assigned Cleaner"]?.select?.name ||
+    page.properties?.["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+    ""
+  );
 }
 async function getDatabaseSchema(databaseId) {
 const db = await notion.databases.retrieve({
@@ -1033,6 +1087,10 @@ if (needsAI) {
 
 for (const page of matches) {
   const assignedCleaner = getAssignedCleaner(page);
+  const officialCleaner = assignedCleaner || employee;
+  const fullUnitTitle = getRoomTitleFromPage(page) || unit;
+  const cleanerFinishedAt =
+    page.properties["Finished At"]?.date?.start || "";
 
   const historyLine =
     `${localTime()} - ${employee} - ${label}` +
@@ -1098,6 +1156,19 @@ for (const page of matches) {
     };
   }
 
+  const autoCloseCleaning =
+    action === "INSPECTION_START" &&
+    !cleanerFinishedAt &&
+    officialCleaner;
+
+  if (autoCloseCleaning) {
+    props["Finished At"] = {
+      date: {
+        start: now,
+      },
+    };
+  }
+
   if (needsAI) {
     props["Issues Notes"] = {
       rich_text: [
@@ -1128,22 +1199,38 @@ for (const page of matches) {
   });
 
   await saveDailyLog({
-  action,
-  unit,
-  employee: mode === "cleaner" ? employee : assignedCleaner,
-  inspector: mode === "inspector" ? employee : "",
-  assignedCleaner: mode === "inspector" ? assignedCleaner : "",
-  note,
-  ai,
-  photoUrl: photoUrl || "",
-  lostAndFound: action === "LOST_FOUND",
-});
+    action,
+    unit: fullUnitTitle,
+    employee: mode === "cleaner" ? officialCleaner : officialCleaner,
+    inspector: mode === "inspector" ? employee : "",
+    assignedCleaner: mode === "inspector" ? officialCleaner : "",
+    note,
+    ai,
+    photoUrl: photoUrl || "",
+    lostAndFound: action === "LOST_FOUND",
+  });
 
-  if (mode === "cleaner" && action === "DONE") {
-    const fullUnitTitle = getRoomTitleFromPage(page) || unit;
+  if (autoCloseCleaning) {
+    await saveDailyLog({
+      action: "DONE",
+      unit: fullUnitTitle,
+      employee: officialCleaner,
+      inspector: "",
+      assignedCleaner: "",
+      note: `Cierre automático porque ${employee} inició inspección`,
+      ai: null,
+    });
 
     await createPayrollRecord({
-      cleaner: employee,
+      cleaner: officialCleaner,
+      unit: fullUnitTitle,
+      date: todayISO(),
+    });
+  }
+
+  if (mode === "cleaner" && action === "DONE") {
+    await createPayrollRecord({
+      cleaner: officialCleaner,
       unit: fullUnitTitle,
       date: todayISO(),
     });
@@ -1179,6 +1266,12 @@ function readText(page, names) {
   if (prop.checkbox !== undefined) return prop.checkbox ? "Yes" : "No";
 
   return "";
+}
+
+function readUrl(page, names) {
+  const prop = getProp(page, names);
+  if (!prop) return "";
+  return prop.url || "";
 }
 
 function formatReportTime(value) {
@@ -1237,389 +1330,357 @@ function normalizeReportUnit(unit) {
     .trim();
 }
 async function generateDailyReport(date = todayISO()) {
-  console.log("USANDO REPORTE DESDE SERVER.JS VERSION NUEVA");
-  const logs = await getDailyLogsForReport(date);
+  console.log("USANDO REPORTE DESDE SERVER.JS - REPORTE DESDE PAGINA CENTRAL");
+
+  const [centralRooms, logs] = await Promise.all([
+    queryRoomsByDate(date),
+    getDailyLogsForReport(date),
+  ]);
 
   const fileName = `daily-housekeeping-report-${date}.pdf`;
   const filePath = path.join(reportsDir, fileName);
 
-  const doc = new PDFDocument({ margin: 50 });
-  doc.pipe(fs.createWriteStream(filePath));
-
-  const units = new Set();
-  const completedUnitKeys = new Set();
-  const cleaners = new Set();
-  const inspectors = new Set();
-
-  const productivity = {};
-  const productivityKeys = new Set();
-  const issuesByUnit = {};
-  const errorsByCleaner = {};
-
-  let issues = 0;
-  let cleanerErrors = 0;
-  let highPriority = 0;
-  let completed = 0;
-
-logs.forEach((log) => {
-  const unit = readText(log, ["Unit", "unit"]);
-  const cleaner = normalizeCleaner(readText(log, ["Cleaner", "cleaner"]));
-  const inspector = normalizeCleaner(readText(log, ["Inspector", "inspector"]));
-  const action = readText(log, ["Action", "action"]);
-  const category = readText(log, ["Category", "category"]);
-  const priority = readText(log, ["Priority", "priority"]);
-  const status = readText(log, ["Status", "status"]);
-  const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
-
-  if (cleaner) cleaners.add(cleaner);
-  if (inspector) inspectors.add(inspector);
-
-  const actionLower = action.toLowerCase();
-  const categoryLower = category.toLowerCase();
-  const priorityLower = priority.toLowerCase();
-  const statusLower = status.toLowerCase();
-
-  if (unit && actionLower === "done") {
-    completedUnitKeys.add(unit);
-  }
-
-  if (cleaner && unit && actionLower === "done") {
-    const key = `${cleaner}_${unit}`;
-
-    if (!productivityKeys.has(key)) {
-      productivityKeys.add(key);
-      productivity[cleaner] = (productivity[cleaner] || 0) + 1;
-    }
-  }
-
-    if (
-      actionLower.includes("issue") ||
-      actionLower.includes("problem") ||
-      actionLower.includes("problema") ||
-      actionLower.includes("report") ||
-      categoryLower.includes("issue") ||
-      categoryLower.includes("problem") ||
-      categoryLower.includes("problema")
-    ) {
-      issues++;
-      if (unit) issuesByUnit[unit] = (issuesByUnit[unit] || 0) + 1;
-    }
-
-    if (actionLower === "inspection_report") {
-  cleanerErrors++;
-
-  const cleanerName = normalizeCleaner(cleanerError || cleaner || "Unknown");
-
-  errorsByCleaner[cleanerName] =
-    (errorsByCleaner[cleanerName] || 0) + 1;
-}
-
-    if (
-      priorityLower.includes("high") ||
-      priorityLower.includes("urgent") ||
-      priorityLower.includes("alta") ||
-      priorityLower.includes("urgente")
-    ) {
-      highPriority++;
-    }
-
-  
-  });
-  completed = completedUnitKeys.size;
-  doc.fontSize(20).text("DAILY REPORT", {
-    align: "center",
-  });
-
-  doc.moveDown();
-  doc.fontSize(12).text(`Date: ${date}`);
-  doc.text(`Company: ${process.env.COMPANY_NAME || "417 Maid Cleaning Services "}`);
-  doc.moveDown();
-
-  doc.fontSize(16).text("1. Executive Summary");
-  doc.moveDown(0.5);
-  doc.fontSize(12).text(`Total Records: ${logs.length}`);
-  doc.text(`Total Units Completed: ${completedUnitKeys.size}`);
-  doc.text(`Completed / Ready Records: ${completed}`);
-  doc.text(`Issues Reported: ${issues}`);
-  doc.text(`High Priority Records: ${highPriority}`);
-  doc.text(`Cleaner Errors: ${cleanerErrors}`);
-  doc.text(`Active Cleaners: ${cleaners.size}`);
-  doc.text(`Active Inspectors: ${inspectors.size}`);
-
-  doc.moveDown();
-
-  doc.fontSize(16).text("2. Productivity by Cleaner");
-  doc.moveDown(0.5);
-
-  if (Object.keys(productivity).length === 0) {
-    doc.fontSize(12).text("No completed cleaning records found.");
-  } else {
-    Object.entries(productivity).forEach(([cleaner, count]) => {
-      doc.fontSize(12).text(`${cleaner}: ${count} completed unit(s)`);
-    });
-  }
-
-  doc.moveDown();
-
-  doc.fontSize(16).text("3. Issues & Cleaner Errors");
-  doc.moveDown(0.5);
-
-  doc.fontSize(12).text("Issues by Unit:");
-
-  if (Object.keys(issuesByUnit).length === 0) {
-    doc.text("No issues reported.");
-  } else {
-    Object.entries(issuesByUnit).forEach(([unit, count]) => {
-      doc.text(`Unit ${unit}: ${count} issue(s)`);
-    });
-  }
-
-  doc.moveDown(0.5);
-  doc.text("Cleaner Errors:");
-
-  if (Object.keys(errorsByCleaner).length === 0) {
-    doc.text("No cleaner errors reported.");
-  } else {
-    Object.entries(errorsByCleaner).forEach(([cleaner, count]) => {
-      doc.text(`${cleaner}: ${count} error(s)`);
-    });
-  }
-
-  const cleanersActivity = {};
-  const inspectorsActivity = {};
+  const logsByUnit = {};
+  const logsByCleaner = {};
+  const logsByInspector = {};
 
   logs.forEach((log) => {
-    const time = readText(log, ["Time", "time"]);
-    const unit = readText(log, ["Unit", "unit"]);
-    const cleaner = readText(log, ["Cleaner", "cleaner"]);
-    const inspector = readText(log, ["Inspector", "inspector"]);
+    const unit = normalizeReportUnit(readText(log, ["Unit", "unit"]));
+    const cleaner = normalizeCleaner(readText(log, ["Cleaner", "cleaner"]));
+    const inspector = normalizeCleaner(readText(log, ["Inspector", "inspector"]));
     const action = readText(log, ["Action", "action"]);
     const note = readText(log, ["Note", "note"]);
     const category = readText(log, ["Category", "category"]);
     const priority = readText(log, ["Priority", "priority"]);
+    const time = readText(log, ["Time", "time"]);
+    const photoUrl = readUrl(log, ["Photo URL", "photo url"]);
+    const cleanerError = normalizeCleaner(readText(log, ["Cleaner Error", "cleaner error"]));
 
-    const actionLower = action.toLowerCase();
-    const categoryLower = category.toLowerCase();
+    const item = {
+      unit,
+      cleaner,
+      inspector,
+      action,
+      note,
+      category,
+      priority,
+      time,
+      photoUrl,
+      cleanerError,
+      displayTime: formatReportTime(time),
+    };
+
+    if (!logsByUnit[unit]) logsByUnit[unit] = [];
+    logsByUnit[unit].push(item);
 
     if (cleaner) {
-      if (!cleanersActivity[cleaner]) {
-        cleanersActivity[cleaner] = {};
-      }
-
-      if (!cleanersActivity[cleaner][unit]) {
-        cleanersActivity[cleaner][unit] = {
-          start: "",
-          finish: "",
-          requests: [],
-          issues: [],
-        };
-      }
-
-      if (actionLower.includes("start")) {
-        cleanersActivity[cleaner][unit].start = formatReportTime(time);
-      }
-
-      if (
-        actionLower.includes("done") ||
-        actionLower.includes("finish") ||
-        actionLower.includes("terminada") ||
-        actionLower.includes("terminado")
-      ) {
-        cleanersActivity[cleaner][unit].finish = formatReportTime(time);
-      }
-
-      if (
-        actionLower.includes("supplies") ||
-        categoryLower.includes("supplies")
-      ) {
-        cleanersActivity[cleaner][unit].requests.push(
-          `${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
-        );
-      }
-
-      if (
-        actionLower.includes("issue") ||
-        actionLower.includes("problem") ||
-        categoryLower.includes("maintenance") ||
-        categoryLower.includes("damage")
-      ) {
-        cleanersActivity[cleaner][unit].issues.push(
-          `${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
-        );
-      }
+      if (!logsByCleaner[cleaner]) logsByCleaner[cleaner] = [];
+      logsByCleaner[cleaner].push(item);
     }
 
     if (inspector) {
-      if (!inspectorsActivity[inspector]) {
-        inspectorsActivity[inspector] = {};
-      }
-
-      if (!inspectorsActivity[inspector][unit]) {
-        inspectorsActivity[inspector][unit] = {
-          inspectionStart: "",
-          ready: "",
-          requests: [],
-          issues: [],
-        };
-      }
-
-      if (actionLower.includes("inspection_start")) {
-        inspectorsActivity[inspector][unit].inspectionStart = formatReportTime(time);
-      }
-
-      if (
-        actionLower.includes("ready_guest") ||
-        actionLower.includes("ready")
-      ) {
-        inspectorsActivity[inspector][unit].ready = formatReportTime(time);
-      }
-
-      if (
-        actionLower.includes("inspection_supplies") ||
-        actionLower.includes("supplies") ||
-        categoryLower.includes("supplies")
-      ) {
-        inspectorsActivity[inspector][unit].requests.push(
-          `${formatReportTime(time)} - ${note || "Supply request"}${priority ? ` (${priority})` : ""}`
-        );
-      }
-
-      if (
-        actionLower.includes("inspection_report") ||
-        actionLower.includes("issue") ||
-        actionLower.includes("problem") ||
-        categoryLower.includes("maintenance") ||
-        categoryLower.includes("damage")
-      ) {
-        inspectorsActivity[inspector][unit].issues.push(
-          `${formatReportTime(time)} - ${note || "Issue reported"}${priority ? ` (${priority})` : ""}`
-        );
-      }
+      if (!logsByInspector[inspector]) logsByInspector[inspector] = [];
+      logsByInspector[inspector].push(item);
     }
   });
 
-  doc.addPage();
+  const centralUnits = centralRooms.map((page) => {
+    const unitTitle = getRoomTitleFromPage(page);
+    const unitKey = normalizeReportUnit(unitTitle);
+    const assignedCleaner = normalizeCleaner(getAssignedCleaner(page));
+    const status = readText(page, ["Cleaning Status", "Status", "status"]);
+    const startedAt = readText(page, ["Started At", "started at"]);
+    const finishedAt = readText(page, ["Finished At", "finished at"]);
 
-  doc.fontSize(13).text("Cleaners Activity", {
-    align: "center",
+    return {
+      unitTitle,
+      unitKey,
+      assignedCleaner,
+      status,
+      startedAt,
+      finishedAt,
+      startedDisplay: formatReportTime(startedAt),
+      finishedDisplay: formatReportTime(finishedAt),
+      logs: logsByUnit[unitKey] || [],
+    };
   });
 
-  doc.moveDown();
+  const totalUnits = centralUnits.length;
+  const completedUnits = centralUnits.filter((u) => u.finishedAt).length;
+  const readyUnits = centralUnits.filter((u) =>
+    String(u.status || "").toLowerCase().includes("ready")
+  ).length;
 
-  Object.entries(cleanersActivity)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .forEach(([cleaner, units]) => {
-      doc.fontSize(11).text(cleaner);
-      doc.moveDown(0.3);
+  const assignedCleaners = new Set(
+    centralUnits.map((u) => u.assignedCleaner).filter(Boolean)
+  );
 
-      Object.entries(units)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .forEach(([unit, data]) => {
-          doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
-          if (data.start) doc.text(`Start: ${data.start}`);
-          if (data.finish) doc.text(`Finished: ${data.finish}`);
+  const activeInspectors = new Set(
+    logs.map((log) => normalizeCleaner(readText(log, ["Inspector", "inspector"]))).filter(Boolean)
+  );
 
-          if (data.requests.length > 0) {
-            doc.text("Requests:");
-            data.requests.forEach((item) => {
-              doc.text(`- ${item}`);
-            });
-          }
+  let issues = 0;
+  let supplyRequests = 0;
+  let lostAndFound = 0;
+  let cleanerErrors = 0;
+  let highPriority = 0;
 
-          if (data.issues.length > 0) {
-            doc.text("Issues:");
-            data.issues.forEach((item) => {
-              doc.text(`- ${item}`);
-            });
-          }
+  logs.forEach((log) => {
+    const action = readText(log, ["Action", "action"]).toLowerCase();
+    const category = readText(log, ["Category", "category"]).toLowerCase();
+    const priority = readText(log, ["Priority", "priority"]).toLowerCase();
 
-          doc.moveDown(0.3);
-          doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
-          doc.moveDown(0.4);
-        });
+    if (
+      action.includes("issue") ||
+      action.includes("report") ||
+      category.includes("maintenance") ||
+      category.includes("damage") ||
+      category.includes("cleaning")
+    ) {
+      issues++;
+    }
 
-      doc.moveDown(0.5);
-    });
+    if (action.includes("supplies") || category.includes("supplies")) {
+      supplyRequests++;
+    }
 
-  doc.addPage();
+    if (action.includes("lost_found") || category.includes("guest item")) {
+      lostAndFound++;
+    }
 
-  doc.fontSize(13).text("Inspectors Activity", {
-    align: "center",
+    if (action === "inspection_report") {
+      cleanerErrors++;
+    }
+
+    if (
+      priority.includes("high") ||
+      priority.includes("urgent") ||
+      priority.includes("alta") ||
+      priority.includes("urgente")
+    ) {
+      highPriority++;
+    }
   });
 
-  doc.moveDown();
+  const cleanerSummary = {};
 
-  Object.entries(inspectorsActivity)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .forEach(([inspector, units]) => {
-      doc.fontSize(11).text(inspector);
-      doc.moveDown(0.3);
+  centralUnits.forEach((unit) => {
+    const cleaner = unit.assignedCleaner || "Sin asignar";
 
-      Object.entries(units)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .forEach(([unit, data]) => {
-          doc.fontSize(9).text(`Unit ${unit || "N/A"}`);
-          if (data.inspectionStart) doc.text(`Inspection Started: ${data.inspectionStart}`);
-          if (data.ready) doc.text(`Ready for Guest: ${data.ready}`);
+    if (!cleanerSummary[cleaner]) {
+      cleanerSummary[cleaner] = [];
+    }
 
-          if (data.requests.length > 0) {
-            doc.text("Requests:");
-            data.requests.forEach((item) => {
-              doc.text(`- ${item}`);
-            });
-          }
+    const unitLogs = unit.logs || [];
 
-          if (data.issues.length > 0) {
-            doc.text("Issues:");
-            data.issues.forEach((item) => {
-              doc.text(`- ${item}`);
-            });
-          }
-
-          doc.moveDown(0.3);
-          doc.moveTo(50, doc.y).lineTo(560, doc.y).stroke();
-          doc.moveDown(0.4);
-        });
-
-      doc.moveDown(0.5);
-    });
-
-  doc.addPage();
-
-  doc.fontSize(18).text("Activity Ledger", {
-    align: "center",
-  });
-
-  doc.moveDown();
-
-  logs.forEach((log, index) => {
-    const logTitle = readText(log, ["Log", "log"]);
-    const time = readText(log, ["Time", "time"]);
-    const unit = readText(log, ["Unit", "unit"]);
-    const cleaner = readText(log, ["Cleaner", "cleaner"]);
-    const action = readText(log, ["Action", "action"]);
-    const note = readText(log, ["Note", "note"]);
-    const inspector = readText(log, ["Inspector", "inspector"]);
-    const category = readText(log, ["Category", "category"]);
-    const priority = readText(log, ["Priority", "priority"]);
-    const status = readText(log, ["Status", "status"]);
-    const cleanerError = readText(log, ["Cleaner Error", "cleaner error"]);
-
-    doc.fontSize(11).text(
-      `${index + 1}. ${formatReportTime(time)} | Unit: ${unit || "N/A"} | Action: ${action || "N/A"}`
+    const requests = unitLogs.filter((l) =>
+      String(l.action || "").toLowerCase().includes("supplies")
     );
 
-    if (logTitle) doc.text(`   Log: ${logTitle}`);
-    if (cleaner) doc.text(`   Cleaner: ${cleaner}`);
-    if (inspector) doc.text(`   Inspector: ${inspector}`);
-    if (category) doc.text(`   Category: ${category}`);
-    if (priority) doc.text(`   Priority: ${priority}`);
-    if (status) doc.text(`   Status: ${status}`);
-    if (cleanerError) doc.text(`   Cleaner Error: ${cleanerError}`);
-    if (note) doc.text(`   Note: ${note}`);
+    const problems = unitLogs.filter((l) => {
+      const a = String(l.action || "").toLowerCase();
+      const c = String(l.category || "").toLowerCase();
 
-    doc.moveDown(0.6);
+      return (
+        a.includes("issue") ||
+        a.includes("report") ||
+        a.includes("lost_found") ||
+        c.includes("maintenance") ||
+        c.includes("damage") ||
+        c.includes("guest item")
+      );
+    });
+
+    cleanerSummary[cleaner].push({
+      unit: unit.unitTitle,
+      start: unit.startedDisplay,
+      finish: unit.finishedDisplay,
+      status: unit.status || "N/A",
+      requests,
+      problems,
+    });
   });
+
+  const inspectorSummary = {};
+
+  logs.forEach((log) => {
+    const inspector = normalizeCleaner(readText(log, ["Inspector", "inspector"]));
+    const unit = readText(log, ["Unit", "unit"]);
+    const action = readText(log, ["Action", "action"]);
+    const note = readText(log, ["Note", "note"]);
+    const priority = readText(log, ["Priority", "priority"]);
+    const category = readText(log, ["Category", "category"]);
+    const time = readText(log, ["Time", "time"]);
+    const photoUrl = readUrl(log, ["Photo URL", "photo url"]);
+
+    if (!inspector) return;
+
+    if (!inspectorSummary[inspector]) {
+      inspectorSummary[inspector] = {};
+    }
+
+    if (!inspectorSummary[inspector][unit]) {
+      inspectorSummary[inspector][unit] = {
+        start: "",
+        finish: "",
+        requests: [],
+        problems: [],
+      };
+    }
+
+    const target = inspectorSummary[inspector][unit];
+    const actionLower = String(action || "").toLowerCase();
+    const categoryLower = String(category || "").toLowerCase();
+
+    if (actionLower === "inspection_start") {
+      target.start = formatReportTime(time);
+    }
+
+    if (actionLower === "ready_guest") {
+      target.finish = formatReportTime(time);
+    }
+
+    if (actionLower.includes("supplies") || categoryLower.includes("supplies")) {
+      target.requests.push({
+        time: formatReportTime(time),
+        note: note || "Supply request",
+        priority,
+        photoUrl,
+      });
+    }
+
+    if (
+      actionLower.includes("inspection_report") ||
+      actionLower.includes("lost_found") ||
+      categoryLower.includes("maintenance") ||
+      categoryLower.includes("damage") ||
+      categoryLower.includes("guest item")
+    ) {
+      target.problems.push({
+        time: formatReportTime(time),
+        note: note || "Issue reported",
+        priority,
+        photoUrl,
+      });
+    }
+  });
+
+  const doc = new PDFDocument({ margin: 45 });
+  doc.pipe(fs.createWriteStream(filePath));
+
+  function sectionTitle(title) {
+    if (doc.y > 700) doc.addPage();
+    doc.moveDown(0.6);
+    doc.fontSize(15).text(title);
+    doc.moveDown(0.4);
+  }
+
+  function writeSmallLine(textValue) {
+    if (doc.y > 735) doc.addPage();
+    doc.fontSize(9).text(textValue);
+  }
+
+  function writeNoteList(title, items) {
+    if (!items || items.length === 0) return;
+
+    writeSmallLine(title);
+
+    items.forEach((item) => {
+      const priority = item.priority ? ` (${item.priority})` : "";
+      const photo = item.photoUrl ? " | Photo attached" : "";
+      writeSmallLine(`  - ${item.time || ""} ${item.note || ""}${priority}${photo}`);
+    });
+  }
+
+  doc.fontSize(20).text("DAILY REPORT", { align: "center" });
+  doc.moveDown();
+  doc.fontSize(11).text(`Date: ${date}`);
+  doc.text(`Company: ${process.env.COMPANY_NAME || "417 Maid Cleaning Services"}`);
+
+  sectionTitle("1. Executive Summary");
+  doc.fontSize(11).text(`Total Units from Central Page: ${totalUnits}`);
+  doc.text(`Units Finished by Cleaners: ${completedUnits}`);
+  doc.text(`Units Ready for Guest: ${readyUnits}`);
+  doc.text(`Issues / Reports: ${issues}`);
+  doc.text(`Supply Requests: ${supplyRequests}`);
+  doc.text(`Lost & Found: ${lostAndFound}`);
+  doc.text(`High Priority Records: ${highPriority}`);
+  doc.text(`Cleaner Errors: ${cleanerErrors}`);
+  doc.text(`Assigned Cleaners: ${assignedCleaners.size}`);
+  doc.text(`Active Inspectors: ${activeInspectors.size}`);
+
+  sectionTitle("2. Units from Central Page");
+  if (centralUnits.length === 0) {
+    doc.fontSize(10).text("No units found in the central page for this date.");
+  } else {
+    centralUnits
+      .sort((a, b) => a.unitTitle.localeCompare(b.unitTitle))
+      .forEach((unit) => {
+        writeSmallLine(
+          `${unit.unitTitle} | Cleaner: ${unit.assignedCleaner || "Sin asignar"} | Status: ${unit.status || "N/A"} | Start: ${unit.startedDisplay} | Finish: ${unit.finishedDisplay}`
+        );
+      });
+  }
+
+  doc.addPage();
+  doc.fontSize(16).text("3. Cleaner Summary", { align: "center" });
+  doc.moveDown();
+
+  Object.entries(cleanerSummary)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([cleaner, units]) => {
+      if (doc.y > 680) doc.addPage();
+
+      doc.fontSize(12).text(cleaner);
+      doc.moveDown(0.25);
+
+      units
+        .sort((a, b) => a.unit.localeCompare(b.unit))
+        .forEach((item) => {
+          writeSmallLine(
+            `Unit ${item.unit} | Start: ${item.start} | Finished: ${item.finish} | Status: ${item.status}`
+          );
+
+          writeNoteList("  Requests:", item.requests);
+          writeNoteList("  Problems / Lost & Found:", item.problems);
+
+          doc.moveDown(0.2);
+        });
+
+      doc.moveDown(0.5);
+    });
+
+  doc.addPage();
+  doc.fontSize(16).text("4. Inspector Summary", { align: "center" });
+  doc.moveDown();
+
+  if (Object.keys(inspectorSummary).length === 0) {
+    doc.fontSize(10).text("No inspector activity found.");
+  } else {
+    Object.entries(inspectorSummary)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([inspector, units]) => {
+        if (doc.y > 680) doc.addPage();
+
+        doc.fontSize(12).text(inspector);
+        doc.moveDown(0.25);
+
+        Object.entries(units)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .forEach(([unit, item]) => {
+            writeSmallLine(
+              `Unit ${unit || "N/A"} | Inspection Start: ${item.start || "N/A"} | Ready for Guest: ${item.finish || "N/A"}`
+            );
+
+            writeNoteList("  Requests:", item.requests);
+            writeNoteList("  Problems / Lost & Found:", item.problems);
+
+            doc.moveDown(0.2);
+          });
+
+        doc.moveDown(0.5);
+      });
+  }
 
   doc.end();
 
@@ -1627,6 +1688,7 @@ logs.forEach((log) => {
     fileName,
     fileUrl: `/reports/${fileName}`,
     totalRecords: logs.length,
+    totalUnits,
   };
 }
 
@@ -1648,7 +1710,7 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    if ((action === "ISSUE" || action === "SUPPLIES") && !String(note || "").trim()) {
+    if ((action === "ISSUE" || action === "SUPPLIES" || action === "LOST_FOUND") && !String(note || "").trim()) {
       return res.status(400).json({
         success: false,
         message: "Debes escribir una nota",
@@ -1694,7 +1756,7 @@ app.post("/inspector-action", async (req, res) => {
     }
 
     if (
-      (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES") &&
+      (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES" || action === "LOST_FOUND") &&
       !String(note || "").trim()
     ) {
       return res.status(400).json({
