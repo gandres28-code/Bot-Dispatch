@@ -109,7 +109,53 @@
       line-height:1.4;
       margin-bottom:10px;
       text-align:center;
-    }
+    }.assignment-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin:15px 0;
+}
+
+.assignment-card{
+  padding:16px;
+  border-radius:14px;
+  background:#e5e7eb;
+  font-weight:bold;
+  text-align:center;
+  cursor:pointer;
+  border:2px solid transparent;
+}
+
+.assignment-card.orange{
+  background:#f59e0b;
+  color:white;
+}
+
+.assignment-card.green{
+  background:#16a34a;
+  color:white;
+}
+
+.assignment-card.purple{
+  background:#7c3aed;
+  color:white;
+}
+
+.assignment-card.urgent{
+  background:#dc2626;
+  color:white;
+  animation: blink 1s infinite;
+}
+
+.assignment-card.selected{
+  border:3px solid #111827;
+}
+
+@keyframes blink{
+  0%{ opacity:1; }
+  50%{ opacity:.45; }
+  100%{ opacity:1; }
+}
   </style>
 </head>
 
@@ -125,7 +171,17 @@
 Usa este panel para iniciar inspección, marcar una unidad lista, reportar errores de limpieza o pedir supplies.
 </p>
 
-<input id="name" placeholder="Nombre del inspector">
+<input id="code" placeholder="Código del inspector">
+
+<button class="start action-btn" onclick="loadInspectorAssignments()">
+  🔎 Ver mis inspecciones
+</button>
+
+<div id="inspectorName" style="text-align:center; font-weight:bold; margin:15px 0;"></div>
+
+<div id="assignments"></div>
+
+<input id="name" placeholder="Nombre del inspector" style="display:none;">
 
 <input id="unit" placeholder="Unidad (Ej: 331A)">
 
@@ -258,7 +314,104 @@ async function uploadInspectionPhotoIfNeeded(unit, name, action, note){
 
   return data.photoUrl;
 }
+let selectedUnit = "";
 
+function getCardClass(status, priority){
+  if(String(priority || "").toLowerCase() === "urgent"){
+    return "urgent";
+  }
+
+  if(status === "Cleaned - Awaiting Inspection"){
+    return "orange";
+  }
+
+  if(status === "Inspection Started"){
+    return "purple";
+  }
+
+  if(status === "Ready for Guest"){
+    return "green";
+  }
+
+  return "";
+}
+
+async function loadInspectorAssignments(){
+  const code = document.getElementById("code").value.trim();
+
+  if(!code){
+    alert("Escribe tu código");
+    return;
+  }
+
+  document.getElementById("assignments").innerHTML = "⏳ Cargando...";
+
+  try{
+    const response = await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}`);
+    const data = await response.json();
+
+    if(!data.ok){
+      document.getElementById("assignments").innerHTML = "";
+      alert(data.message || "No se pudieron cargar las inspecciones");
+      return;
+    }
+
+    document.getElementById("name").value = data.inspector;
+    document.getElementById("inspectorName").innerText = `Inspector: ${data.inspector}`;
+
+    if(!data.units || data.units.length === 0){
+      document.getElementById("assignments").innerHTML =
+        "<p style='text-align:center;'>No tienes unidades asignadas hoy.</p>";
+      return;
+    }
+
+    let html = `<div class="assignment-grid">`;
+
+    data.units.forEach(item => {
+      const cardClass = getCardClass(item.status, item.priority);
+
+      html += `
+        <div
+          class="assignment-card ${cardClass}"
+          onclick="selectAssignment('${item.unit.replace(/'/g, "\\'")}')"
+          id="card-${item.unit.replace(/[^a-zA-Z0-9]/g, "")}"
+        >
+          <div>${item.unit}</div>
+          <div style="font-size:12px; margin-top:6px;">
+            ${item.priority === "Urgent" ? "🚨 URGENTE" : item.status || "Pendiente"}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+
+    document.getElementById("assignments").innerHTML = html;
+
+  }catch(error){
+    document.getElementById("assignments").innerHTML = "";
+    alert("Error cargando inspecciones");
+  }
+}
+
+function selectAssignment(unit){
+  selectedUnit = unit;
+
+  document.getElementById("unit").value = unit;
+
+  document.querySelectorAll(".assignment-card").forEach(card => {
+    card.classList.remove("selected");
+  });
+
+  const cardId = "card-" + unit.replace(/[^a-zA-Z0-9]/g, "");
+  const card = document.getElementById(cardId);
+
+  if(card){
+    card.classList.add("selected");
+  }
+
+  showBigStatus(`Unidad seleccionada: ${unit}`, "success");
+}
 async function sendInspectionAction(action){
 
   if(isSending){
