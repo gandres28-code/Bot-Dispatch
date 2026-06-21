@@ -2147,6 +2147,51 @@ app.get("/inspector-assignments", async (req, res) => {
     });
   }
 });
+app.get("/cleaner-assignments", async (req, res) => {
+  try {
+    const name = String(req.query.name || "").trim();
+
+    if (!name) {
+      return res.status(400).json({
+        ok: false,
+        message: "Nombre requerido",
+      });
+    }
+
+    const pages = await queryTodayRooms();
+
+    const units = pages
+      .map((page) => {
+        const props = page.properties;
+
+        return {
+          id: page.id,
+          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+          status: props["Cleaning Status"]?.status?.name || "",
+          assignedCleaner: props["Assigned Cleaner"]?.select?.name || "",
+          arrival: !!props.Arrival?.checkbox,
+        };
+      })
+      .filter((item) => {
+        return item.assignedCleaner.toLowerCase().trim() === name.toLowerCase().trim();
+      });
+
+    res.json({
+      ok: true,
+      cleaner: name,
+      count: units.length,
+      units,
+    });
+
+  } catch (error) {
+    console.error("Error en /cleaner-assignments:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.post("/clock-in", async (req, res) => {
   try {
     const code = String(req.body.code || "").trim();
