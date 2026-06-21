@@ -2172,18 +2172,20 @@ app.get("/cleaner-assignments", async (req, res) => {
           arrival: !!props.Arrival?.checkbox,
         };
       })
-      .filter((item) => {
-  const typedName = name.toLowerCase().trim();
-
-  const assignedNames = String(item.assignedCleaner || "")
+    .filter((item) => {
+  const typedName = String(name || "")
     .toLowerCase()
-    .split(/,|&| y | and |\+|\//)
-    .map((n) => n.trim())
-    .filter(Boolean);
+    .trim();
 
-  return assignedNames.some((assignedName) => {
-    return assignedName === typedName || assignedName.includes(typedName);
-  });
+  const assignedCleaner = String(item.assignedCleaner || "")
+    .toLowerCase()
+    .trim();
+
+  if (!typedName || !assignedCleaner) {
+    return false;
+  }
+
+  return assignedCleaner.includes(typedName);
 });
 
   } catch (error) {
