@@ -963,7 +963,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   };
 }
 // ■ Actualizar habitación principal
-async function updateNotionRoom(unit, action, employee, note, mode = "cleaner") {
+async function updateNotionRoom(unit, action, employee, note, mode = "cleaner", photoUrl = "") {
 if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
 throw new Error("Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID");
 }
@@ -972,10 +972,12 @@ const allowedActions = [
 "DONE",
 "ISSUE",
 "SUPPLIES",
+"PHOTO",
+"LOST_FOUND",
 "INSPECTION_START",
 "READY_GUEST",
 "INSPECTION_REPORT",
-"INSPECTION_SUPPLIES",
+"INSPECTION_SUPPLIES"
 ];
 if (!allowedActions.includes(action)) {
 throw new Error("Acción no permitida");
@@ -1023,6 +1025,7 @@ for (const page of matches) {
     `${localTime()} - ${employee} - ${label}` +
     `${assignedCleaner && mode === "inspector" ? ` - Cleaner: ${assignedCleaner}` : ""}` +
     `${note ? ` - ${note}` : ""}` +
+    `${photoUrl ? ` - Photo: ${photoUrl}` : ""}` +
     `${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
 
   const oldLastMessage =
@@ -1112,14 +1115,16 @@ for (const page of matches) {
   });
 
   await saveDailyLog({
-    action,
-    unit,
-    employee: mode === "cleaner" ? employee : assignedCleaner,
-    inspector: mode === "inspector" ? employee : "",
-    assignedCleaner: mode === "inspector" ? assignedCleaner : "",
-    note,
-    ai,
-  });
+  action,
+  unit,
+  employee: mode === "cleaner" ? employee : assignedCleaner,
+  inspector: mode === "inspector" ? employee : "",
+  assignedCleaner: mode === "inspector" ? assignedCleaner : "",
+  note,
+  ai,
+  photoUrl: photoUrl || "",
+  lostAndFound: action === "LOST_FOUND",
+});
 
   if (mode === "cleaner" && action === "DONE") {
     const fullUnitTitle = getRoomTitleFromPage(page) || unit;
@@ -1637,7 +1642,7 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    const result = await updateNotionRoom(unit, action, name, note, "cleaner");
+    const result = await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl);
 
     if (action === "DONE") {
       await notifyInspectors(unit);
