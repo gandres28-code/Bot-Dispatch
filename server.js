@@ -8,6 +8,15 @@ const fs = require("fs");
 const path = require("path");
 const dayjs = require("dayjs");
 const app = express();
+const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
+const upload = multer({ storage: multer.memoryStorage() });
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 // ■ Anti duplicados
 const recentActions = new Map();
 app.use(express.json());
