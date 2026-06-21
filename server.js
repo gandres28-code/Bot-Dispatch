@@ -2187,7 +2187,45 @@ app.get("/health", (req, res) => {
   res.send("OK");
 });
 const PORT = process.env.PORT || 3000;
+app.post("/upload-photo", upload.single("photo"), async (req, res) => {
+  try {
+    const { unit, name, role, action, note } = req.body;
 
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "No se recibió ninguna foto"
+      });
+    }
+
+    const base64 = req.file.buffer.toString("base64");
+    const dataUri = `data:${req.file.mimetype};base64,${base64}`;
+
+    const result = await cloudinary.uploader.upload(dataUri, {
+      folder: `housekeeping/${unit || "unknown"}`,
+      resource_type: "image",
+      quality: "auto:best"
+    });
+
+    res.json({
+      success: true,
+      photoUrl: result.secure_url,
+      publicId: result.public_id,
+      unit,
+      name,
+      role,
+      action,
+      note
+    });
+
+  } catch (err) {
+    console.error("❌ Error subiendo foto:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
