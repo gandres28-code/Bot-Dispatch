@@ -1614,7 +1614,7 @@ logs.forEach((log) => {
 
 app.post("/action", async (req, res) => {
   try {
-    const { action, unit, note, name } = req.body;
+    const { action, unit, note, name, photoUrl } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
