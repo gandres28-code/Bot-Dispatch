@@ -2172,13 +2172,17 @@ app.get("/cleaner-assignments", async (req, res) => {
           arrival: !!props.Arrival?.checkbox,
         };
       })
-    .filter((item) => {
+.filter((item) => {
   const typedName = String(name || "")
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim();
 
   const assignedCleaner = String(item.assignedCleaner || "")
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim();
 
   if (!typedName || !assignedCleaner) {
