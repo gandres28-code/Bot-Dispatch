@@ -227,7 +227,7 @@ Foto opcional para problemas / Lost & Found
 <button class="supplies action-btn" onclick="sendInspectionAction('INSPECTION_SUPPLIES')">
   🧺 Pedir algo para la unidad
 </button>
-
+</div>
 <p id="status"></p>
 
 </div>
@@ -411,11 +411,13 @@ function selectAssignment(unit){
   const cardId = "card-" + unit.replace(/[^a-zA-Z0-9]/g, "");
   const card = document.getElementById(cardId);
 
-  if(card){
-    card.classList.add("selected");
-  }
+ if(card){
+  card.classList.add("selected");
+}
 
-  showBigStatus(`Unidad seleccionada: ${unit}`, "success");
+document.getElementById("inspectionPanel").style.display = "block";
+
+showBigStatus(`Unidad seleccionada: ${unit}`, "success");
 }
 async function sendInspectionAction(action){
 
