@@ -285,17 +285,32 @@ async function loadEvents(){
     container.innerHTML =
       "";
 
-    data.events.forEach(event => {
-      container.innerHTML += `
-        <div class="event">
-          <div class="time">${event.time || ""}</div>
-          <div class="unit">${event.unit || ""}</div>
-          <div>${event.action || ""}</div>
-          <div>${event.person || ""}</div>
-          <div>${event.note || ""}</div>
-        </div>
-      `;
-    });
+  data.events.forEach(event => {
+  container.innerHTML += `
+    <div class="event">
+      <div class="time">${event.time || ""}</div>
+      <div class="unit">${event.unit || ""}</div>
+      <div>${event.action || ""}</div>
+      <div>${event.person || ""}</div>
+      <div>${event.note || ""}</div>
+
+      ${event.photoUrl ? `
+        <a href="${event.photoUrl}" target="_blank">
+          <img
+            src="${event.photoUrl}"
+            style="
+              width:100%;
+              max-width:260px;
+              margin-top:12px;
+              border-radius:12px;
+              box-shadow:0 2px 10px rgba(0,0,0,.18);
+            "
+          >
+        </a>
+      ` : ""}
+    </div>
+  `;
+});
 
   }catch(err){
     console.log(err);
