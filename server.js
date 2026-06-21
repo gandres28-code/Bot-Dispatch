@@ -2173,15 +2173,18 @@ app.get("/cleaner-assignments", async (req, res) => {
         };
       })
       .filter((item) => {
-        return item.assignedCleaner.toLowerCase().trim() === name.toLowerCase().trim();
-      });
+  const typedName = name.toLowerCase().trim();
 
-    res.json({
-      ok: true,
-      cleaner: name,
-      count: units.length,
-      units,
-    });
+  const assignedNames = String(item.assignedCleaner || "")
+    .toLowerCase()
+    .split(/,|&| y | and |\+|\//)
+    .map((n) => n.trim())
+    .filter(Boolean);
+
+  return assignedNames.some((assignedName) => {
+    return assignedName === typedName || assignedName.includes(typedName);
+  });
+});
 
   } catch (error) {
     console.error("Error en /cleaner-assignments:", error.message);
