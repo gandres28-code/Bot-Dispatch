@@ -1677,7 +1677,7 @@ app.post("/action", async (req, res) => {
 
 app.post("/inspector-action", async (req, res) => {
   try {
-    const { action, unit, note, name } = req.body;
+    const { action, unit, note, name, photoUrl } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -1703,7 +1703,7 @@ app.post("/inspector-action", async (req, res) => {
       });
     }
 
-    const result = await updateNotionRoom(unit, action, name, note, "inspector");
+    const result = await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
 
     res.json({
       success: true,
