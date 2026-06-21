@@ -53,6 +53,7 @@
     .ready{ background:#059669; }
     .report{ background:#f59e0b; }
     .supplies{ background:#2563eb; }
+    .lost{ background:#111827; }
 
     #status{
       text-align:center;
@@ -137,6 +138,16 @@ Informe / Problema / Supplies
   placeholder="Escribe aquí qué salió mal, qué falta o qué necesita la unidad..."
 ></textarea>
 
+  <div class="note-title">
+Foto opcional para problemas / Lost & Found
+</div>
+
+<input
+  type="file"
+  id="photoInput"
+  accept="image/*"
+  capture="environment"
+/>
 <button class="start action-btn" onclick="sendInspectionAction('INSPECTION_START')">
   🔍 Empezar inspección
 </button>
@@ -147,6 +158,10 @@ Informe / Problema / Supplies
 
 <button class="report action-btn" onclick="sendInspectionAction('INSPECTION_REPORT')">
   📝 Informe de error de limpieza
+</button>
+ 
+<button class="lost action-btn" onclick="sendInspectionAction('LOST_FOUND')">
+  🎒 Lost & Found
 </button>
 
 <button class="supplies action-btn" onclick="sendInspectionAction('INSPECTION_SUPPLIES')">
@@ -214,6 +229,36 @@ function vibratePhone(type){
   }
 }
 
+async function uploadInspectionPhotoIfNeeded(unit, name, action, note){
+  const photoInput = document.getElementById("photoInput");
+  const file = photoInput.files[0];
+
+  if(!file){
+    return "";
+  }
+
+  const formData = new FormData();
+  formData.append("photo", file);
+  formData.append("unit", unit);
+  formData.append("name", name);
+  formData.append("role", "Inspector");
+  formData.append("action", action);
+  formData.append("note", note);
+
+  const response = await fetch("/upload-photo", {
+    method: "POST",
+    body: formData
+  });
+
+  const data = await response.json();
+
+  if(!data.success){
+    throw new Error(data.error || "Error subiendo foto");
+  }
+
+  return data.photoUrl;
+}
+
 async function sendInspectionAction(action){
 
   if(isSending){
@@ -234,15 +279,20 @@ async function sendInspectionAction(action){
     return;
   }
 
-  if(
-    (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES")
-    && !note
-  ){
+  if((action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES" || action === "LOST_FOUND") && !note){
     alert("Debes escribir un informe o nota");
     return;
   }
 
-  const sendKey = `${action}-${unit}-${name}-${note}`;
+  const photoInput = document.getElementById("photoInput");
+  const hasPhoto = photoInput.files.length > 0;
+
+  if((action === "INSPECTION_REPORT" || action === "LOST_FOUND") && !hasPhoto){
+    alert("Debes agregar una foto");
+    return;
+  }
+
+  const sendKey = `${action}-${unit}-${name}-${note}-${hasPhoto}`;
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
@@ -262,6 +312,16 @@ async function sendInspectionAction(action){
   showBigStatus("⏳ Enviando...", "loading");
 
   try{
+
+    let photoUrl = "";
+
+    if(hasPhoto){
+      showBigStatus("📸 Subiendo foto...", "loading");
+      photoUrl = await uploadInspectionPhotoIfNeeded(unit, name, action, note);
+    }
+
+    showBigStatus("⏳ Enviando reporte...", "loading");
+
     const response = await fetch("/inspector-action",{
       method:"POST",
       headers:{
@@ -271,7 +331,8 @@ async function sendInspectionAction(action){
         action,
         unit,
         note,
-        name
+        name,
+        photoUrl
       })
     });
 
@@ -289,6 +350,8 @@ async function sendInspectionAction(action){
         document.getElementById("note").value = "";
       }
 
+      document.getElementById("photoInput").value = "";
+
     }else{
       document.getElementById("status").innerText =
         data.message || "❌ Error";
@@ -300,9 +363,9 @@ async function sendInspectionAction(action){
 
   }catch(error){
     document.getElementById("status").innerText =
-      "❌ Error de conexión";
+      "❌ Error: " + error.message;
 
-    showBigStatus("❌ Error de conexión", "error");
+    showBigStatus("❌ Error: " + error.message, "error");
     playBeep("error");
     vibratePhone("error");
   }finally{
