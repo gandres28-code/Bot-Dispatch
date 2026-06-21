@@ -292,7 +292,7 @@ async function sendAction(action){
   const photoInput = document.getElementById("photoInput");
   const hasPhoto = photoInput.files.length > 0;
 
-  if((action === "PHOTO" || action === "LOST_FOUND") && !hasPhoto){
+  if((action === "ISSUE" || action === "LOST_FOUND") && !hasPhoto){
     alert("Debes agregar una foto");
     return;
   }
