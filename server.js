@@ -843,6 +843,13 @@ async function findEmployeeByCode(code) {
     return employeeCode.trim() === String(code).trim();
   });
 }
+function getEmployeeNameFromPage(page) {
+  return page.properties.Employee?.title?.map((t) => t.plain_text).join("") || "";
+}
+
+function getEmployeeRoleFromPage(page) {
+  return page.properties.Role?.select?.name || "";
+}
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   const records = await getPayrollRecords(weekStart, weekEnd);
   const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
@@ -2074,6 +2081,71 @@ app.get("/backfill-payroll", async (req, res) => {
 });
 app.get("/time-clock", (req, res) => {
   res.sendFile(__dirname + "/public/time-clock.html");
+});
+app.get("/inspector-assignments", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
+
+    const employee = await findEmployeeByCode(code);
+
+    if (!employee) {
+      return res.status(404).json({
+        ok: false,
+        message: "Código no encontrado",
+      });
+    }
+
+    const inspectorName = getEmployeeNameFromPage(employee);
+    const role = getEmployeeRoleFromPage(employee);
+
+    const allowedRoles = ["Inspector", "Dispatch / Inspector"];
+
+    if (!allowedRoles.includes(role)) {
+      return res.status(403).json({
+        ok: false,
+        message: "Este código no tiene acceso a inspecciones",
+      });
+    }
+
+    const pages = await queryTodayRooms();
+
+    const units = pages
+      .map((page) => {
+        const props = page.properties;
+
+        return {
+          id: page.id,
+          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+          status: props["Cleaning Status"]?.status?.name || "",
+          priority: props.Priority?.select?.name || "Normal",
+          assignedInspector: props["Assigned Inspector"]?.select?.name || "",
+        };
+      })
+      .filter((item) => item.assignedInspector === inspectorName);
+
+    res.json({
+      ok: true,
+      inspector: inspectorName,
+      role,
+      count: units.length,
+      units,
+    });
+
+  } catch (error) {
+    console.error("Error en /inspector-assignments:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
 });
 app.post("/clock-in", async (req, res) => {
   try {
