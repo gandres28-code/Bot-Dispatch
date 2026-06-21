@@ -471,6 +471,8 @@ inspector,
 assignedCleaner,
 note,
 ai = null,
+photoUrl = "",
+lostAndFound = false,
 }) {
 if (!NOTION_LOG_DATABASE_ID) {
 console.log("■■ NOTION_LOG_DATABASE_ID faltante, no se guardó historial");
@@ -509,6 +511,17 @@ if (field) {
 props[field.name] = field.value;
 }
 });
+if (schema["Photo URL"] && photoUrl) {
+  props["Photo URL"] = {
+    url: photoUrl,
+  };
+}
+
+if (schema["Lost and Found"]) {
+  props["Lost and Found"] = {
+    checkbox: !!lostAndFound,
+  };
+}
 const response = await notion.pages.create({
 parent: {
   database_id: NOTION_LOG_DATABASE_ID,
