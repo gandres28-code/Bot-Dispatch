@@ -1776,6 +1776,9 @@ app.get("/operations-events", async (req, res) => {
           props.Note?.rich_text
             ?.map((t) => t.plain_text)
             .join("") || "",
+        
+        photoUrl:
+          props["Photo URL"]?.url || "",
       };
     });
 
