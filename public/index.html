@@ -103,6 +103,41 @@
     #bigStatus.loading{
       background:#2563eb;
     }
+    .assignment-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin:15px 0;
+}
+
+.assignment-card{
+  padding:16px;
+  border-radius:14px;
+  background:#e5e7eb;
+  font-weight:bold;
+  text-align:center;
+  cursor:pointer;
+  border:2px solid transparent;
+}
+
+.assignment-card.arrival{
+  background:#dc2626;
+  color:white;
+}
+
+.assignment-card.started{
+  background:#7c3aed;
+  color:white;
+}
+
+.assignment-card.done{
+  background:#16a34a;
+  color:white;
+}
+
+.assignment-card.selected{
+  border:3px solid #111827;
+}
   </style>
 </head>
 
@@ -119,10 +154,21 @@
   placeholder="Nombre del limpiador"
 />
 
+<button class="start action-btn" onclick="loadCleanerAssignments()">
+  🔎 Ver mis unidades
+</button>
+
+<div id="cleanerName" style="text-align:center; font-weight:bold; margin:15px 0;"></div>
+
+<div id="assignments"></div>
+
 <input
   id="unit"
-  placeholder="Unidad (Ej: 331A)"
-/>
+  placeholder="Unidad"
+  style="display:none;"
+>
+
+<div id="cleaningPanel" style="display:none;">
 
 <div class="note-title">
 Notas / Problemas / Supplies
@@ -172,6 +218,7 @@ Foto opcional
   onclick="sendAction('ISSUE')">
   ⚠️ Reportar problema
 </button>
+</div>
 
 <p id="status"></p>
 
@@ -233,7 +280,100 @@ function vibratePhone(type){
     }
   }
 }
+let selectedUnit = "";
 
+function getCleanerCardClass(status, arrival){
+  if(status === "Ready for Guest" || status === "Cleaned - Awaiting Inspection"){
+    return "done";
+  }
+
+  if(status === "In Progress"){
+    return "started";
+  }
+
+  if(arrival){
+    return "arrival";
+  }
+
+  return "";
+}
+
+async function loadCleanerAssignments(){
+  const name = document.getElementById("name").value.trim();
+
+  if(!name){
+    alert("Escribe tu nombre");
+    return;
+  }
+
+  document.getElementById("assignments").innerHTML = "⏳ Cargando...";
+
+  try{
+    const response = await fetch(`/cleaner-assignments?name=${encodeURIComponent(name)}`);
+    const data = await response.json();
+
+    if(!data.ok){
+      document.getElementById("assignments").innerHTML = "";
+      alert(data.message || "No se pudieron cargar tus unidades");
+      return;
+    }
+
+    document.getElementById("cleanerName").innerText = `Limpiador: ${data.cleaner}`;
+
+    if(!data.units || data.units.length === 0){
+      document.getElementById("assignments").innerHTML =
+        "<p style='text-align:center;'>No tienes unidades asignadas hoy.</p>";
+      return;
+    }
+
+    let html = `<div class="assignment-grid">`;
+
+    data.units.forEach(item => {
+      const cardClass = getCleanerCardClass(item.status, item.arrival);
+
+      html += `
+        <div
+          class="assignment-card ${cardClass}"
+          onclick="selectCleanerAssignment('${item.unit.replace(/'/g, "\\'")}')"
+          id="card-${item.unit.replace(/[^a-zA-Z0-9]/g, "")}"
+        >
+          <div>${item.unit}</div>
+          <div style="font-size:12px; margin-top:6px;">
+            ${item.arrival ? "🚨 ARRIVAL" : item.status || "Normal"}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+
+    document.getElementById("assignments").innerHTML = html;
+
+  }catch(error){
+    document.getElementById("assignments").innerHTML = "";
+    alert("Error cargando unidades");
+  }
+}
+
+function selectCleanerAssignment(unit){
+  selectedUnit = unit;
+
+  document.getElementById("unit").value = unit;
+  document.getElementById("cleaningPanel").style.display = "block";
+
+  document.querySelectorAll(".assignment-card").forEach(card => {
+    card.classList.remove("selected");
+  });
+
+  const cardId = "card-" + unit.replace(/[^a-zA-Z0-9]/g, "");
+  const card = document.getElementById(cardId);
+
+  if(card){
+    card.classList.add("selected");
+  }
+
+  showBigStatus(`Unidad seleccionada: ${unit}`, "success");
+}
 async function uploadPhotoIfNeeded(unit, name, action, note){
   const photoInput = document.getElementById("photoInput");
   const file = photoInput.files[0];
