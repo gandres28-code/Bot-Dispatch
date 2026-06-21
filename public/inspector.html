@@ -183,8 +183,12 @@ Usa este panel para iniciar inspección, marcar una unidad lista, reportar error
 
 <input id="name" placeholder="Nombre del inspector" style="display:none;">
 
-<input id="unit" placeholder="Unidad (Ej: 331A)">
-
+<input
+  id="unit"
+  placeholder="Unidad"
+  style="display:none;"
+>
+<div id="inspectionPanel" style="display:none;">
 <div class="note-title">
 Informe / Problema / Supplies
 </div>
@@ -390,6 +394,7 @@ async function loadInspectorAssignments(){
 
   }catch(error){
     document.getElementById("assignments").innerHTML = "";
+    document.getElementById("inspectionPanel").style.display = "block";
     alert("Error cargando inspecciones");
   }
 }
