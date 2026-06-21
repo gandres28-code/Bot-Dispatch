@@ -53,6 +53,8 @@
     .done{ background:#dc2626; }
     .issue{ background:#f59e0b; }
     .supplies{ background:#2563eb; }
+    .photo{ background:#7c3aed; }
+    .lost{ background:#111827; }
 
     .card{
       background:white;
@@ -130,6 +132,28 @@ Notas / Problemas / Supplies
   id="note"
   placeholder="Escribe aquí si necesitas algo o reportas un problema..."
 ></textarea>
+  <div class="note-title">
+Foto opcional
+</div>
+
+<input
+  type="file"
+  id="photoInput"
+  accept="image/*"
+  capture="environment"
+/>
+
+<button
+  class="photo action-btn"
+  onclick="sendAction('PHOTO')">
+  📸 Enviar foto
+</button>
+
+<button
+  class="lost action-btn"
+  onclick="sendAction('LOST_FOUND')">
+  🎒 Lost & Found
+</button>
 
 <button
   class="start action-btn"
@@ -216,27 +240,45 @@ function vibratePhone(type){
   }
 }
 
+async function uploadPhotoIfNeeded(unit, name, action, note){
+  const photoInput = document.getElementById("photoInput");
+  const file = photoInput.files[0];
+
+  if(!file){
+    return "";
+  }
+
+  const formData = new FormData();
+  formData.append("photo", file);
+  formData.append("unit", unit);
+  formData.append("name", name);
+  formData.append("role", "Cleaner");
+  formData.append("action", action);
+  formData.append("note", note);
+
+  const response = await fetch("/upload-photo", {
+    method: "POST",
+    body: formData
+  });
+
+  const data = await response.json();
+
+  if(!data.success){
+    throw new Error(data.error || "Error subiendo foto");
+  }
+
+  return data.photoUrl;
+}
+
 async function sendAction(action){
 
   if(isSending){
     return;
   }
 
-  const name =
-    document.getElementById("name")
-    .value
-    .trim();
-
-  const unit =
-    document.getElementById("unit")
-    .value
-    .trim()
-    .toUpperCase();
-
-  const note =
-    document.getElementById("note")
-    .value
-    .trim();
+  const name = document.getElementById("name").value.trim();
+  const unit = document.getElementById("unit").value.trim().toUpperCase();
+  const note = document.getElementById("note").value.trim();
 
   if(!name){
     alert("Escribe tu nombre");
@@ -248,15 +290,20 @@ async function sendAction(action){
     return;
   }
 
-  if(
-    (action === "ISSUE" || action === "SUPPLIES")
-    && !note
-  ){
+  if((action === "ISSUE" || action === "SUPPLIES" || action === "LOST_FOUND") && !note){
     alert("Debes escribir una nota");
     return;
   }
 
-  const sendKey = `${action}-${unit}-${name}-${note}`;
+  const photoInput = document.getElementById("photoInput");
+  const hasPhoto = photoInput.files.length > 0;
+
+  if((action === "PHOTO" || action === "LOST_FOUND") && !hasPhoto){
+    alert("Debes agregar una foto");
+    return;
+  }
+
+  const sendKey = `${action}-${unit}-${name}-${note}-${hasPhoto}`;
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
@@ -272,12 +319,19 @@ async function sendAction(action){
 
   setButtonsDisabled(true);
 
-  document.getElementById("status").innerText =
-    "⏳ Enviando...";
-
+  document.getElementById("status").innerText = "⏳ Enviando...";
   showBigStatus("⏳ Enviando...", "loading");
 
   try{
+
+    let photoUrl = "";
+
+    if(hasPhoto){
+      showBigStatus("📸 Subiendo foto...", "loading");
+      photoUrl = await uploadPhotoIfNeeded(unit, name, action, note);
+    }
+
+    showBigStatus("⏳ Enviando reporte...", "loading");
 
     const response = await fetch("/action",{
       method:"POST",
@@ -288,7 +342,8 @@ async function sendAction(action){
         action,
         unit,
         note,
-        name
+        name,
+        photoUrl
       })
     });
 
@@ -306,6 +361,8 @@ async function sendAction(action){
         document.getElementById("note").value = "";
       }
 
+      document.getElementById("photoInput").value = "";
+
     }else{
       document.getElementById("status").innerText =
         data.message || "❌ Error";
@@ -318,9 +375,9 @@ async function sendAction(action){
   }catch(error){
 
     document.getElementById("status").innerText =
-      "❌ Error de conexión";
+      "❌ Error: " + error.message;
 
-    showBigStatus("❌ Error de conexión", "error");
+    showBigStatus("❌ Error: " + error.message, "error");
     playBeep("error");
     vibratePhone("error");
 
