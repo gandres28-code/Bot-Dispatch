@@ -2158,17 +2158,6 @@ app.get("/cleaner-assignments", async (req, res) => {
       });
     }
 
-    const response = await notion.databases.query({
-      database_id: NOTION_DATABASE_ID,
-      page_size: 100,
-      filter: {
-        property: "Date",
-        date: {
-          equals: todayISO(),
-        },
-      },
-    });
-
     const cleanText = (value) => {
       return String(value || "")
         .toLowerCase()
@@ -2179,7 +2168,9 @@ app.get("/cleaner-assignments", async (req, res) => {
 
     const typedName = cleanText(name);
 
-    const units = response.results
+    const pages = await queryTodayRooms();
+
+    const units = pages
       .map((page) => {
         const props = page.properties;
 
