@@ -300,6 +300,25 @@ h1{
     grid-template-columns:repeat(5, 220px);
   }
 }
+ .search-box{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  margin-bottom:15px;
+}
+
+.search-box input{
+  padding:12px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  font-size:16px;
+}
+
+@media(max-width:700px){
+  .search-box{
+    grid-template-columns:1fr;
+  }
+}
 </style>
 </head>
 
@@ -343,6 +362,11 @@ h1{
 </div>
 
 <div id="dispatchBoard" class="dispatch-board" style="display:none;"></div>
+ <div class="search-box">
+  <input id="searchUnit" placeholder="Buscar unidad..." oninput="renderCurrentView()">
+  <input id="filterCleaner" placeholder="Filtrar por limpiador..." oninput="renderCurrentView()">
+  <input id="filterInspector" placeholder="Filtrar por inspector..." oninput="renderCurrentView()">
+</div>
 <div id="units" class="units">
   <div class="loading">Cargando unidades...</div>
 </div>
@@ -427,6 +451,44 @@ function getStatusBadge(unit){
 
 function setFilter(filter){
   currentFilter = filter;
+ renderCurrentView();
+}
+ function cleanSearch(value){
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function getFilteredUnits(){
+  const searchUnit = cleanSearch(document.getElementById("searchUnit")?.value || "");
+  const filterCleaner = cleanSearch(document.getElementById("filterCleaner")?.value || "");
+  const filterInspector = cleanSearch(document.getElementById("filterInspector")?.value || "");
+
+  return allUnits.filter((unit) => {
+    const unitText = cleanSearch(unit.unit);
+    const cleanerText = cleanSearch(unit.cleaner);
+    const inspectorText = cleanSearch(unit.inspector);
+
+    const matchesUnit = !searchUnit || unitText.includes(searchUnit);
+    const matchesCleaner = !filterCleaner || cleanerText.includes(filterCleaner);
+    const matchesInspector = !filterInspector || inspectorText.includes(filterInspector);
+
+    return matchesUnit && matchesCleaner && matchesInspector && unitMatchesFilter(unit);
+  });
+}
+
+function renderCurrentView(){
+  const dispatchVisible =
+    document.getElementById("dispatchBoard").style.display !== "none";
+
+  if(dispatchVisible){
+    renderDispatchBoard();
+  }else{
+    renderUnits();
+  }
+}
   renderUnits();
   if(document.getElementById("dispatchBoard").style.display !== "none"){
   renderDispatchBoard();
@@ -491,7 +553,7 @@ function updateStats(){
 
 function renderUnits(){
   const container = document.getElementById("units");
-  const visibleUnits = allUnits.filter(unitMatchesFilter);
+ const visibleUnits = getFilteredUnits();
 
   if(visibleUnits.length === 0){
     container.innerHTML = `<div class="loading">No hay unidades para este filtro.</div>`;
@@ -789,8 +851,8 @@ function renderDispatchBoard(){
     "READY": [],
     "URGENTES": [],
   };
-
-  allUnits.forEach(unit => {
+ 
+ getFilteredUnits().forEach(unit => {
     const column = getDispatchColumn(unit);
 
     if(!columns[column]){
