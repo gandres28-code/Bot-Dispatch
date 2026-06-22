@@ -2538,6 +2538,42 @@ app.get("/master-units", async (req, res) => {
     });
   }
 });
+app.post("/master-action", async (req, res) => {
+  try {
+    const { action, unit, name, note, role } = req.body;
+
+    if (!action || !unit || !name) {
+      return res.status(400).json({
+        ok: false,
+        message: "Faltan datos: acción, unidad o nombre",
+      });
+    }
+
+    const mode = role === "inspector" ? "inspector" : "cleaner";
+
+    const result = await updateNotionRoom(
+      unit,
+      action,
+      name,
+      note || "Acción realizada desde App Maestra",
+      mode,
+      ""
+    );
+
+    res.json({
+      ok: true,
+      message: `Acción completada: ${result.label} - ${unit}`,
+    });
+
+  } catch (error) {
+    console.error("Error en /master-action:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
