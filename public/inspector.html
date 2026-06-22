@@ -549,7 +549,26 @@ async function sendInspectionAction(action){
     setButtonsDisabled(false);
   }
 }
-</script>
+  const socket = io();
 
+socket.on("ops-update", () => {
+  if(typeof loadMaster === "function"){
+    loadMaster();
+  }
+
+  if(typeof loadCleanerAssignments === "function" && typeof currentCleanerName !== "undefined" && currentCleanerName){
+    loadCleanerAssignments();
+  }
+
+  if(typeof loadInspectorAssignments === "function" && typeof currentInspectorCode !== "undefined" && currentInspectorCode){
+    loadInspectorAssignments();
+  }
+
+  if(typeof loadEvents === "function"){
+    loadEvents();
+  }
+});
+</script>
+<script src="/socket.io/socket.io.js"></script>
 </body>
 </html>
