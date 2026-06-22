@@ -77,9 +77,9 @@ res.sendFile(__dirname + "/public/index.html");
 // ■ Página inspectores
 app.get("/inspector", (req, res) => {
 res.sendFile(__dirname + "/public/inspector.html");
-  app.get("/master", (req, res) => {
-  res.sendFile(__dirname + "/public/master.html");
 });
+app.get("/master", (req, res) => {
+  res.sendFile(__dirname + "/public/master.html");
 });
 // ■ Diagnóstico seguro
 app.get("/debug-env", (req, res) => {
