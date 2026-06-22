@@ -231,7 +231,7 @@ Foto opcional para problemas / Lost & Found
 <p id="status"></p>
 
 </div>
-
+  
 <script>
 let isSending = false;
 let lastSendKey = "";
@@ -345,6 +345,7 @@ function getCardClass(status, priority){
 async function loadInspectorAssignments(){
   const code = document.getElementById("code").value.trim();
   currentInspectorCode = code;
+localStorage.setItem("inspectorCode", code);
 
   if(!code){
     alert("Escribe tu código");
@@ -568,6 +569,16 @@ socket.on("ops-update", () => {
     loadEvents();
   }
 });
+  window.addEventListener("load", () => {
+  const savedCode = localStorage.getItem("inspectorCode");
+
+  if(savedCode){
+    document.getElementById("code").value = savedCode;
+    currentInspectorCode = savedCode;
+    loadInspectorAssignments();
+  }
+});
+  
 </script>
 <script src="/socket.io/socket.io.js"></script>
 </body>
