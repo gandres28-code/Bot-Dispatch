@@ -176,6 +176,35 @@ h1{
     grid-template-columns:1fr 1fr;
   }
 }
+  .create-box{
+  background:white;
+  padding:15px;
+  border-radius:14px;
+  box-shadow:0 2px 10px rgba(0,0,0,.08);
+  margin-bottom:20px;
+}
+
+.create-box input,
+.create-box select{
+  width:100%;
+  padding:12px;
+  margin:7px 0;
+  font-size:16px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  box-sizing:border-box;
+}
+
+.create-box button{
+  width:100%;
+  padding:13px;
+  border:none;
+  border-radius:10px;
+  background:#111827;
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
 </style>
 </head>
 
@@ -204,6 +233,25 @@ h1{
     <div class="stat-number" id="readyUnits">0</div>
     <div>Ready</div>
   </div>
+</div>
+  <div class="create-box">
+  <h3>➕ Crear asignación</h3>
+
+  <input id="newUnit" placeholder="Unidad Ej: 331A">
+  <input id="newCleaner" placeholder="Limpiador">
+  <input id="newInspector" placeholder="Inspector">
+
+  <label>
+    <input type="checkbox" id="newArrival">
+    Arrival
+  </label>
+
+  <select id="newPriority">
+    <option value="Normal">Normal</option>
+    <option value="Urgent">Urgent</option>
+  </select>
+
+  <button onclick="createAssignment()">Crear asignación</button>
 </div>
 
 <div class="filters">
@@ -552,6 +600,48 @@ async function changeInspector(encodedUnit){
   }
 
   await updateUnitField(encodeURIComponent(unit), "inspector", value.trim());
+}
+  async function createAssignment(){
+  const unit = document.getElementById("newUnit").value.trim().toUpperCase();
+  const cleaner = document.getElementById("newCleaner").value.trim();
+  const inspector = document.getElementById("newInspector").value.trim();
+  const arrival = document.getElementById("newArrival").checked;
+  const priority = document.getElementById("newPriority").value;
+
+  if(!unit || !cleaner){
+    alert("Unidad y limpiador son obligatorios");
+    return;
+  }
+
+  const response = await fetch("/master-create-assignment",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      unit,
+      cleaner,
+      inspector,
+      arrival,
+      priority
+    })
+  });
+
+  const data = await response.json();
+
+  if(data.ok){
+    alert(data.message || "Asignación creada");
+
+    document.getElementById("newUnit").value = "";
+    document.getElementById("newCleaner").value = "";
+    document.getElementById("newInspector").value = "";
+    document.getElementById("newArrival").checked = false;
+    document.getElementById("newPriority").value = "Normal";
+
+    await loadMaster();
+  }else{
+    alert(data.message || "Error creando asignación");
+  }
 }
 loadMaster();
 setInterval(loadMaster,10000);
