@@ -410,6 +410,21 @@ function renderUnits(){
           <button class="btn-issue" onclick="reportIssue('${encodedUnit}','${encodedCleaner}')">
             ⚠️ Report Problem
           </button>
+          <button class="btn-issue" onclick="updateUnitField('${encodedUnit}','priority','Urgent')">
+          🚨 Marcar Urgent
+          </button>
+          
+          <button class="btn-ready" onclick="updateUnitField('${encodedUnit}','priority','Normal')">
+          ✅ Quitar Urgent
+          </button>
+          
+          <button class="btn-start" onclick="changeCleaner('${encodedUnit}')">
+          👤 Cambiar Cleaner
+          </button>
+          
+          <button class="btn-inspection" onclick="changeInspector('${encodedUnit}')">
+          🔍 Cambiar Inspector
+          </button>
         </div>
       </div>
     `;
@@ -492,7 +507,52 @@ async function reportIssue(encodedUnit, encodedName){
     alert(data.message || "Error");
   }
 }
+async function updateUnitField(encodedUnit, field, value){
+  const unit = decodeURIComponent(encodedUnit || "");
 
+  const response = await fetch("/master-update-unit",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      unit,
+      field,
+      value
+    })
+  });
+
+  const data = await response.json();
+
+  if(data.ok){
+    alert(data.message || "Unidad actualizada");
+    await loadMaster();
+  }else{
+    alert(data.message || "Error");
+  }
+}
+
+async function changeCleaner(encodedUnit){
+  const unit = decodeURIComponent(encodedUnit || "");
+  const value = prompt("Nuevo nombre del cleaner:");
+
+  if(!value){
+    return;
+  }
+
+  await updateUnitField(encodeURIComponent(unit), "cleaner", value.trim());
+}
+
+async function changeInspector(encodedUnit){
+  const unit = decodeURIComponent(encodedUnit || "");
+  const value = prompt("Nuevo nombre del inspector:");
+
+  if(!value){
+    return;
+  }
+
+  await updateUnitField(encodeURIComponent(unit), "inspector", value.trim());
+}
 loadMaster();
 setInterval(loadMaster,10000);
 </script>
