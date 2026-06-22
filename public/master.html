@@ -806,7 +806,12 @@ function renderDispatchBoard(){
       const unitClass = getUnitClass(unit);
 
       cardsHtml += `
-        <div class="dispatch-card ${unitClass}" onclick="openDetail('${encodedUnit}')">
+      <div
+    class="dispatch-card ${unitClass}"
+    draggable="true"
+    ondragstart="dragUnit(event, '${encodedUnit}', '${encodeValue(unit.cleaner)}', '${encodeValue(unit.inspector)}')"
+    onclick="openDetail('${encodedUnit}')"
+  >
           <b>${escapeHtml(unit.unit)}</b>
           <div class="small">Cleaner: ${escapeHtml(unit.cleaner || "-")}</div>
           <div class="small">Inspector: ${escapeHtml(unit.inspector || "-")}</div>
@@ -817,14 +822,106 @@ function renderDispatchBoard(){
       `;
     });
 
-    board.innerHTML += `
-      <div class="dispatch-column">
-        <h3>${columnName} (${units.length})</h3>
-        ${cardsHtml || `<p class="small" style="text-align:center;">Vacío</p>`}
-      </div>
-    `;
+   board.innerHTML += `
+  <div
+    class="dispatch-column"
+    ondragover="allowDrop(event)"
+    ondrop="dropUnit(event, '${columnName}')"
+  >
+    <h3>${columnName} (${units.length})</h3>
+    ${cardsHtml || `<p class="small" style="text-align:center;">Vacío</p>`}
+  </div>
+`;
   });
 }  
+ let draggedUnitData = null;
+
+function dragUnit(event, encodedUnit, encodedCleaner, encodedInspector){
+  draggedUnitData = {
+    unit: decodeURIComponent(encodedUnit || ""),
+    cleaner: decodeURIComponent(encodedCleaner || ""),
+    inspector: decodeURIComponent(encodedInspector || "")
+  };
+
+  event.dataTransfer.effectAllowed = "move";
+}
+
+function allowDrop(event){
+  event.preventDefault();
+}
+
+async function dropUnit(event, columnName){
+  event.preventDefault();
+
+  if(!draggedUnitData || !draggedUnitData.unit){
+    return;
+  }
+
+  let action = "";
+  let role = "";
+  let name = "";
+
+  if(columnName === "EN LIMPIEZA"){
+    action = "START";
+    role = "cleaner";
+    name = draggedUnitData.cleaner;
+  }
+
+  if(columnName === "LISTA PARA INSPECCIÓN"){
+    action = "DONE";
+    role = "cleaner";
+    name = draggedUnitData.cleaner;
+  }
+
+  if(columnName === "INSPECCIÓN INICIADA"){
+    action = "INSPECTION_START";
+    role = "inspector";
+    name = draggedUnitData.inspector;
+  }
+
+  if(columnName === "READY"){
+    action = "READY_GUEST";
+    role = "inspector";
+    name = draggedUnitData.inspector;
+  }
+
+  if(columnName === "URGENTES"){
+    await updateUnitField(
+      encodeURIComponent(draggedUnitData.unit),
+      "priority",
+      "Urgent"
+    );
+
+    draggedUnitData = null;
+    return;
+  }
+
+  if(columnName === "SIN INICIAR"){
+    alert("No se puede regresar automáticamente a Sin Iniciar todavía.");
+    draggedUnitData = null;
+    return;
+  }
+
+  if(!action){
+    draggedUnitData = null;
+    return;
+  }
+
+  if(!name){
+    alert("No hay persona asignada para esta acción.");
+    draggedUnitData = null;
+    return;
+  }
+
+  await masterAction(
+    action,
+    encodeURIComponent(draggedUnitData.unit),
+    encodeURIComponent(name),
+    role
+  );
+
+  draggedUnitData = null;
+}
 loadMaster();
 setInterval(loadMaster,10000);
 </script>
