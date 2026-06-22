@@ -225,9 +225,12 @@ Foto opcional
 </div>
 
 <script>
+let currentCleanerName = "";
+let cleanerRefreshTimer = null;
 let isSending = false;
 let lastSendKey = "";
 let lastSendTime = 0;
+  
 
 function setButtonsDisabled(disabled){
   document.querySelectorAll(".action-btn").forEach(button => {
@@ -300,6 +303,7 @@ function getCleanerCardClass(status, arrival){
 
 async function loadCleanerAssignments(){
   const name = document.getElementById("name").value.trim();
+  currentCleanerName = name;
 
   if(!name){
     alert("Escribe tu nombre");
@@ -316,6 +320,7 @@ async function loadCleanerAssignments(){
       document.getElementById("assignments").innerHTML = "";
       alert(data.message || "No se pudieron cargar tus unidades");
       return;
+      startCleanerAutoRefresh();
     }
 
     document.getElementById("cleanerName").innerText = `Limpiador: ${data.cleaner}`;
@@ -353,6 +358,21 @@ async function loadCleanerAssignments(){
     document.getElementById("assignments").innerHTML = "";
     alert("Error cargando unidades");
   }
+}
+  function startCleanerAutoRefresh(){
+
+  if(cleanerRefreshTimer){
+    return;
+  }
+
+  cleanerRefreshTimer = setInterval(() => {
+
+    if(currentCleanerName){
+      loadCleanerAssignments();
+    }
+
+  }, 10000);
+
 }
 
 function selectCleanerAssignment(unit){
