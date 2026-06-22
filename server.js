@@ -2574,6 +2574,90 @@ app.post("/master-action", async (req, res) => {
     });
   }
 });
+app.post("/master-update-unit", async (req, res) => {
+  try {
+    const { unit, field, value } = req.body;
+
+    if (!unit || !field) {
+      return res.status(400).json({
+        ok: false,
+        message: "Faltan datos: unidad o campo",
+      });
+    }
+
+    const pages = await queryTodayRooms();
+    const normalizedTarget = normalizeRoom(unit);
+    const targetDigits = roomDigits(unit);
+
+    let matches = pages.filter((page) => {
+      const title =
+        page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+      return normalizeRoom(title) === normalizedTarget;
+    });
+
+    if (matches.length === 0) {
+      matches = pages.filter((page) => {
+        const title =
+          page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+        return roomDigits(title) === targetDigits;
+      });
+    }
+
+    if (matches.length === 0) {
+      throw new Error(`No encontré la unidad ${unit} para hoy`);
+    }
+
+    const props = {};
+
+    if (field === "priority") {
+      props.Priority = {
+        select: {
+          name: value || "Normal",
+        },
+      };
+    }
+
+    if (field === "cleaner") {
+      props["Assigned Cleaner"] = {
+        select: {
+          name: value,
+        },
+      };
+    }
+
+    if (field === "inspector") {
+      props["Assigned Inspector"] = {
+        select: {
+          name: value,
+        },
+      };
+    }
+
+    if (Object.keys(props).length === 0) {
+      throw new Error("Campo no permitido");
+    }
+
+    for (const page of matches) {
+      await notion.pages.update({
+        page_id: page.id,
+        properties: props,
+      });
+    }
+
+    res.json({
+      ok: true,
+      message: `Unidad ${unit} actualizada correctamente`,
+    });
+
+  } catch (error) {
+    console.error("Error en /master-update-unit:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
