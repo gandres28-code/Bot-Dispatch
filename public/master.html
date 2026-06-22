@@ -128,53 +128,35 @@ async function loadMaster(){
   const container =
     document.getElementById("units");
 
-  container.innerHTML = "";
+container.innerHTML += `
+  <div class="unit ${className}">
+    <h3>${unit.unit}</h3>
 
-  data.units.forEach(unit => {
+    <div class="small">Cleaner: ${unit.cleaner || "-"}</div>
+    <div class="small">Inspector: ${unit.inspector || "-"}</div>
+    <div class="small">Status: ${unit.status || "No Status"}</div>
 
-    let className = "";
+    <button onclick="masterAction('START','${unit.unit}','${unit.cleaner}','cleaner')">
+      🟢 Start Cleaning
+    </button>
 
-    if(unit.arrival){
-      arrivals++;
-      className = "arrival";
-    }
+    <button onclick="masterAction('DONE','${unit.unit}','${unit.cleaner}','cleaner')">
+      🔴 Finish Cleaning
+    </button>
 
-    if(unit.status === "Cleaned - Awaiting Inspection"){
-      inspection++;
-      className = "inspection";
-    }
+    <button onclick="masterAction('INSPECTION_START','${unit.unit}','${unit.inspector}','inspector')">
+      🔍 Start Inspection
+    </button>
 
-    if(unit.status === "In Progress"){
-      className = "cleaning";
-    }
+    <button onclick="masterAction('READY_GUEST','${unit.unit}','${unit.inspector}','inspector')">
+      ✅ Ready for Guest
+    </button>
 
-    if(unit.status === "Ready for Guest"){
-      ready++;
-      className = "ready";
-    }
-
-    if(unit.priority === "Urgent"){
-      className = "urgent";
-    }
-
-    container.innerHTML += `
-      <div class="unit ${className}">
-        <h3>${unit.unit}</h3>
-
-        <div class="small">
-          Cleaner: ${unit.cleaner || "-"}
-        </div>
-
-        <div class="small">
-          Inspector: ${unit.inspector || "-"}
-        </div>
-
-        <div>
-          ${unit.status || "No Status"}
-        </div>
-
-      </div>
-    `;
+    <button onclick="reportIssue('${unit.unit}','${unit.cleaner}')">
+      ⚠️ Report Problem
+    </button>
+  </div>
+`;
   });
 
   document.getElementById("arrivalUnits").innerText =
@@ -186,7 +168,45 @@ async function loadMaster(){
   document.getElementById("readyUnits").innerText =
     ready;
 }
+async function masterAction(action, unit, name, role){
+  if(!name || name === "-"){
+    alert("No hay persona asignada para esta acción");
+    return;
+  }
 
+  const response = await fetch("/master-action",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      action,
+      unit,
+      name,
+      role,
+      note:"Acción realizada desde App Maestra"
+    })
+  });
+
+  const data = await response.json();
+
+  if(data.ok){
+    alert(data.message || "Acción completada");
+    loadMaster();
+  }else{
+    alert(data.message || "Error");
+  }
+}
+
+async function reportIssue(unit, name){
+  const note = prompt("Describe el problema:");
+
+  if(!note){
+    return;
+  }
+
+  await masterAction("ISSUE", unit, name, "cleaner");
+}
 loadMaster();
 
 setInterval(loadMaster,10000);
