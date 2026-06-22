@@ -2747,6 +2747,92 @@ app.post("/master-create-assignment", async (req, res) => {
     });
   }
 });
+app.get("/master-unit-detail", async (req, res) => {
+  try {
+    const unit = String(req.query.unit || "").trim();
+
+    if (!unit) {
+      return res.status(400).json({
+        ok: false,
+        message: "Unidad requerida",
+      });
+    }
+
+    const pages = await queryTodayRooms();
+    const normalizedTarget = normalizeRoom(unit);
+    const targetDigits = roomDigits(unit);
+
+    let roomPage = pages.find((page) => {
+      const title =
+        page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+      return normalizeRoom(title) === normalizedTarget;
+    });
+
+    if (!roomPage) {
+      roomPage = pages.find((page) => {
+        const title =
+          page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+        return roomDigits(title) === targetDigits;
+      });
+    }
+
+    if (!roomPage) {
+      throw new Error(`No encontré la unidad ${unit} para hoy`);
+    }
+
+    const props = roomPage.properties;
+
+    const logs = await getDailyLogsForReport(todayISO());
+
+    const unitLogs = logs
+      .map((log) => {
+        const p = log.properties;
+
+        return {
+          id: log.id,
+          time: p.Time?.date?.start || "",
+          unit: p.Unit?.rich_text?.map((t) => t.plain_text).join("") || "",
+          action: p.Action?.select?.name || "",
+          cleaner: p.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "",
+          inspector: p.Inspector?.rich_text?.map((t) => t.plain_text).join("") || "",
+          note: p.Note?.rich_text?.map((t) => t.plain_text).join("") || "",
+          photoUrl: p["Photo URL"]?.url || "",
+          lostAndFound: !!p["Lost and Found"]?.checkbox,
+        };
+      })
+      .filter((log) => {
+        return normalizeRoom(log.unit) === normalizedTarget ||
+               roomDigits(log.unit) === targetDigits;
+      });
+
+    res.json({
+      ok: true,
+      unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || unit,
+      cleaner:
+        props["Assigned Cleaner"]?.select?.name ||
+        props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+        "",
+      inspector:
+        props["Assigned Inspector"]?.select?.name ||
+        props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
+        "",
+      status: props["Cleaning Status"]?.status?.name || "",
+      arrival: !!props.Arrival?.checkbox,
+      priority: props.Priority?.select?.name || "Normal",
+      startedAt: props["Started At"]?.date?.start || "",
+      finishedAt: props["Finished At"]?.date?.start || "",
+      logs: unitLogs,
+    });
+
+  } catch (error) {
+    console.error("Error en /master-unit-detail:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
