@@ -2658,6 +2658,95 @@ app.post("/master-update-unit", async (req, res) => {
     });
   }
 });
+app.post("/master-create-assignment", async (req, res) => {
+  try {
+    const {
+      unit,
+      cleaner,
+      inspector,
+      arrival,
+      priority,
+      date,
+    } = req.body;
+
+    if (!unit || !cleaner) {
+      return res.status(400).json({
+        ok: false,
+        message: "Falta unidad o limpiador",
+      });
+    }
+
+    const assignmentDate = date || todayISO();
+
+    const props = {
+      "Room Number": {
+        title: [
+          {
+            text: {
+              content: unit,
+            },
+          },
+        ],
+      },
+
+      Date: {
+        date: {
+          start: assignmentDate,
+        },
+      },
+
+      "Assigned Cleaner": {
+        select: {
+          name: cleaner,
+        },
+      },
+
+      Arrival: {
+        checkbox: !!arrival,
+      },
+
+      Priority: {
+        select: {
+          name: priority || "Normal",
+        },
+      },
+
+      "Cleaning Status": {
+        status: {
+          name: "Not Started",
+        },
+      },
+    };
+
+    if (inspector) {
+      props["Assigned Inspector"] = {
+        select: {
+          name: inspector,
+        },
+      };
+    }
+
+    await notion.pages.create({
+      parent: {
+        database_id: NOTION_DATABASE_ID,
+      },
+      properties: props,
+    });
+
+    res.json({
+      ok: true,
+      message: `Asignación creada: ${unit}`,
+    });
+
+  } catch (error) {
+    console.error("Error en /master-create-assignment:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
