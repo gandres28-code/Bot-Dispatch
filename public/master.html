@@ -1,1 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
+<title>Master Operations</title>
+
+<style>
+
+body{
+  font-family:Arial,sans-serif;
+  background:#f4f4f4;
+  margin:0;
+  padding:20px;
+}
+
+h1{
+  text-align:center;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+  margin-bottom:20px;
+}
+
+.stat{
+  background:white;
+  padding:15px;
+  border-radius:12px;
+  text-align:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
+}
+
+.units{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:12px;
+}
+
+.unit{
+  background:white;
+  padding:15px;
+  border-radius:14px;
+  box-shadow:0 2px 10px rgba(0,0,0,.08);
+}
+
+.arrival{
+  border-left:8px solid #dc2626;
+}
+
+.urgent{
+  animation:blink 1s infinite;
+  border-left:8px solid #dc2626;
+}
+
+.cleaning{
+  border-left:8px solid #7c3aed;
+}
+
+.inspection{
+  border-left:8px solid #f59e0b;
+}
+
+.ready{
+  border-left:8px solid #16a34a;
+}
+
+@keyframes blink{
+  0%{opacity:1}
+  50%{opacity:.5}
+  100%{opacity:1}
+}
+
+.small{
+  font-size:13px;
+  color:#666;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>🏨 Master Operations</h1>
+
+<div class="stats">
+
+<div class="stat">
+<div id="totalUnits">0</div>
+<div>Total Units</div>
+</div>
+
+<div class="stat">
+<div id="arrivalUnits">0</div>
+<div>Arrivals</div>
+</div>
+
+<div class="stat">
+<div id="inspectionUnits">0</div>
+<div>Inspection</div>
+</div>
+
+<div class="stat">
+<div id="readyUnits">0</div>
+<div>Ready</div>
+</div>
+
+</div>
+
+<div id="units" class="units"></div>
+
+<script>
+
+async function loadMaster(){
+
+  const response = await fetch("/master-units");
+  const data = await response.json();
+
+  let arrivals = 0;
+  let inspection = 0;
+  let ready = 0;
+
+  document.getElementById("totalUnits").innerText =
+    data.count || 0;
+
+  const container =
+    document.getElementById("units");
+
+  container.innerHTML = "";
+
+  data.units.forEach(unit => {
+
+    let className = "";
+
+    if(unit.arrival){
+      arrivals++;
+      className = "arrival";
+    }
+
+    if(unit.status === "Cleaned - Awaiting Inspection"){
+      inspection++;
+      className = "inspection";
+    }
+
+    if(unit.status === "In Progress"){
+      className = "cleaning";
+    }
+
+    if(unit.status === "Ready for Guest"){
+      ready++;
+      className = "ready";
+    }
+
+    if(unit.priority === "Urgent"){
+      className = "urgent";
+    }
+
+    container.innerHTML += `
+      <div class="unit ${className}">
+        <h3>${unit.unit}</h3>
+
+        <div class="small">
+          Cleaner: ${unit.cleaner || "-"}
+        </div>
+
+        <div class="small">
+          Inspector: ${unit.inspector || "-"}
+        </div>
+
+        <div>
+          ${unit.status || "No Status"}
+        </div>
+
+      </div>
+    `;
+  });
+
+  document.getElementById("arrivalUnits").innerText =
+    arrivals;
+
+  document.getElementById("inspectionUnits").innerText =
+    inspection;
+
+  document.getElementById("readyUnits").innerText =
+    ready;
+}
+
+loadMaster();
+
+setInterval(loadMaster,10000);
+
+</script>
+
+</body>
+</html>
