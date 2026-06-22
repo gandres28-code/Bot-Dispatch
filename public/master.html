@@ -3,63 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Master Operations</title>
-
-.dispatch-board{
-  display:grid;
-  grid-template-columns:repeat(5, minmax(220px, 1fr));
-  gap:12px;
-  overflow-x:auto;
-}
-
-.dispatch-column{
-  background:#e5e7eb;
-  border-radius:14px;
-  padding:10px;
-  min-height:300px;
-}
-
-.dispatch-column h3{
-  text-align:center;
-  font-size:15px;
-  margin:8px 0 12px;
-}
-
-.dispatch-card{
-  background:white;
-  border-radius:12px;
-  padding:12px;
-  margin-bottom:10px;
-  box-shadow:0 2px 8px rgba(0,0,0,.12);
-  cursor:pointer;
-  border-left:6px solid #9ca3af;
-}
-
-.dispatch-card.arrival{
-  border-left-color:#dc2626;
-}
-
-.dispatch-card.urgent{
-  animation:blink 1s infinite;
-  border-left-color:#dc2626;
-}
-
-.dispatch-card.cleaning{
-  border-left-color:#7c3aed;
-}
-
-.dispatch-card.inspection{
-  border-left-color:#f59e0b;
-}
-
-.dispatch-card.ready{
-  border-left-color:#16a34a;
-}
-
-@media(max-width:900px){
-  .dispatch-board{
-    grid-template-columns:repeat(5, 220px);
-  }
-}
+ 
 <style>
 body{
   font-family:Arial,sans-serif;
@@ -299,6 +243,62 @@ h1{
   max-width:320px;
   border-radius:12px;
   margin:8px 0;
+}
+   .dispatch-board{
+  display:grid;
+  grid-template-columns:repeat(5, minmax(220px, 1fr));
+  gap:12px;
+  overflow-x:auto;
+}
+
+.dispatch-column{
+  background:#e5e7eb;
+  border-radius:14px;
+  padding:10px;
+  min-height:300px;
+}
+
+.dispatch-column h3{
+  text-align:center;
+  font-size:15px;
+  margin:8px 0 12px;
+}
+
+.dispatch-card{
+  background:white;
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+  cursor:pointer;
+  border-left:6px solid #9ca3af;
+}
+
+.dispatch-card.arrival{
+  border-left-color:#dc2626;
+}
+
+.dispatch-card.urgent{
+  animation:blink 1s infinite;
+  border-left-color:#dc2626;
+}
+
+.dispatch-card.cleaning{
+  border-left-color:#7c3aed;
+}
+
+.dispatch-card.inspection{
+  border-left-color:#f59e0b;
+}
+
+.dispatch-card.ready{
+  border-left-color:#16a34a;
+}
+
+@media(max-width:900px){
+  .dispatch-board{
+    grid-template-columns:repeat(5, 220px);
+  }
 }
 </style>
 </head>
