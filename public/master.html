@@ -563,18 +563,18 @@ function renderUnits(){
   });
 }
 
-async function masterAction(action, encodedUnit, encodedName, role){
+async function masterAction(action, encodedUnit, encodedName, role, silent = false){
   const unit = decodeURIComponent(encodedUnit || "");
   const name = decodeURIComponent(encodedName || "");
 
   if(!unit){
-    alert("No hay unidad seleccionada");
-    return;
+    if(!silent) alert("No hay unidad seleccionada");
+    return false;
   }
 
   if(!name || name === "-"){
-    alert("No hay persona asignada para esta acción");
-    return;
+    if(!silent) alert("No hay persona asignada para esta acción");
+    return false;
   }
 
   const response = await fetch("/master-action",{
@@ -594,10 +594,14 @@ async function masterAction(action, encodedUnit, encodedName, role){
   const data = await response.json();
 
   if(data.ok){
-    alert(data.message || "Acción completada");
-    await loadMaster();
+    if(!silent){
+      alert(data.message || "Acción completada");
+      await loadMaster();
+    }
+    return true;
   }else{
-    alert(data.message || "Error");
+    if(!silent) alert(data.message || "Error");
+    return false;
   }
 }
 
@@ -834,6 +838,33 @@ function renderDispatchBoard(){
 `;
   });
 }  
+ function updateLocalUnitStatus(unitName, columnName){
+  const item = allUnits.find((unit) => unit.unit === unitName);
+
+  if(!item){
+    return;
+  }
+
+  if(columnName === "EN LIMPIEZA"){
+    item.status = "In Progress";
+  }
+
+  if(columnName === "LISTA PARA INSPECCIÓN"){
+    item.status = "Cleaned - Awaiting Inspection";
+  }
+
+  if(columnName === "INSPECCIÓN INICIADA"){
+    item.status = "Inspection Started";
+  }
+
+  if(columnName === "READY"){
+    item.status = "Ready for Guest";
+  }
+
+  if(columnName === "URGENTES"){
+    item.priority = "Urgent";
+  }
+}
  let draggedUnitData = null;
 
 function dragUnit(event, encodedUnit, encodedCleaner, encodedInspector){
@@ -886,15 +917,21 @@ async function dropUnit(event, columnName){
   }
 
   if(columnName === "URGENTES"){
-    await updateUnitField(
-      encodeURIComponent(draggedUnitData.unit),
-      "priority",
-      "Urgent"
-    );
+  const movedUnit = draggedUnitData.unit;
 
-    draggedUnitData = null;
-    return;
-  }
+  updateLocalUnitStatus(movedUnit, columnName);
+  renderDispatchBoard();
+  updateStats();
+
+  await updateUnitField(
+    encodeURIComponent(movedUnit),
+    "priority",
+    "Urgent"
+  );
+
+  draggedUnitData = null;
+  return;
+}
 
   if(columnName === "SIN INICIAR"){
     alert("No se puede regresar automáticamente a Sin Iniciar todavía.");
@@ -913,14 +950,26 @@ async function dropUnit(event, columnName){
     return;
   }
 
-  await masterAction(
-    action,
-    encodeURIComponent(draggedUnitData.unit),
-    encodeURIComponent(name),
-    role
-  );
+ const movedUnit = draggedUnitData.unit;
 
-  draggedUnitData = null;
+updateLocalUnitStatus(movedUnit, columnName);
+renderDispatchBoard();
+updateStats();
+
+const ok = await masterAction(
+  action,
+  encodeURIComponent(movedUnit),
+  encodeURIComponent(name),
+  role,
+  true
+);
+
+if(!ok){
+  await loadMaster();
+  alert("No se pudo actualizar en Notion. Se regresó al estado anterior.");
+}
+
+draggedUnitData = null;
 }
 loadMaster();
 setInterval(loadMaster,10000);
