@@ -451,9 +451,22 @@ function getStatusBadge(unit){
 
 function setFilter(filter){
   currentFilter = filter;
- renderCurrentView();
+  renderCurrentView();
 }
  function cleanSearch(value){
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function setFilter(filter){
+  currentFilter = filter;
+  renderCurrentView();
+}
+
+function cleanSearch(value){
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
@@ -480,19 +493,14 @@ function getFilteredUnits(){
 }
 
 function renderCurrentView(){
-  const dispatchVisible =
-    document.getElementById("dispatchBoard").style.display !== "none";
+  const dispatchBoard = document.getElementById("dispatchBoard");
+  const dispatchVisible = dispatchBoard && dispatchBoard.style.display !== "none";
 
   if(dispatchVisible){
     renderDispatchBoard();
   }else{
     renderUnits();
   }
-}
-  renderUnits();
-  if(document.getElementById("dispatchBoard").style.display !== "none"){
-  renderDispatchBoard();
-}
 }
 
 function unitMatchesFilter(unit){
