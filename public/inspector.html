@@ -319,6 +319,8 @@ async function uploadInspectionPhotoIfNeeded(unit, name, action, note){
   return data.photoUrl;
 }
 let selectedUnit = "";
+let currentInspectorCode = "";
+let autoRefreshTimer = null;
 
 function getCardClass(status, priority){
   if(String(priority || "").toLowerCase() === "urgent"){
@@ -342,6 +344,7 @@ function getCardClass(status, priority){
 
 async function loadInspectorAssignments(){
   const code = document.getElementById("code").value.trim();
+  currentInspectorCode = code;
 
   if(!code){
     alert("Escribe tu código");
@@ -358,6 +361,8 @@ async function loadInspectorAssignments(){
       document.getElementById("assignments").innerHTML = "";
       alert(data.message || "No se pudieron cargar las inspecciones");
       return;
+      
+      startInspectorAutoRefresh();
     }
 
     document.getElementById("name").value = data.inspector;
@@ -418,6 +423,17 @@ function selectAssignment(unit){
 document.getElementById("inspectionPanel").style.display = "block";
 
 showBigStatus(`Unidad seleccionada: ${unit}`, "success");
+}
+  function startInspectorAutoRefresh(){
+  if(autoRefreshTimer){
+    return;
+  }
+
+  autoRefreshTimer = setInterval(() => {
+    if(currentInspectorCode){
+      loadInspectorAssignments();
+    }
+  }, 10000);
 }
 async function sendInspectionAction(action){
 
