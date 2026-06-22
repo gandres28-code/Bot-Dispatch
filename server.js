@@ -19,6 +19,33 @@ cloudinary.config({
 });
 // ■ Anti duplicados
 const recentActions = new Map();
+const cacheStore = new Map();
+
+function getCache(key){
+  const item = cacheStore.get(key);
+
+  if(!item){
+    return null;
+  }
+
+  if(Date.now() > item.expiresAt){
+    cacheStore.delete(key);
+    return null;
+  }
+
+  return item.data;
+}
+
+function setCache(key, data, ttlMs = 5000){
+  cacheStore.set(key, {
+    data,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+function clearOpsCache(){
+  cacheStore.clear();
+}
 app.use(express.json());
 app.use(express.static("public"));
 // ■ Carpeta para PDFs
@@ -1732,7 +1759,7 @@ app.post("/action", async (req, res) => {
     if (action === "DONE") {
       await notifyInspectors(unit);
     }
-
+    clearOpsCache();
     res.json({
       success: true,
       message: `Enviado correctamente: ${result.label} - ${unit}`,
@@ -1776,7 +1803,7 @@ app.post("/inspector-action", async (req, res) => {
     }
 
     const result = await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
-
+    clearOpsCache();
     res.json({
       success: true,
       message: `Inspector: ${result.label} - ${unit}`,
@@ -2088,6 +2115,12 @@ app.get("/time-clock", (req, res) => {
 app.get("/inspector-assignments", async (req, res) => {
   try {
     const code = String(req.query.code || "").trim();
+    const cacheKey = `inspector-assignments:${code}`;
+const cached = getCache(cacheKey);
+
+if(cached){
+  return res.json(cached);
+}
 
     if (!code) {
       return res.status(400).json({
@@ -2133,13 +2166,17 @@ app.get("/inspector-assignments", async (req, res) => {
       })
       .filter((item) => item.assignedInspector === inspectorName);
 
-    res.json({
-      ok: true,
-      inspector: inspectorName,
-      role,
-      count: units.length,
-      units,
-    });
+    const payload = {
+  ok: true,
+  inspector: inspectorName,
+  role,
+  count: units.length,
+  units,
+};
+
+setCache(cacheKey, payload, 5000);
+
+res.json(payload);
 
   } catch (error) {
     console.error("Error en /inspector-assignments:", error.message);
@@ -2153,6 +2190,12 @@ app.get("/inspector-assignments", async (req, res) => {
 app.get("/cleaner-assignments", async (req, res) => {
   try {
     const name = String(req.query.name || "").trim();
+    const cacheKey = `cleaner-assignments:${name.toLowerCase()}`;
+const cached = getCache(cacheKey);
+
+if(cached){
+  return res.json(cached);
+}
 
     if (!name) {
       return res.status(400).json({
@@ -2199,13 +2242,16 @@ app.get("/cleaner-assignments", async (req, res) => {
 
         return assignedCleaner.includes(typedName);
       });
-
-    res.json({
+    const payload = {
       ok: true,
       cleaner: name,
       count: units.length,
       units,
-    });
+    };
+    
+    setCache(cacheKey, payload, 5000);
+    
+    res.json(payload);
 
   } catch (error) {
     console.error("Error en /cleaner-assignments:", error.message);
@@ -2453,6 +2499,12 @@ app.post("/upload-photo", upload.single("photo"), async (req, res) => {
 app.get("/master-units", async (req, res) => {
   try {
     const pages = await queryTodayRooms();
+    const cacheKey = "master-units";
+const cached = getCache(cacheKey);
+
+if(cached){
+  return res.json(cached);
+}
 
     const units = pages.map((page) => {
       const props = page.properties;
@@ -2477,12 +2529,16 @@ app.get("/master-units", async (req, res) => {
       };
     });
 
-    res.json({
-      ok: true,
-      date: todayISO(),
-      count: units.length,
-      units,
-    });
+   const payload = {
+  ok: true,
+  date: todayISO(),
+  count: units.length,
+  units,
+};
+
+setCache(cacheKey, payload, 5000);
+
+res.json(payload);
 
   } catch (error) {
     console.error("Error en /master-units:", error.message);
@@ -2559,7 +2615,7 @@ app.post("/master-action", async (req, res) => {
       mode,
       ""
     );
-
+    clearOpsCache();
     res.json({
       ok: true,
       message: `Acción completada: ${result.label} - ${unit}`,
@@ -2643,7 +2699,8 @@ app.post("/master-update-unit", async (req, res) => {
         properties: props,
       });
     }
-
+     como cambio eso
+comocambioesoclearOpsCache();
     res.json({
       ok: true,
       message: `Unidad ${unit} actualizada correctamente`,
