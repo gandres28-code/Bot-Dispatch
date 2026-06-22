@@ -4,6 +4,62 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Master Operations</title>
 
+.dispatch-board{
+  display:grid;
+  grid-template-columns:repeat(5, minmax(220px, 1fr));
+  gap:12px;
+  overflow-x:auto;
+}
+
+.dispatch-column{
+  background:#e5e7eb;
+  border-radius:14px;
+  padding:10px;
+  min-height:300px;
+}
+
+.dispatch-column h3{
+  text-align:center;
+  font-size:15px;
+  margin:8px 0 12px;
+}
+
+.dispatch-card{
+  background:white;
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+  cursor:pointer;
+  border-left:6px solid #9ca3af;
+}
+
+.dispatch-card.arrival{
+  border-left-color:#dc2626;
+}
+
+.dispatch-card.urgent{
+  animation:blink 1s infinite;
+  border-left-color:#dc2626;
+}
+
+.dispatch-card.cleaning{
+  border-left-color:#7c3aed;
+}
+
+.dispatch-card.inspection{
+  border-left-color:#f59e0b;
+}
+
+.dispatch-card.ready{
+  border-left-color:#16a34a;
+}
+
+@media(max-width:900px){
+  .dispatch-board{
+    grid-template-columns:repeat(5, 220px);
+  }
+}
 <style>
 body{
   font-family:Arial,sans-serif;
@@ -281,7 +337,12 @@ h1{
   <button class="filter-btn" onclick="setFilter('READY')">Ready</button>
   <button class="filter-btn" onclick="setFilter('URGENT')">Urgentes</button>
 </div>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+  <button class="filter-btn" onclick="showCardView()">📋 Vista Tarjetas</button>
+  <button class="filter-btn" onclick="showDispatchView()">🧭 Vista Dispatch</button>
+</div>
 
+<div id="dispatchBoard" class="dispatch-board" style="display:none;"></div>
 <div id="units" class="units">
   <div class="loading">Cargando unidades...</div>
 </div>
@@ -367,6 +428,9 @@ function getStatusBadge(unit){
 function setFilter(filter){
   currentFilter = filter;
   renderUnits();
+  if(document.getElementById("dispatchBoard").style.display !== "none"){
+  renderDispatchBoard();
+}
 }
 
 function unitMatchesFilter(unit){
@@ -675,6 +739,92 @@ async function openDetail(encodedUnit){
     ${logsHtml || "<p>No hay registros todavía.</p>"}
   `;
 }
+function showCardView(){
+  document.getElementById("units").style.display = "grid";
+  document.getElementById("dispatchBoard").style.display = "none";
+}
+
+function showDispatchView(){
+  document.getElementById("units").style.display = "none";
+  document.getElementById("dispatchBoard").style.display = "grid";
+  renderDispatchBoard();
+}
+
+function getDispatchColumn(unit){
+  if(unit.priority === "Urgent"){
+    return "URGENTES";
+  }
+
+  if(unit.status === "Ready for Guest"){
+    return "READY";
+  }
+
+  if(unit.status === "Inspection Started"){
+    return "INSPECCIÓN INICIADA";
+  }
+
+  if(unit.status === "Cleaned - Awaiting Inspection"){
+    return "LISTA PARA INSPECCIÓN";
+  }
+
+  if(unit.status === "In Progress"){
+    return "EN LIMPIEZA";
+  }
+
+  return "SIN INICIAR";
+}
+
+function renderDispatchBoard(){
+  const board = document.getElementById("dispatchBoard");
+
+  const columns = {
+    "SIN INICIAR": [],
+    "EN LIMPIEZA": [],
+    "LISTA PARA INSPECCIÓN": [],
+    "INSPECCIÓN INICIADA": [],
+    "READY": [],
+    "URGENTES": [],
+  };
+
+  allUnits.forEach(unit => {
+    const column = getDispatchColumn(unit);
+
+    if(!columns[column]){
+      columns[column] = [];
+    }
+
+    columns[column].push(unit);
+  });
+
+  board.innerHTML = "";
+
+  Object.entries(columns).forEach(([columnName, units]) => {
+    let cardsHtml = "";
+
+    units.forEach(unit => {
+      const encodedUnit = encodeValue(unit.unit);
+      const unitClass = getUnitClass(unit);
+
+      cardsHtml += `
+        <div class="dispatch-card ${unitClass}" onclick="openDetail('${encodedUnit}')">
+          <b>${escapeHtml(unit.unit)}</b>
+          <div class="small">Cleaner: ${escapeHtml(unit.cleaner || "-")}</div>
+          <div class="small">Inspector: ${escapeHtml(unit.inspector || "-")}</div>
+          <div class="small">${escapeHtml(unit.status || "No Status")}</div>
+          ${unit.arrival ? `<div class="badge badge-red">ARRIVAL</div>` : ""}
+          ${unit.priority === "Urgent" ? `<div class="badge badge-red">URGENT</div>` : ""}
+        </div>
+      `;
+    });
+
+    board.innerHTML += `
+      <div class="dispatch-column">
+        <h3>${columnName} (${units.length})</h3>
+        ${cardsHtml || `<p class="small" style="text-align:center;">Vacío</p>`}
+      </div>
+    `;
+  });
+}  
 loadMaster();
 setInterval(loadMaster,10000);
 </script>
