@@ -582,48 +582,7 @@ async function changeInspector(encodedUnit){
 
   await updateUnitField(encodeURIComponent(unit), "inspector", value.trim());
 }
-  async function createAssignment(){
-  const unit = document.getElementById("newUnit").value.trim().toUpperCase();
-  const cleaner = document.getElementById("newCleaner").value.trim();
-  const inspector = document.getElementById("newInspector").value.trim();
-  const arrival = document.getElementById("newArrival").checked;
-  const priority = document.getElementById("newPriority").value;
-
-  if(!unit || !cleaner){
-    alert("Unidad y limpiador son obligatorios");
-    return;
-  }
-
-  const response = await fetch("/master-create-assignment",{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json"
-    },
-    body:JSON.stringify({
-      unit,
-      cleaner,
-      inspector,
-      arrival,
-      priority
-    })
-  });
-
-  const data = await response.json();
-
-  if(data.ok){
-    alert(data.message || "Asignación creada");
-
-    document.getElementById("newUnit").value = "";
-    document.getElementById("newCleaner").value = "";
-    document.getElementById("newInspector").value = "";
-    document.getElementById("newArrival").checked = false;
-    document.getElementById("newPriority").value = "Normal";
-
-    await loadMaster();
-  }else{
-    alert(data.message || "Error creando asignación");
-  }
-}
+ 
 loadMaster();
 setInterval(loadMaster,10000);
 </script>
