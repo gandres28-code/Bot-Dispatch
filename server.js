@@ -77,6 +77,9 @@ res.sendFile(__dirname + "/public/index.html");
 // ■ Página inspectores
 app.get("/inspector", (req, res) => {
 res.sendFile(__dirname + "/public/inspector.html");
+  app.get("/master", (req, res) => {
+  res.sendFile(__dirname + "/public/master.html");
+});
 });
 // ■ Diagnóstico seguro
 app.get("/debug-env", (req, res) => {
@@ -2444,6 +2447,50 @@ app.post("/upload-photo", upload.single("photo"), async (req, res) => {
     res.status(500).json({
       success: false,
       error: err.message
+    });
+  }
+});
+app.get("/master-units", async (req, res) => {
+  try {
+    const pages = await queryTodayRooms();
+
+    const units = pages.map((page) => {
+      const props = page.properties;
+
+      return {
+        id: page.id,
+        unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+        date: props.Date?.date?.start || "",
+        cleaner:
+          props["Assigned Cleaner"]?.select?.name ||
+          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+          "",
+        inspector:
+          props["Assigned Inspector"]?.select?.name ||
+          props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
+          "",
+        status: props["Cleaning Status"]?.status?.name || "",
+        arrival: !!props.Arrival?.checkbox,
+        priority: props.Priority?.select?.name || "Normal",
+        startedAt: props["Started At"]?.date?.start || "",
+        finishedAt: props["Finished At"]?.date?.start || "",
+      };
+    });
+
+    res.json({
+      ok: true,
+      date: todayISO(),
+      count: units.length,
+      units,
+    });
+
+  } catch (error) {
+    console.error("Error en /master-units:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+      units: [],
     });
   }
 });
