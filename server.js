@@ -8,6 +8,16 @@ const fs = require("fs");
 const path = require("path");
 const dayjs = require("dayjs");
 const app = express();
+const http = require("http");
+const { Server } = require("socket.io");
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const upload = multer({ storage: multer.memoryStorage() });
@@ -45,6 +55,14 @@ function setCache(key, data, ttlMs = 5000){
 
 function clearOpsCache(){
   cacheStore.clear();
+}
+function broadcastOpsUpdate(payload = {}){
+  clearOpsCache();
+
+  io.emit("ops-update", {
+    time: new Date().toISOString(),
+    ...payload,
+  });
 }
 app.use(express.json());
 app.use(express.static("public"));
@@ -1759,7 +1777,9 @@ app.post("/action", async (req, res) => {
     if (action === "DONE") {
       await notifyInspectors(unit);
     }
-    clearOpsCache();
+    broadcastOpsUpdate({
+  type: "action",
+});
     res.json({
       success: true,
       message: `Enviado correctamente: ${result.label} - ${unit}`,
@@ -1803,7 +1823,9 @@ app.post("/inspector-action", async (req, res) => {
     }
 
     const result = await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
-    clearOpsCache();
+    broadcastOpsUpdate({
+  type: "action",
+});
     res.json({
       success: true,
       message: `Inspector: ${result.label} - ${unit}`,
@@ -2615,7 +2637,9 @@ app.post("/master-action", async (req, res) => {
       mode,
       ""
     );
-    clearOpsCache();
+    broadcastOpsUpdate({
+  type: "action",
+});
     res.json({
       ok: true,
       message: `Acción completada: ${result.label} - ${unit}`,
@@ -2699,8 +2723,9 @@ app.post("/master-update-unit", async (req, res) => {
         properties: props,
       });
     }
-     como cambio eso
-comocambioesoclearOpsCache();
+    broadcastOpsUpdate({
+  type: "action",
+});
     res.json({
       ok: true,
       message: `Unidad ${unit} actualizada correctamente`,
@@ -2890,6 +2915,6 @@ app.get("/master-unit-detail", async (req, res) => {
     });
   }
 });
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
