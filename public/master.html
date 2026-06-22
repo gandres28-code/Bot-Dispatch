@@ -2,11 +2,9 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <title>Master Operations</title>
 
 <style>
-
 body{
   font-family:Arial,sans-serif;
   background:#f4f4f4;
@@ -16,6 +14,14 @@ body{
 
 h1{
   text-align:center;
+  margin-bottom:10px;
+}
+
+.topbar{
+  text-align:center;
+  margin-bottom:18px;
+  color:#555;
+  font-size:14px;
 }
 
 .stats{
@@ -31,11 +37,34 @@ h1{
   border-radius:12px;
   text-align:center;
   box-shadow:0 2px 8px rgba(0,0,0,.08);
+  font-weight:bold;
+}
+
+.stat-number{
+  font-size:26px;
+  margin-bottom:5px;
+}
+
+.filters{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:8px;
+  margin-bottom:18px;
+}
+
+.filter-btn{
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  background:#111827;
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
 }
 
 .units{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
   gap:12px;
 }
 
@@ -44,131 +73,358 @@ h1{
   padding:15px;
   border-radius:14px;
   box-shadow:0 2px 10px rgba(0,0,0,.08);
+  border-left:8px solid #d1d5db;
 }
 
 .arrival{
-  border-left:8px solid #dc2626;
+  border-left-color:#dc2626;
 }
 
 .urgent{
   animation:blink 1s infinite;
-  border-left:8px solid #dc2626;
+  border-left-color:#dc2626;
 }
 
 .cleaning{
-  border-left:8px solid #7c3aed;
+  border-left-color:#7c3aed;
 }
 
 .inspection{
-  border-left:8px solid #f59e0b;
+  border-left-color:#f59e0b;
 }
 
 .ready{
-  border-left:8px solid #16a34a;
+  border-left-color:#16a34a;
 }
 
 @keyframes blink{
   0%{opacity:1}
-  50%{opacity:.5}
+  50%{opacity:.55}
   100%{opacity:1}
 }
 
 .small{
   font-size:13px;
-  color:#666;
+  color:#555;
+  margin:3px 0;
 }
 
+.badge{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:bold;
+  margin-top:6px;
+  background:#e5e7eb;
+}
+
+.badge-red{
+  background:#fee2e2;
+  color:#991b1b;
+}
+
+.badge-green{
+  background:#dcfce7;
+  color:#166534;
+}
+
+.badge-orange{
+  background:#ffedd5;
+  color:#9a3412;
+}
+
+.badge-purple{
+  background:#ede9fe;
+  color:#5b21b6;
+}
+
+.actions{
+  margin-top:12px;
+  display:grid;
+  gap:7px;
+}
+
+.actions button{
+  width:100%;
+  padding:10px;
+  border:none;
+  border-radius:10px;
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.btn-start{ background:#7c3aed; }
+.btn-done{ background:#dc2626; }
+.btn-inspection{ background:#f59e0b; }
+.btn-ready{ background:#16a34a; }
+.btn-issue{ background:#111827; }
+
+.loading{
+  text-align:center;
+  font-weight:bold;
+  color:#555;
+}
+
+@media(max-width:700px){
+  .stats{
+    grid-template-columns:repeat(2,1fr);
+  }
+
+  .filters{
+    grid-template-columns:1fr 1fr;
+  }
+}
 </style>
 </head>
 
 <body>
 
 <h1>🏨 Master Operations</h1>
+<div class="topbar" id="todayLabel">Cargando...</div>
 
 <div class="stats">
+  <div class="stat">
+    <div class="stat-number" id="totalUnits">0</div>
+    <div>Total</div>
+  </div>
 
-<div class="stat">
-<div id="totalUnits">0</div>
-<div>Total Units</div>
+  <div class="stat">
+    <div class="stat-number" id="arrivalUnits">0</div>
+    <div>Arrivals</div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-number" id="inspectionUnits">0</div>
+    <div>Inspection</div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-number" id="readyUnits">0</div>
+    <div>Ready</div>
+  </div>
 </div>
 
-<div class="stat">
-<div id="arrivalUnits">0</div>
-<div>Arrivals</div>
+<div class="filters">
+  <button class="filter-btn" onclick="setFilter('ALL')">Todas</button>
+  <button class="filter-btn" onclick="setFilter('ARRIVAL')">Arrivals</button>
+  <button class="filter-btn" onclick="setFilter('INSPECTION')">Inspección</button>
+  <button class="filter-btn" onclick="setFilter('READY')">Ready</button>
+  <button class="filter-btn" onclick="setFilter('URGENT')">Urgentes</button>
 </div>
 
-<div class="stat">
-<div id="inspectionUnits">0</div>
-<div>Inspection</div>
+<div id="units" class="units">
+  <div class="loading">Cargando unidades...</div>
 </div>
-
-<div class="stat">
-<div id="readyUnits">0</div>
-<div>Ready</div>
-</div>
-
-</div>
-
-<div id="units" class="units"></div>
 
 <script>
+let allUnits = [];
+let currentFilter = "ALL";
+let isLoading = false;
+
+function escapeHtml(value){
+  return String(value || "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function encodeValue(value){
+  return encodeURIComponent(String(value || ""));
+}
+
+function formatStatus(status){
+  return status || "No Status";
+}
+
+function getUnitClass(unit){
+  if(unit.priority === "Urgent"){
+    return "urgent";
+  }
+
+  if(unit.status === "Ready for Guest"){
+    return "ready";
+  }
+
+  if(unit.status === "Cleaned - Awaiting Inspection"){
+    return "inspection";
+  }
+
+  if(unit.status === "Inspection Started"){
+    return "inspection";
+  }
+
+  if(unit.status === "In Progress"){
+    return "cleaning";
+  }
+
+  if(unit.arrival){
+    return "arrival";
+  }
+
+  return "";
+}
+
+function getStatusBadge(unit){
+  if(unit.priority === "Urgent"){
+    return `<span class="badge badge-red">🚨 URGENT</span>`;
+  }
+
+  if(unit.status === "Ready for Guest"){
+    return `<span class="badge badge-green">✅ Ready</span>`;
+  }
+
+  if(unit.status === "Cleaned - Awaiting Inspection"){
+    return `<span class="badge badge-orange">🟠 Awaiting Inspection</span>`;
+  }
+
+  if(unit.status === "Inspection Started"){
+    return `<span class="badge badge-purple">🔍 Inspection Started</span>`;
+  }
+
+  if(unit.status === "In Progress"){
+    return `<span class="badge badge-purple">🧹 In Progress</span>`;
+  }
+
+  if(unit.arrival){
+    return `<span class="badge badge-red">ARRIVAL</span>`;
+  }
+
+  return `<span class="badge">Normal</span>`;
+}
+
+function setFilter(filter){
+  currentFilter = filter;
+  renderUnits();
+}
+
+function unitMatchesFilter(unit){
+  if(currentFilter === "ALL") return true;
+  if(currentFilter === "ARRIVAL") return !!unit.arrival;
+  if(currentFilter === "URGENT") return unit.priority === "Urgent";
+  if(currentFilter === "READY") return unit.status === "Ready for Guest";
+  if(currentFilter === "INSPECTION"){
+    return unit.status === "Cleaned - Awaiting Inspection" || unit.status === "Inspection Started";
+  }
+  return true;
+}
 
 async function loadMaster(){
+  if(isLoading) return;
 
-  const response = await fetch("/master-units");
-  const data = await response.json();
+  isLoading = true;
 
-  let arrivals = 0;
-  let inspection = 0;
-  let ready = 0;
+  try{
+    const response = await fetch("/master-units");
+    const data = await response.json();
 
-  document.getElementById("totalUnits").innerText =
-    data.count || 0;
+    if(!data.ok){
+      document.getElementById("units").innerHTML =
+        `<div class="loading">Error: ${escapeHtml(data.message || "No se pudo cargar")}</div>`;
+      return;
+    }
 
-  const container =
-    document.getElementById("units");
+    allUnits = data.units || [];
 
-container.innerHTML += `
-  <div class="unit ${className}">
-    <h3>${unit.unit}</h3>
+    document.getElementById("todayLabel").innerText =
+      `Fecha: ${data.date || ""} | Unidades: ${data.count || 0}`;
 
-    <div class="small">Cleaner: ${unit.cleaner || "-"}</div>
-    <div class="small">Inspector: ${unit.inspector || "-"}</div>
-    <div class="small">Status: ${unit.status || "No Status"}</div>
+    updateStats();
+    renderUnits();
 
-    <button onclick="masterAction('START','${unit.unit}','${unit.cleaner}','cleaner')">
-      🟢 Start Cleaning
-    </button>
-
-    <button onclick="masterAction('DONE','${unit.unit}','${unit.cleaner}','cleaner')">
-      🔴 Finish Cleaning
-    </button>
-
-    <button onclick="masterAction('INSPECTION_START','${unit.unit}','${unit.inspector}','inspector')">
-      🔍 Start Inspection
-    </button>
-
-    <button onclick="masterAction('READY_GUEST','${unit.unit}','${unit.inspector}','inspector')">
-      ✅ Ready for Guest
-    </button>
-
-    <button onclick="reportIssue('${unit.unit}','${unit.cleaner}')">
-      ⚠️ Report Problem
-    </button>
-  </div>
-`;
-  });
-
-  document.getElementById("arrivalUnits").innerText =
-    arrivals;
-
-  document.getElementById("inspectionUnits").innerText =
-    inspection;
-
-  document.getElementById("readyUnits").innerText =
-    ready;
+  }catch(error){
+    document.getElementById("units").innerHTML =
+      `<div class="loading">Error cargando unidades</div>`;
+  }finally{
+    isLoading = false;
+  }
 }
-async function masterAction(action, unit, name, role){
+
+function updateStats(){
+  const arrivals = allUnits.filter(unit => unit.arrival).length;
+  const inspection = allUnits.filter(unit =>
+    unit.status === "Cleaned - Awaiting Inspection" ||
+    unit.status === "Inspection Started"
+  ).length;
+  const ready = allUnits.filter(unit => unit.status === "Ready for Guest").length;
+
+  document.getElementById("totalUnits").innerText = allUnits.length;
+  document.getElementById("arrivalUnits").innerText = arrivals;
+  document.getElementById("inspectionUnits").innerText = inspection;
+  document.getElementById("readyUnits").innerText = ready;
+}
+
+function renderUnits(){
+  const container = document.getElementById("units");
+  const visibleUnits = allUnits.filter(unitMatchesFilter);
+
+  if(visibleUnits.length === 0){
+    container.innerHTML = `<div class="loading">No hay unidades para este filtro.</div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+
+  visibleUnits.forEach(unit => {
+    const unitClass = getUnitClass(unit);
+
+    const safeUnitDisplay = escapeHtml(unit.unit);
+    const safeCleanerDisplay = escapeHtml(unit.cleaner || "-");
+    const safeInspectorDisplay = escapeHtml(unit.inspector || "-");
+    const safeStatusDisplay = escapeHtml(formatStatus(unit.status));
+
+    const encodedUnit = encodeValue(unit.unit);
+    const encodedCleaner = encodeValue(unit.cleaner);
+    const encodedInspector = encodeValue(unit.inspector);
+
+    container.innerHTML += `
+      <div class="unit ${unitClass}">
+        <h3>${safeUnitDisplay}</h3>
+
+        <div class="small">Cleaner: ${safeCleanerDisplay}</div>
+        <div class="small">Inspector: ${safeInspectorDisplay}</div>
+        <div class="small">Status: ${safeStatusDisplay}</div>
+
+        ${getStatusBadge(unit)}
+
+        <div class="actions">
+          <button class="btn-start" onclick="masterAction('START','${encodedUnit}','${encodedCleaner}','cleaner')">
+            🟢 Start Cleaning
+          </button>
+
+          <button class="btn-done" onclick="masterAction('DONE','${encodedUnit}','${encodedCleaner}','cleaner')">
+            🔴 Finish Cleaning
+          </button>
+
+          <button class="btn-inspection" onclick="masterAction('INSPECTION_START','${encodedUnit}','${encodedInspector}','inspector')">
+            🔍 Start Inspection
+          </button>
+
+          <button class="btn-ready" onclick="masterAction('READY_GUEST','${encodedUnit}','${encodedInspector}','inspector')">
+            ✅ Ready for Guest
+          </button>
+
+          <button class="btn-issue" onclick="reportIssue('${encodedUnit}','${encodedCleaner}')">
+            ⚠️ Report Problem
+          </button>
+        </div>
+      </div>
+    `;
+  });
+}
+
+async function masterAction(action, encodedUnit, encodedName, role){
+  const unit = decodeURIComponent(encodedUnit || "");
+  const name = decodeURIComponent(encodedName || "");
+
+  if(!unit){
+    alert("No hay unidad seleccionada");
+    return;
+  }
+
   if(!name || name === "-"){
     alert("No hay persona asignada para esta acción");
     return;
@@ -192,25 +448,53 @@ async function masterAction(action, unit, name, role){
 
   if(data.ok){
     alert(data.message || "Acción completada");
-    loadMaster();
+    await loadMaster();
   }else{
     alert(data.message || "Error");
   }
 }
 
-async function reportIssue(unit, name){
+async function reportIssue(encodedUnit, encodedName){
   const note = prompt("Describe el problema:");
 
   if(!note){
     return;
   }
 
-  await masterAction("ISSUE", unit, name, "cleaner");
+  const unit = decodeURIComponent(encodedUnit || "");
+  const name = decodeURIComponent(encodedName || "");
+
+  if(!name || name === "-"){
+    alert("No hay limpiador asignado para reportar problema");
+    return;
+  }
+
+  const response = await fetch("/master-action",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      action:"ISSUE",
+      unit,
+      name,
+      role:"cleaner",
+      note
+    })
+  });
+
+  const data = await response.json();
+
+  if(data.ok){
+    alert(data.message || "Problema reportado");
+    await loadMaster();
+  }else{
+    alert(data.message || "Error");
+  }
 }
+
 loadMaster();
-
 setInterval(loadMaster,10000);
-
 </script>
 
 </body>
