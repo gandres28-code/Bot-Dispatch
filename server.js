@@ -942,7 +942,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   const totals = {};
 
   records.forEach((r) => {
-    const cleaner = r.cleaner || "Unknown";
+    const cleaner = (r.cleaner || "Unknown").trim();
 
     if (!totals[cleaner]) {
       totals[cleaner] = {
@@ -1009,7 +1009,15 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
         amount: t.totalAmount,
       });
       
-      const sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
+   let sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
+
+let i = 1;
+while (usedSheetNames.has(sheetName)) {
+  sheetName = cleanSheetName(`${t.cleaner} - Cleaning ${i}`);
+  i++;
+}
+
+usedSheetNames.add(sheetName);
 let cleanerSheet = workbook.getWorksheet(sheetName);
 
 if (!cleanerSheet) {
@@ -1051,7 +1059,7 @@ if (!cleanerSheet) {
 
   hourlyRecords.forEach((r) => {
     hourlySheet.addRow({
-      employee: r.employee,
+     employee: (r.employee || "Unknown").trim(),
       role: r.role,
       clockIn: r.clockIn,
       clockOut: r.clockOut,
