@@ -991,7 +991,6 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Pay Period", key: "payPeriod", width: 25 },
     { header: "Amount", key: "amount", width: 15 },
   ];
- const usedSheetNames = new Set();
   Object.values(totals)
     .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
     .forEach((t) => {
@@ -1009,18 +1008,15 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
         payPeriod: `${weekStart} to ${weekEnd}`,
         amount: t.totalAmount,
       });
-      
-   let sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
+  let sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
 
 let i = 1;
-while (usedSheetNames.has(sheetName)) {
+while (workbook.getWorksheet(sheetName)) {
   sheetName = cleanSheetName(`${t.cleaner} - Cleaning ${i}`);
   i++;
 }
 
-usedSheetNames.add(sheetName);
-let cleanerSheet = workbook.getWorksheet(sheetName);
-
+const cleanerSheet = workbook.addWorksheet(sheetName);
 if (!cleanerSheet) {
   cleanerSheet = workbook.addWorksheet(sheetName);
 
