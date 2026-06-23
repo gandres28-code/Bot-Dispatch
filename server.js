@@ -181,13 +181,19 @@ return match ? match[1] : "";
 // Cambia estos números por tus tarifas reales.
 // También puedes controlarlos desde Render con PAYROLL_RATE_1, PAYROLL_RATE_2, etc.
 const ROOM_RATES = {
-S: Number(process.env.PAYROLL_RATE_S || 15), // Studio
-M: Number(process.env.PAYROLL_RATE_M || 10), // Motel
-"1": Number(process.env.PAYROLL_RATE_1 || 20),
-"2": Number(process.env.PAYROLL_RATE_2 || 30),
-"3": Number(process.env.PAYROLL_RATE_3 || 40),
-"4": Number(process.env.PAYROLL_RATE_4 || 50),
-"5": Number(process.env.PAYROLL_RATE_5 || 60),
+S: Number(process.env.PAYROLL_RATE_S || 22), // Studio
+M: Number(process.env.PAYROLL_RATE_M || 20), // Motel
+"1": Number(process.env.PAYROLL_RATE_1 || 35),
+"2": Number(process.env.PAYROLL_RATE_2 || 45),
+"3": Number(process.env.PAYROLL_RATE_3 || 55),
+"SUNRISE": Number(process.env.PAYROLL_RATE_4 || 41),
+"30 ELM": Number(process.env.PAYROLL_RATE_5 || 33),
+"SERENITY": Number(process.env.PAYROLL_RATE_5 || 51),
+"MAIA": Number(process.env.PAYROLL_RATE_5 || 125),
+"WILLOW": Number(process.env.PAYROLL_RATE_5 || 125),
+"MENA": Number(process.env.PAYROLL_RATE_5 || 88),
+"SUNDOWNER": Number(process.env.PAYROLL_RATE_5 || 70),
+"LANDS END": Number(process.env.PAYROLL_RATE_5 || 90),
 };
 // ■ Leer tipo de habitación desde lo que está entre paréntesis: 331A (2), 405 (S), 210 (M)
 function getRoomType(unitName) {
