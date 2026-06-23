@@ -1005,14 +1005,19 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
         amount: t.totalAmount,
       });
 
-      const cleanerSheet = workbook.addWorksheet(cleanSheetName(t.cleaner));
+     const sheetName = cleanSheetName(t.cleaner);
+let cleanerSheet = workbook.getWorksheet(sheetName);
 
-      cleanerSheet.columns = [
-        { header: "Date", key: "date", width: 15 },
-        { header: "Unit", key: "unit", width: 22 },
-        { header: "Room Type", key: "roomType", width: 15 },
-        { header: "Amount", key: "amount", width: 15 },
-      ];
+if (!cleanerSheet) {
+  cleanerSheet = workbook.addWorksheet(sheetName);
+
+  cleanerSheet.columns = [
+    { header: "Date", key: "date", width: 15 },
+    { header: "Unit", key: "unit", width: 22 },
+    { header: "Room Type", key: "roomType", width: 15 },
+    { header: "Amount", key: "amount", width: 15 },
+  ];
+}
 
       t.records.forEach((r) => {
         cleanerSheet.addRow({
