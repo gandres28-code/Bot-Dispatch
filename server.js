@@ -1017,15 +1017,13 @@ while (workbook.getWorksheet(sheetName)) {
 }
 
 const cleanerSheet = workbook.addWorksheet(sheetName);
-if (!cleanerSheet) {
-  cleanerSheet = workbook.addWorksheet(sheetName);
 
-  cleanerSheet.columns = [
-    { header: "Date", key: "date", width: 15 },
-    { header: "Unit", key: "unit", width: 22 },
-    { header: "Room Type", key: "roomType", width: 15 },
-    { header: "Amount", key: "amount", width: 15 },
-  ];
+cleanerSheet.columns = [
+  { header: "Date", key: "date", width: 15 },
+  { header: "Unit", key: "unit", width: 22 },
+  { header: "Room Type", key: "roomType", width: 15 },
+  { header: "Amount", key: "amount", width: 15 },
+];
 }
 
       t.records.forEach((r) => {
