@@ -254,7 +254,31 @@ function getPayrollWeek(date = new Date()) {
 function cleanSheetName(name) {
   return String(name || "Unknown")
     .replace(/[\\/*?:[\]]/g, "")
-    .substring(0, 31);
+    .trim()
+    .substring(0, 31) || "Unknown";
+}
+
+function uniqueSheetName(workbook, baseName) {
+  const cleanBase = cleanSheetName(baseName);
+  const existingNames = new Set(
+    workbook.worksheets.map((sheet) => String(sheet.name || "").toLowerCase())
+  );
+
+  let sheetName = cleanBase;
+  let counter = 1;
+
+  while (existingNames.has(sheetName.toLowerCase())) {
+    const suffix = ` ${counter}`;
+    const maxBaseLength = 31 - suffix.length;
+    sheetName = `${cleanBase.substring(0, maxBaseLength)}${suffix}`;
+    counter++;
+  }
+
+  return sheetName;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Nombre del archivo Excel semanal
@@ -677,31 +701,43 @@ async function payrollRecordExists({ cleaner, unit, date }) {
 async function payrollRecordAlreadyExists({ cleaner, unit, date }) {
   if (!NOTION_PAYROLL_DATABASE_ID) return false;
 
+  const cleanCleaner = normalizeCleaner(cleaner);
+  const cleanUnit = String(unit || "").trim();
+
   const response = await notion.databases.query({
     database_id: NOTION_PAYROLL_DATABASE_ID,
-    page_size: 100,
+    page_size: 10,
+    filter: {
+      and: [
+        {
+          property: "Date",
+          date: {
+            equals: date,
+          },
+        },
+        {
+          property: "Cleaner",
+          rich_text: {
+            equals: cleanCleaner,
+          },
+        },
+        {
+          property: "Unit",
+          rich_text: {
+            equals: cleanUnit,
+          },
+        },
+      ],
+    },
   });
 
-  return response.results.some((page) => {
-    const props = page.properties;
-
-    const existingDate = props.Date?.date?.start || "";
-
-    const existingCleaner =
-      props.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "";
-
-    const existingUnit =
-      props.Unit?.rich_text?.map((t) => t.plain_text).join("") || "";
-
-    return (
-      existingDate === date &&
-      existingCleaner === cleaner &&
-      existingUnit === unit
-    );
-  });
+  return response.results.length > 0;
 }
 
 async function createPayrollRecord({ cleaner, unit, date }) {
+  cleaner = normalizeCleaner(cleaner);
+  unit = String(unit || "").trim();
+
   if (!NOTION_PAYROLL_DATABASE_ID) {
     console.log("NOTION_PAYROLL_DATABASE_ID faltante, no se guardó Payroll Record");
     return;
@@ -800,8 +836,6 @@ async function createPayrollRecord({ cleaner, unit, date }) {
   });
 
   console.log("Payroll Record guardado:", cleaner, unit, `$${pay.amount}`);
-
-  await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
 }
 // ■ Leer Payroll Records desde Notion
 async function getPayrollRecords(weekStart, weekEnd) {
@@ -962,7 +996,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   const hourlyTotals = {};
 
   hourlyRecords.forEach((r) => {
-    const employee = r.employee || "Unknown";
+    const employee = normalizeCleaner(r.employee || "Unknown");
 
     if (!hourlyTotals[employee]) {
       hourlyTotals[employee] = {
@@ -992,55 +1026,48 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Amount", key: "amount", width: 15 },
   ];
   Object.values(totals)
-  .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
-  .forEach((t) => {
-    summarySheet.addRow({
-      employee: t.cleaner,
-      payType: "Unit Pay",
-      units: t.totalUnits,
-      hours: "",
-      total: t.totalAmount,
-    });
+    .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
+    .forEach((t) => {
+      summarySheet.addRow({
+        employee: t.cleaner,
+        payType: "Unit Pay",
+        units: t.totalUnits,
+        hours: "",
+        total: Number(t.totalAmount.toFixed(2)),
+      });
 
-    quickbooksSheet.addRow({
-      employee: t.cleaner,
-      payType: "Unit Pay",
-      payPeriod: `${weekStart} to ${weekEnd}`,
-      amount: t.totalAmount,
-    });
+      quickbooksSheet.addRow({
+        employee: t.cleaner,
+        payType: "Unit Pay",
+        payPeriod: `${weekStart} to ${weekEnd}`,
+        amount: Number(t.totalAmount.toFixed(2)),
+      });
 
-    let sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
+      const sheetName = uniqueSheetName(workbook, `${t.cleaner} - Cleaning`);
+      const cleanerSheet = workbook.addWorksheet(sheetName);
 
-    let i = 1;
-    while (workbook.getWorksheet(sheetName)) {
-      sheetName = cleanSheetName(`${t.cleaner} - Cleaning ${i}`);
-      i++;
-    }
+      cleanerSheet.columns = [
+        { header: "Date", key: "date", width: 15 },
+        { header: "Unit", key: "unit", width: 22 },
+        { header: "Room Type", key: "roomType", width: 15 },
+        { header: "Amount", key: "amount", width: 15 },
+      ];
 
-    const cleanerSheet = workbook.addWorksheet(sheetName);
+      t.records.forEach((r) => {
+        cleanerSheet.addRow({
+          date: r.date,
+          unit: r.unit,
+          roomType: r.roomType,
+          amount: Number(r.amount || 0),
+        });
+      });
 
-    cleanerSheet.columns = [
-      { header: "Date", key: "date", width: 15 },
-      { header: "Unit", key: "unit", width: 22 },
-      { header: "Room Type", key: "roomType", width: 15 },
-      { header: "Amount", key: "amount", width: 15 },
-    ];
-
-    t.records.forEach((r) => {
+      cleanerSheet.addRow({});
       cleanerSheet.addRow({
-        date: r.date,
-        unit: r.unit,
-        roomType: r.roomType,
-        amount: Number(r.amount || 0),
+        date: "TOTAL",
+        amount: Number(t.totalAmount.toFixed(2)),
       });
     });
-
-    cleanerSheet.addRow({});
-    cleanerSheet.addRow({
-      date: "TOTAL",
-      amount: t.totalAmount,
-    });
-  });
 
   hourlySheet.columns = [
     { header: "Employee", key: "employee", width: 22 },
@@ -2116,6 +2143,7 @@ app.get("/backfill-payroll", async (req, res) => {
           date,
         });
 
+        await sleep(350);
         created++;
       } catch (error) {
         errors.push({
