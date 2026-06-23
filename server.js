@@ -2177,6 +2177,63 @@ app.get("/backfill-payroll", async (req, res) => {
     });
   }
 });
+app.get("/delete-payroll-week", async (req, res) => {
+  try {
+    const start = req.query.start;
+    const end = req.query.end;
+
+    const records = await getPayrollRecords(start, end);
+
+    let deleted = 0;
+
+    for (const record of records) {
+      const response = await notion.databases.query({
+        database_id: NOTION_PAYROLL_DATABASE_ID,
+        filter: {
+          and: [
+            {
+              property: "Date",
+              date: {
+                equals: record.date,
+              },
+            },
+            {
+              property: "Cleaner",
+              rich_text: {
+                equals: record.cleaner,
+              },
+            },
+            {
+              property: "Unit",
+              rich_text: {
+                equals: record.unit,
+              },
+            },
+          ],
+        },
+      });
+
+      for (const page of response.results) {
+        await notion.pages.update({
+          page_id: page.id,
+          archived: true,
+        });
+
+        deleted++;
+      }
+    }
+
+    res.json({
+      ok: true,
+      deleted,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
 app.get("/time-clock", (req, res) => {
   res.sendFile(__dirname + "/public/time-clock.html");
 });
