@@ -992,55 +992,55 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Amount", key: "amount", width: 15 },
   ];
   Object.values(totals)
-    .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
-    .forEach((t) => {
-      summarySheet.addRow({
-        employee: t.cleaner,
-        payType: "Unit Pay",
-        units: t.totalUnits,
-        hours: "",
-        total: t.totalAmount,
-      });
+  .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
+  .forEach((t) => {
+    summarySheet.addRow({
+      employee: t.cleaner,
+      payType: "Unit Pay",
+      units: t.totalUnits,
+      hours: "",
+      total: t.totalAmount,
+    });
 
-      quickbooksSheet.addRow({
-        employee: t.cleaner,
-        payType: "Unit Pay",
-        payPeriod: `${weekStart} to ${weekEnd}`,
-        amount: t.totalAmount,
-      });
-  let sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
+    quickbooksSheet.addRow({
+      employee: t.cleaner,
+      payType: "Unit Pay",
+      payPeriod: `${weekStart} to ${weekEnd}`,
+      amount: t.totalAmount,
+    });
 
-let i = 1;
-while (workbook.getWorksheet(sheetName)) {
-  sheetName = cleanSheetName(`${t.cleaner} - Cleaning ${i}`);
-  i++;
-}
+    let sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
 
-const cleanerSheet = workbook.addWorksheet(sheetName);
+    let i = 1;
+    while (workbook.getWorksheet(sheetName)) {
+      sheetName = cleanSheetName(`${t.cleaner} - Cleaning ${i}`);
+      i++;
+    }
 
-cleanerSheet.columns = [
-  { header: "Date", key: "date", width: 15 },
-  { header: "Unit", key: "unit", width: 22 },
-  { header: "Room Type", key: "roomType", width: 15 },
-  { header: "Amount", key: "amount", width: 15 },
-];
-}
+    const cleanerSheet = workbook.addWorksheet(sheetName);
 
-      t.records.forEach((r) => {
-        cleanerSheet.addRow({
-          date: r.date,
-          unit: r.unit,
-          roomType: r.roomType,
-          amount: Number(r.amount || 0),
-        });
-      });
+    cleanerSheet.columns = [
+      { header: "Date", key: "date", width: 15 },
+      { header: "Unit", key: "unit", width: 22 },
+      { header: "Room Type", key: "roomType", width: 15 },
+      { header: "Amount", key: "amount", width: 15 },
+    ];
 
-      cleanerSheet.addRow({});
+    t.records.forEach((r) => {
       cleanerSheet.addRow({
-        date: "TOTAL",
-        amount: t.totalAmount,
+        date: r.date,
+        unit: r.unit,
+        roomType: r.roomType,
+        amount: Number(r.amount || 0),
       });
     });
+
+    cleanerSheet.addRow({});
+    cleanerSheet.addRow({
+      date: "TOTAL",
+      amount: t.totalAmount,
+    });
+  });
 
   hourlySheet.columns = [
     { header: "Employee", key: "employee", width: 22 },
