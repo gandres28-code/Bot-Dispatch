@@ -911,6 +911,7 @@ function getEmployeeRoleFromPage(page) {
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   const records = await getPayrollRecords(weekStart, weekEnd);
   const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
+ 
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = process.env.COMPANY_NAME || "Housekeeping Payroll System";
@@ -990,7 +991,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Pay Period", key: "payPeriod", width: 25 },
     { header: "Amount", key: "amount", width: 15 },
   ];
-
+ const usedSheetNames = new Set();
   Object.values(totals)
     .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
     .forEach((t) => {
