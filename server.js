@@ -1004,8 +1004,8 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
         payPeriod: `${weekStart} to ${weekEnd}`,
         amount: t.totalAmount,
       });
-
-     const sheetName = cleanSheetName(t.cleaner);
+      
+      const sheetName = cleanSheetName(`${t.cleaner} - Cleaning`);
 let cleanerSheet = workbook.getWorksheet(sheetName);
 
 if (!cleanerSheet) {
