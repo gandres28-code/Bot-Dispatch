@@ -2166,33 +2166,48 @@ if(cached){
       });
     }
 
-    const inspectorName = getEmployeeNameFromPage(employee);
-    const role = getEmployeeRoleFromPage(employee);
+  const inspectorName = getEmployeeNameFromPage(employee);
+const role = getEmployeeRoleFromPage(employee);
 
-    const allowedRoles = ["Inspector", "Dispatch / Inspector"];
+const allowedRoles = ["Inspector", "Dispatch / Inspector"];
 
-    if (!allowedRoles.includes(role)) {
-      return res.status(403).json({
-        ok: false,
-        message: "Este código no tiene acceso a inspecciones",
-      });
-    }
+if (!allowedRoles.includes(role)) {
+  return res.status(403).json({
+    ok: false,
+    message: "Este código no tiene acceso a inspecciones",
+  });
+}
 
-    const pages = await queryTodayRooms();
+const pages = await queryTodayRooms();
 
-    const units = pages
-      .map((page) => {
-        const props = page.properties;
+const units = pages
+  .map((page) => {
+    const props = page.properties;
 
-        return {
-          id: page.id,
-          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
-          status: props["Cleaning Status"]?.status?.name || "",
-          priority: props.Priority?.select?.name || "Normal",
-          assignedInspector: props["Assigned Inspector"]?.select?.name || "",
-        };
-      })
-      .filter((item) => item.assignedInspector === inspectorName);
+    const assignedInspector =
+      props["Assigned Inspector"]?.multi_select
+        ?.map((i) => i.name)
+        .join(", ") || "";
+
+    return {
+      id: page.id,
+      unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+      status: props["Cleaning Status"]?.status?.name || "",
+      priority: props.Priority?.select?.name || "Normal",
+      assignedInspector,
+    };
+  })
+  .filter((item) => {
+    const inspectorList = String(item.assignedInspector || "")
+      .toLowerCase()
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    return inspectorList.includes(
+      inspectorName.toLowerCase().trim()
+    );
+  });
 
     const payload = {
   ok: true,
@@ -2546,9 +2561,9 @@ if(cached){
           props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
           "",
         inspector:
-          props["Assigned Inspector"]?.select?.name ||
-          props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
-          "",
+  props["Assigned Inspector"]?.multi_select
+    ?.map(i => i.name)
+    .join(", ") || "",
         status: props["Cleaning Status"]?.status?.name || "",
         arrival: !!props.Arrival?.checkbox,
         priority: props.Priority?.select?.name || "Normal",
@@ -2593,10 +2608,10 @@ app.get("/master-units", async (req, res) => {
           props["Assigned Cleaner"]?.select?.name ||
           props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
           "",
-        inspector:
-          props["Assigned Inspector"]?.select?.name ||
-          props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
-          "",
+      inspector:
+  props["Assigned Inspector"]?.multi_select
+    ?.map(i => i.name)
+    .join(", ") || "",
         status: props["Cleaning Status"]?.status?.name || "",
         arrival: !!props.Arrival?.checkbox,
         priority: props.Priority?.select?.name || "Normal",
@@ -2901,9 +2916,9 @@ app.get("/master-unit-detail", async (req, res) => {
         props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
         "",
       inspector:
-        props["Assigned Inspector"]?.select?.name ||
-        props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
-        "",
+  props["Assigned Inspector"]?.multi_select
+    ?.map(i => i.name)
+    .join(", ") || "",
       status: props["Cleaning Status"]?.status?.name || "",
       arrival: !!props.Arrival?.checkbox,
       priority: props.Priority?.select?.name || "Normal",
