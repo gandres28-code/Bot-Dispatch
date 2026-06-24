@@ -1,79 +1,347 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <title>Panel de Limpieza</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
 
   <style>
-    body{
-      font-family:Arial,sans-serif;
-      padding:20px;
-      background:#f4f4f4;
-      max-width:600px;
-      margin:auto;
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --line:#e5e7eb;
+      --green:#16a34a;
+      --red:#dc2626;
+      --blue:#2563eb;
+      --amber:#f59e0b;
+      --purple:#7c3aed;
+      --black:#111827;
+      --shadow:0 12px 30px rgba(15,23,42,.10);
+      --radius:22px;
     }
 
-    h2{
-      text-align:center;
-      margin-bottom:20px;
+    *{
+      box-sizing:border-box;
+    }
+
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.10), transparent 32%),
+        linear-gradient(180deg,#f9fafb 0%,#eef2f7 100%);
+      color:var(--text);
+      max-width:760px;
+      margin:auto;
+      padding:18px;
+      padding-bottom:40px;
+    }
+
+    .shell{
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+
+    .hero{
+      background:linear-gradient(135deg,#111827,#1f2937);
+      color:white;
+      border-radius:28px;
+      padding:22px;
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .hero:after{
+      content:"";
+      position:absolute;
+      width:180px;
+      height:180px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      right:-60px;
+      top:-60px;
+    }
+
+    .hero h1{
+      margin:0;
+      font-size:26px;
+      letter-spacing:-.03em;
+    }
+
+    .hero p{
+      margin:8px 0 0;
+      color:#d1d5db;
+      font-size:14px;
+      line-height:1.35;
+    }
+
+    .card{
+      background:rgba(255,255,255,.94);
+      backdrop-filter:blur(14px);
+      border:1px solid rgba(255,255,255,.70);
+      border-radius:var(--radius);
+      padding:18px;
+      box-shadow:var(--shadow);
+    }
+
+    .section-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .section-title h2{
+      font-size:17px;
+      margin:0;
+      letter-spacing:-.02em;
+    }
+
+    .section-title span{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    label{
+      display:block;
+      font-size:13px;
+      font-weight:800;
+      color:#374151;
+      margin:10px 0 7px;
     }
 
     input, textarea{
       width:100%;
-      padding:15px;
-      margin:10px 0;
-      font-size:18px;
-      border-radius:10px;
-      border:1px solid #ccc;
-      box-sizing:border-box;
+      padding:15px 16px;
+      font-size:16px;
+      border-radius:16px;
+      border:1px solid var(--line);
+      background:#f9fafb;
+      outline:none;
+      transition:.18s ease;
+    }
+
+    input:focus, textarea:focus{
+      border-color:#93c5fd;
+      background:white;
+      box-shadow:0 0 0 4px rgba(59,130,246,.12);
     }
 
     textarea{
-      min-height:100px;
+      min-height:112px;
+      resize:vertical;
+      line-height:1.35;
     }
 
     button{
       width:100%;
-      padding:18px;
-      margin:10px 0;
-      font-size:19px;
+      padding:16px 18px;
+      margin:8px 0;
+      font-size:16px;
       border:none;
-      border-radius:12px;
+      border-radius:16px;
       color:white;
       cursor:pointer;
-      font-weight:bold;
+      font-weight:900;
+      transition:transform .12s ease, opacity .12s ease, box-shadow .12s ease;
+      box-shadow:0 8px 18px rgba(15,23,42,.12);
+    }
+
+    button:active{
+      transform:scale(.985);
     }
 
     button:disabled{
       opacity:.55;
       cursor:not-allowed;
+      transform:none;
     }
 
-    .start{ background:#16a34a; }
-    .done{ background:#dc2626; }
-    .issue{ background:#f59e0b; }
-    .supplies{ background:#2563eb; }
-    .photo{ background:#7c3aed; }
-    .lost{ background:#111827; }
-
-    .card{
-      background:white;
-      padding:20px;
-      border-radius:15px;
-      box-shadow:0 2px 10px rgba(0,0,0,.08);
+    .btn-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
     }
 
-    .note-title{
+    .start{ background:var(--green); }
+    .done{ background:var(--red); }
+    .issue{ background:var(--amber); }
+    .supplies{ background:var(--blue); }
+    .lost{ background:var(--black); }
+    .neutral{ background:#4b5563; }
+    .report{ background:var(--purple); }
+
+    .assignment-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:12px;
+    }
+
+    .assignment-card{
+      padding:16px;
+      border-radius:18px;
+      background:#fff;
+      border:1px solid var(--line);
+      cursor:pointer;
+      box-shadow:0 7px 18px rgba(15,23,42,.07);
+      min-height:112px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .assignment-card:before{
+      content:"";
+      position:absolute;
+      left:0;
+      top:0;
+      bottom:0;
+      width:6px;
+      background:#9ca3af;
+    }
+
+    .assignment-card.arrival:before{ background:var(--red); }
+    .assignment-card.started:before{ background:var(--purple); }
+    .assignment-card.done:before{ background:var(--green); }
+    .assignment-card.ready:before{ background:#059669; }
+
+    .assignment-card.selected{
+      border:2px solid #111827;
+      transform:translateY(-1px);
+    }
+
+    .unit-name{
+      font-size:20px;
+      font-weight:950;
+      letter-spacing:-.03em;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      width:max-content;
+      max-width:100%;
+      padding:6px 9px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:900;
+      background:#f3f4f6;
+      color:#374151;
+      margin-top:8px;
+    }
+
+    .pill.arrival{
+      background:#fee2e2;
+      color:#991b1b;
+    }
+
+    .pill.started{
+      background:#ede9fe;
+      color:#5b21b6;
+    }
+
+    .pill.done{
+      background:#dcfce7;
+      color:#166534;
+    }
+
+    .selected-unit{
+      display:none;
+      border-radius:18px;
+      padding:14px;
+      background:#f9fafb;
+      border:1px solid var(--line);
+      margin-bottom:12px;
+    }
+
+    .selected-unit strong{
+      display:block;
+      font-size:22px;
+    }
+
+    .selected-unit span{
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .photo-box{
+      border:1.5px dashed #cbd5e1;
+      background:#f8fafc;
+      padding:14px;
+      border-radius:18px;
+      margin-top:8px;
+    }
+
+    .photo-meta{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:6px;
+    }
+
+    .history-list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:8px;
+    }
+
+    .history-item{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px;
+      background:#fff;
+    }
+
+    .history-top{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      font-size:13px;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+
+    .history-action{
+      font-weight:950;
+      color:#111827;
       font-size:14px;
-      color:#666;
-      margin-top:15px;
+    }
+
+    .history-note{
+      font-size:14px;
+      color:#374151;
+      margin-top:5px;
+      white-space:pre-wrap;
+    }
+
+    .history-photos{
+      margin-top:7px;
+      font-size:12px;
+      color:#2563eb;
+      font-weight:800;
+    }
+
+    .empty{
+      text-align:center;
+      color:var(--muted);
+      padding:18px 8px;
+      font-size:14px;
     }
 
     #status{
       text-align:center;
-      font-weight:bold;
-      margin-top:20px;
-      font-size:18px;
+      font-weight:900;
+      margin:10px 0 0;
+      font-size:15px;
+      color:#374151;
     }
 
     #bigStatus{
@@ -82,147 +350,154 @@
       top:0;
       left:0;
       width:100%;
-      padding:22px;
+      padding:19px;
       box-sizing:border-box;
       color:white;
-      font-size:22px;
-      font-weight:bold;
+      font-size:18px;
+      font-weight:950;
       text-align:center;
       z-index:9999;
-      box-shadow:0 4px 14px rgba(0,0,0,.25);
+      box-shadow:0 4px 20px rgba(0,0,0,.25);
     }
 
-    #bigStatus.success{
-      background:#16a34a;
+    #bigStatus.success{ background:var(--green); }
+    #bigStatus.error{ background:var(--red); }
+    #bigStatus.loading{ background:var(--blue); }
+
+    .small-link{
+      width:auto;
+      margin:0;
+      padding:9px 11px;
+      border-radius:999px;
+      background:#eef2ff;
+      color:#3730a3;
+      box-shadow:none;
+      font-size:12px;
     }
 
-    #bigStatus.error{
-      background:#dc2626;
+    .hidden{
+      display:none;
     }
 
-    #bigStatus.loading{
-      background:#2563eb;
+    @media(max-width:520px){
+      body{
+        padding:12px;
+      }
+
+      .assignment-grid{
+        grid-template-columns:1fr;
+      }
+
+      .btn-row{
+        grid-template-columns:1fr;
+      }
+
+      .hero h1{
+        font-size:24px;
+      }
     }
-    .assignment-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:12px;
-  margin:15px 0;
-}
-
-.assignment-card{
-  padding:16px;
-  border-radius:14px;
-  background:#e5e7eb;
-  font-weight:bold;
-  text-align:center;
-  cursor:pointer;
-  border:2px solid transparent;
-}
-
-.assignment-card.arrival{
-  background:#dc2626;
-  color:white;
-}
-
-.assignment-card.started{
-  background:#7c3aed;
-  color:white;
-}
-
-.assignment-card.done{
-  background:#16a34a;
-  color:white;
-}
-
-.assignment-card.selected{
-  border:3px solid #111827;
-}
   </style>
 </head>
 
 <body>
-
 <div id="bigStatus"></div>
 
-<div class="card">
+<div class="shell">
 
-<h2>🏠 Panel de Limpieza</h2>
+  <div class="hero">
+    <h1>Panel de Limpieza</h1>
+    <p>Ve tus unidades, marca inicio/terminado y envía reportes con varias fotos. La IA clasifica el mensaje automáticamente para operaciones.</p>
+  </div>
 
-<input
-  id="name"
-  placeholder="Nombre del limpiador"
-/>
+  <div class="card">
+    <div class="section-title">
+      <h2>Acceso del limpiador</h2>
+      <span>Hoy</span>
+    </div>
 
-<button class="start action-btn" onclick="loadCleanerAssignments()">
-  🔎 Ver mis unidades
-</button>
+    <label for="name">Nombre del limpiador</label>
+    <input id="name" placeholder="Ejemplo: Maria" autocomplete="name">
 
-<div id="cleanerName" style="text-align:center; font-weight:bold; margin:15px 0;"></div>
+    <button class="start action-btn" onclick="loadCleanerAssignments(true)">
+      🔎 Ver mis unidades
+    </button>
 
-<div id="assignments"></div>
+    <p id="status"></p>
+  </div>
 
-<input
-  id="unit"
-  placeholder="Unidad"
-  style="display:none;"
->
+  <div class="card">
+    <div class="section-title">
+      <h2>Mis unidades</h2>
+      <button class="small-link" onclick="loadCleanerAssignments(false)">Actualizar</button>
+    </div>
 
-<div id="cleaningPanel" style="display:none;">
+    <div id="cleanerName" style="font-weight:900; margin-bottom:8px;"></div>
+    <div id="assignments" class="empty">Escribe tu nombre y presiona “Ver mis unidades”.</div>
+  </div>
 
-<div class="note-title">
-Notas / Problemas / Supplies
+  <div id="cleaningPanel" class="card hidden">
+    <div class="section-title">
+      <h2>Unidad seleccionada</h2>
+      <span id="unitStatusText"></span>
+    </div>
+
+    <div id="selectedUnitBox" class="selected-unit">
+      <strong id="selectedUnitLabel"></strong>
+      <span>Las acciones se guardan en operaciones y en tu historial.</span>
+    </div>
+
+    <input id="unit" class="hidden" placeholder="Unidad">
+
+    <div class="btn-row">
+      <button class="start action-btn" onclick="sendAction('START')">
+        🟢 Iniciar
+      </button>
+
+      <button class="done action-btn" onclick="sendAction('DONE')">
+        ✅ Terminar
+      </button>
+    </div>
+
+    <label for="note">Mensaje libre para operaciones</label>
+    <textarea id="note" placeholder="Ejemplo: Faltan 3 towels y el toilet está tapado."></textarea>
+
+    <div class="photo-box">
+      <label for="photoInput" style="margin-top:0;">Fotos opcionales</label>
+      <input type="file" id="photoInput" accept="image/*" multiple capture="environment" onchange="updatePhotoCount()">
+      <div id="photoCount" class="photo-meta">Puedes subir varias fotos en el mismo reporte.</div>
+    </div>
+
+    <button class="report action-btn" onclick="sendSmartReport()">
+      📨 Enviar reporte con IA
+    </button>
+
+    <div class="btn-row">
+      <button class="supplies action-btn" onclick="sendQuickReport('SUPPLIES')">
+        🧺 Enviar como supplies
+      </button>
+
+      <button class="issue action-btn" onclick="sendQuickReport('ISSUE')">
+        ⚠️ Enviar problema
+      </button>
+    </div>
+
+    <button class="lost action-btn" onclick="sendQuickReport('LOST_FOUND')">
+      🎒 Lost & Found
+    </button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">
+      <h2>Historial de hoy</h2>
+      <button class="small-link" onclick="loadMyReports()">Actualizar</button>
+    </div>
+
+    <div id="history" class="empty">Tu historial aparecerá aquí después de cargar tus unidades.</div>
+  </div>
+
 </div>
 
-<textarea
-  id="note"
-  placeholder="Escribe aquí si necesitas algo o reportas un problema..."
-></textarea>
-  <div class="note-title">
-Foto opcional
-</div>
-
-<input
-  type="file"
-  id="photoInput"
-  accept="image/*"
-  capture="environment"
-/>
-
-<button
-  class="lost action-btn"
-  onclick="sendAction('LOST_FOUND')">
-  🎒 Lost & Found
-</button>
-
-<button
-  class="start action-btn"
-  onclick="sendAction('START')">
-  🟢 Empezar limpieza
-</button>
-
-<button
-  class="done action-btn"
-  onclick="sendAction('DONE')">
-  🔴 Terminar limpieza
-</button>
-
-<button
-  class="supplies action-btn"
-  onclick="sendAction('SUPPLIES')">
-  🧺 Necesito supplies
-</button>
-
-<button
-  class="issue action-btn"
-  onclick="sendAction('ISSUE')">
-  ⚠️ Reportar problema
-</button>
-</div>
-
-<p id="status"></p>
-
-</div>
+<script src="/socket.io/socket.io.js"></script>
 
 <script>
 let currentCleanerName = "";
@@ -230,7 +505,9 @@ let cleanerRefreshTimer = null;
 let isSending = false;
 let lastSendKey = "";
 let lastSendTime = 0;
-  
+let selectedUnit = "";
+let selectedUnitStatus = "";
+let selectedUnitArrival = false;
 
 function setButtonsDisabled(disabled){
   document.querySelectorAll(".action-btn").forEach(button => {
@@ -249,8 +526,12 @@ function showBigStatus(message, type){
   if(type !== "loading"){
     setTimeout(() => {
       box.style.display = "none";
-    }, 3500);
+    }, 3300);
   }
+}
+
+function setStatus(message){
+  document.getElementById("status").innerText = message || "";
 }
 
 function playBeep(type){
@@ -276,21 +557,35 @@ function playBeep(type){
 
 function vibratePhone(type){
   if(navigator.vibrate){
-    if(type === "success"){
-      navigator.vibrate([120, 60, 120]);
-    }else{
-      navigator.vibrate([300, 80, 300]);
-    }
+    navigator.vibrate(type === "success" ? [90, 40, 90] : [240, 80, 240]);
   }
 }
-let selectedUnit = "";
+
+function escapeHtml(value){
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function safeJsString(value){
+  return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
 
 function getCleanerCardClass(status, arrival){
-  if(status === "Ready for Guest" || status === "Cleaned - Awaiting Inspection"){
+  const cleanStatus = String(status || "").toLowerCase();
+
+  if(cleanStatus.includes("ready")){
+    return "ready";
+  }
+
+  if(cleanStatus.includes("cleaned") || cleanStatus.includes("awaiting")){
     return "done";
   }
 
-  if(status === "In Progress"){
+  if(cleanStatus.includes("progress")){
     return "started";
   }
 
@@ -301,7 +596,35 @@ function getCleanerCardClass(status, arrival){
   return "";
 }
 
-async function loadCleanerAssignments(){
+function getStatusLabel(status, arrival){
+  const cleanStatus = String(status || "").trim();
+
+  if(cleanStatus){
+    return cleanStatus;
+  }
+
+  return arrival ? "ARRIVAL" : "Pendiente";
+}
+
+function getPillClass(status, arrival){
+  const cleanStatus = String(status || "").toLowerCase();
+
+  if(cleanStatus.includes("ready") || cleanStatus.includes("cleaned")){
+    return "done";
+  }
+
+  if(cleanStatus.includes("progress")){
+    return "started";
+  }
+
+  if(arrival){
+    return "arrival";
+  }
+
+  return "";
+}
+
+async function loadCleanerAssignments(showLoading){
   const name = document.getElementById("name").value.trim();
   currentCleanerName = name;
 
@@ -310,24 +633,27 @@ async function loadCleanerAssignments(){
     return;
   }
 
-  document.getElementById("assignments").innerHTML = "⏳ Cargando...";
+  if(showLoading){
+    document.getElementById("assignments").innerHTML = "⏳ Cargando tus unidades...";
+  }
 
   try{
-    const response = await fetch(`/cleaner-assignments?name=${encodeURIComponent(name)}`);
+    const response = await fetch(`/cleaner-assignments?name=${encodeURIComponent(name)}&t=${Date.now()}`);
     const data = await response.json();
 
     if(!data.ok){
       document.getElementById("assignments").innerHTML = "";
       alert(data.message || "No se pudieron cargar tus unidades");
       return;
-      startCleanerAutoRefresh();
     }
 
     document.getElementById("cleanerName").innerText = `Limpiador: ${data.cleaner}`;
 
     if(!data.units || data.units.length === 0){
       document.getElementById("assignments").innerHTML =
-        "<p style='text-align:center;'>No tienes unidades asignadas hoy.</p>";
+        "<div class='empty'>No tienes unidades asignadas hoy.</div>";
+      startCleanerAutoRefresh();
+      loadMyReports();
       return;
     }
 
@@ -335,16 +661,24 @@ async function loadCleanerAssignments(){
 
     data.units.forEach(item => {
       const cardClass = getCleanerCardClass(item.status, item.arrival);
+      const pillClass = getPillClass(item.status, item.arrival);
+      const selectedClass = item.unit === selectedUnit ? "selected" : "";
+      const cardId = "card-" + item.unit.replace(/[^a-zA-Z0-9]/g, "");
 
       html += `
         <div
-          class="assignment-card ${cardClass}"
-          onclick="selectCleanerAssignment('${item.unit.replace(/'/g, "\\'")}')"
-          id="card-${item.unit.replace(/[^a-zA-Z0-9]/g, "")}"
+          class="assignment-card ${cardClass} ${selectedClass}"
+          onclick="selectCleanerAssignment('${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
+          id="${cardId}"
         >
-          <div>${item.unit}</div>
-          <div style="font-size:12px; margin-top:6px;">
-            ${item.arrival ? "🚨 ARRIVAL" : item.status || "Normal"}
+          <div>
+            <div class="unit-name">${escapeHtml(item.unit)}</div>
+            <span class="pill ${pillClass}">
+              ${item.arrival ? "🚨 " : ""}${escapeHtml(getStatusLabel(item.status, item.arrival))}
+            </span>
+          </div>
+          <div style="font-size:12px; color:#6b7280; font-weight:800;">
+            Toca para abrir
           </div>
         </div>
       `;
@@ -354,32 +688,37 @@ async function loadCleanerAssignments(){
 
     document.getElementById("assignments").innerHTML = html;
 
+    startCleanerAutoRefresh();
+    loadMyReports();
+
   }catch(error){
     document.getElementById("assignments").innerHTML = "";
     alert("Error cargando unidades");
   }
 }
-  function startCleanerAutoRefresh(){
 
+function startCleanerAutoRefresh(){
   if(cleanerRefreshTimer){
     return;
   }
 
   cleanerRefreshTimer = setInterval(() => {
-
     if(currentCleanerName){
-      loadCleanerAssignments();
+      loadCleanerAssignments(false);
     }
-
-  }, 10000);
-
+  }, 15000);
 }
 
-function selectCleanerAssignment(unit){
+function selectCleanerAssignment(unit, status, arrival){
   selectedUnit = unit;
+  selectedUnitStatus = status || "";
+  selectedUnitArrival = !!arrival;
 
   document.getElementById("unit").value = unit;
-  document.getElementById("cleaningPanel").style.display = "block";
+  document.getElementById("cleaningPanel").classList.remove("hidden");
+  document.getElementById("selectedUnitBox").style.display = "block";
+  document.getElementById("selectedUnitLabel").innerText = unit;
+  document.getElementById("unitStatusText").innerText = getStatusLabel(status, arrival);
 
   document.querySelectorAll(".assignment-card").forEach(card => {
     card.classList.remove("selected");
@@ -393,39 +732,50 @@ function selectCleanerAssignment(unit){
   }
 
   showBigStatus(`Unidad seleccionada: ${unit}`, "success");
+  loadMyReports();
 }
-async function uploadPhotoIfNeeded(unit, name, action, note){
+
+function updatePhotoCount(){
   const photoInput = document.getElementById("photoInput");
-  const file = photoInput.files[0];
+  const count = photoInput.files.length;
 
-  if(!file){
-    return "";
-  }
+  document.getElementById("photoCount").innerText =
+    count > 0
+      ? `${count} foto${count === 1 ? "" : "s"} seleccionada${count === 1 ? "" : "s"}`
+      : "Puedes subir varias fotos en el mismo reporte.";
+}
 
+async function uploadPhotosWithReport({ unit, name, action, note, role }){
+  const photoInput = document.getElementById("photoInput");
   const formData = new FormData();
-  formData.append("photo", file);
+
   formData.append("unit", unit);
   formData.append("name", name);
-  formData.append("role", "Cleaner");
-  formData.append("action", action);
-  formData.append("note", note);
+  formData.append("employee", name);
+  formData.append("role", role || "Cleaner");
+  formData.append("action", action || "GENERAL_REPORT");
+  formData.append("message", note || "");
+  formData.append("note", note || "");
 
-  const response = await fetch("/upload-photo", {
+  Array.from(photoInput.files || []).forEach(file => {
+    formData.append("photos", file);
+  });
+
+  const response = await fetch("/submit-report", {
     method: "POST",
     body: formData
   });
 
   const data = await response.json();
 
-  if(!data.success){
-    throw new Error(data.error || "Error subiendo foto");
+  if(!response.ok || !data.ok){
+    throw new Error(data.message || data.error || "Error enviando reporte");
   }
 
-  return data.photoUrl;
+  return data;
 }
 
 async function sendAction(action){
-
   if(isSending){
     return;
   }
@@ -440,24 +790,11 @@ async function sendAction(action){
   }
 
   if(!unit){
-    alert("Escribe la unidad");
+    alert("Selecciona una unidad");
     return;
   }
 
-  if((action === "ISSUE" || action === "SUPPLIES" || action === "LOST_FOUND") && !note){
-    alert("Debes escribir una nota");
-    return;
-  }
-
-  const photoInput = document.getElementById("photoInput");
-  const hasPhoto = photoInput.files.length > 0;
-
-  if((action === "ISSUE" || action === "LOST_FOUND") && !hasPhoto){
-    alert("Debes agregar una foto");
-    return;
-  }
-
-  const sendKey = `${action}-${unit}-${name}-${note}-${hasPhoto}`;
+  const sendKey = `${action}-${unit}-${name}-${note}`;
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
@@ -470,99 +807,207 @@ async function sendAction(action){
   isSending = true;
   lastSendKey = sendKey;
   lastSendTime = now;
-
   setButtonsDisabled(true);
-
-  document.getElementById("status").innerText = "⏳ Enviando...";
-  showBigStatus("⏳ Enviando...", "loading");
+  setStatus("⏳ Enviando...");
+  showBigStatus("⏳ Enviando acción...", "loading");
 
   try{
-
-    let photoUrl = "";
-
-    if(hasPhoto){
-      showBigStatus("📸 Subiendo foto...", "loading");
-      photoUrl = await uploadPhotoIfNeeded(unit, name, action, note);
-    }
-
-    showBigStatus("⏳ Enviando reporte...", "loading");
-
     const response = await fetch("/action",{
       method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
+      headers:{ "Content-Type":"application/json" },
       body:JSON.stringify({
         action,
         unit,
         note,
         name,
-        photoUrl
+        photoUrl:""
       })
     });
 
     const data = await response.json();
 
     if(data.success){
-      document.getElementById("status").innerText =
-        data.message || "✅ Enviado";
-
+      setStatus(data.message || "✅ Enviado");
       showBigStatus(data.message || "✅ Enviado correctamente", "success");
       playBeep("success");
       vibratePhone("success");
 
-      if(action !== "START"){
+      if(action === "DONE"){
         document.getElementById("note").value = "";
       }
 
-      document.getElementById("photoInput").value = "";
-
+      await loadMyReports();
+      await loadCleanerAssignments(false);
     }else{
-      document.getElementById("status").innerText =
-        data.message || "❌ Error";
-
-      showBigStatus(data.message || "❌ Error", "error");
-      playBeep("error");
-      vibratePhone("error");
+      throw new Error(data.message || "Error");
     }
 
   }catch(error){
-
-    document.getElementById("status").innerText =
-      "❌ Error: " + error.message;
-
+    setStatus("❌ Error: " + error.message);
     showBigStatus("❌ Error: " + error.message, "error");
     playBeep("error");
     vibratePhone("error");
-
   }finally{
-
     isSending = false;
     setButtonsDisabled(false);
-
   }
-
 }
-const socket = io();
 
-socket.on("ops-update", () => {
-  if(typeof loadMaster === "function"){
-    loadMaster();
+async function sendSmartReport(){
+  await submitReportToAI("GENERAL_REPORT");
+}
+
+async function sendQuickReport(action){
+  await submitReportToAI(action);
+}
+
+async function submitReportToAI(action){
+  if(isSending){
+    return;
   }
 
-  if(typeof loadCleanerAssignments === "function" && typeof currentCleanerName !== "undefined" && currentCleanerName){
-    loadCleanerAssignments();
+  const name = document.getElementById("name").value.trim();
+  const unit = document.getElementById("unit").value.trim().toUpperCase();
+  const note = document.getElementById("note").value.trim();
+  const photoInput = document.getElementById("photoInput");
+  const hasPhotos = photoInput.files.length > 0;
+
+  if(!name){
+    alert("Escribe tu nombre");
+    return;
   }
 
-  if(typeof loadInspectorAssignments === "function" && typeof currentInspectorCode !== "undefined" && currentInspectorCode){
-    loadInspectorAssignments();
+  if(!unit){
+    alert("Selecciona una unidad");
+    return;
   }
 
-  if(typeof loadEvents === "function"){
-    loadEvents();
+  if(!note && !hasPhotos){
+    alert("Escribe un mensaje o agrega fotos");
+    return;
   }
-});
+
+  const sendKey = `REPORT-${action}-${unit}-${name}-${note}-${photoInput.files.length}`;
+  const now = Date.now();
+
+  if(sendKey === lastSendKey && now - lastSendTime < 30000){
+    showBigStatus("⚠️ Ese reporte ya fue enviado.", "error");
+    playBeep("error");
+    vibratePhone("error");
+    return;
+  }
+
+  isSending = true;
+  lastSendKey = sendKey;
+  lastSendTime = now;
+  setButtonsDisabled(true);
+  setStatus("⏳ Enviando reporte...");
+  showBigStatus(hasPhotos ? "📸 Subiendo fotos..." : "⏳ Enviando reporte...", "loading");
+
+  try{
+    const data = await uploadPhotosWithReport({
+      unit,
+      name,
+      action,
+      note,
+      role:"Cleaner"
+    });
+
+    setStatus(data.message || "✅ Reporte enviado");
+    showBigStatus(data.message || "✅ Reporte enviado", "success");
+    playBeep("success");
+    vibratePhone("success");
+
+    document.getElementById("note").value = "";
+    document.getElementById("photoInput").value = "";
+    updatePhotoCount();
+
+    await loadMyReports();
+    await loadCleanerAssignments(false);
+
+  }catch(error){
+    setStatus("❌ Error: " + error.message);
+    showBigStatus("❌ Error: " + error.message, "error");
+    playBeep("error");
+    vibratePhone("error");
+  }finally{
+    isSending = false;
+    setButtonsDisabled(false);
+  }
+}
+
+async function loadMyReports(){
+  const name = document.getElementById("name").value.trim();
+
+  if(!name){
+    document.getElementById("history").innerHTML =
+      "<div class='empty'>Tu historial aparecerá aquí después de cargar tus unidades.</div>";
+    return;
+  }
+
+  try{
+    const params = new URLSearchParams({
+      employee:name,
+      role:"Cleaner"
+    });
+
+    if(selectedUnit){
+      params.append("unit", selectedUnit);
+    }
+
+    const response = await fetch(`/my-reports?${params.toString()}&t=${Date.now()}`);
+    const data = await response.json();
+
+    if(!data.ok || !data.reports || data.reports.length === 0){
+      document.getElementById("history").innerHTML =
+        "<div class='empty'>Todavía no hay reportes o acciones en tu historial de hoy.</div>";
+      return;
+    }
+
+    let html = `<div class="history-list">`;
+
+    data.reports.forEach(item => {
+      const time = item.timeDisplay || item.time || "";
+      const action = item.action || item.aiCategory || "Reporte";
+      const unit = item.unit || "";
+      const note = item.originalMessage || item.note || "";
+      const sent = item.hotsosSent ? "HotSOS enviado ✅" : (item.needsHotsos ? "Pendiente HotSOS" : "Guardado ✅");
+      const photosCount = Number(item.photosCount || 0);
+
+      html += `
+        <div class="history-item">
+          <div class="history-top">
+            <span>${escapeHtml(time)} • ${escapeHtml(unit)}</span>
+            <span>${escapeHtml(sent)}</span>
+          </div>
+          <div class="history-action">${escapeHtml(action)}</div>
+          ${note ? `<div class="history-note">${escapeHtml(note)}</div>` : ""}
+          ${photosCount > 0 ? `<div class="history-photos">📸 ${photosCount} foto${photosCount === 1 ? "" : "s"}</div>` : ""}
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    document.getElementById("history").innerHTML = html;
+
+  }catch(error){
+    document.getElementById("history").innerHTML =
+      "<div class='empty'>No se pudo cargar el historial.</div>";
+  }
+}
+
+let socket = null;
+
+try{
+  socket = io();
+
+  socket.on("ops-update", () => {
+    if(currentCleanerName){
+      loadCleanerAssignments(false);
+      loadMyReports();
+    }
+  });
+}catch(error){}
 </script>
-<script src="/socket.io/socket.io.js"></script>
 </body>
 </html>
