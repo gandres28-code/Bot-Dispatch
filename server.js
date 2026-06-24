@@ -2328,21 +2328,22 @@ app.get("/operations-reports", async (req, res) => {
     res.status(500).json({ ok: false, message: error.message, reports: [] });
   }
 });
-
 app.get("/report-photos", async (req, res) => {
-  let reportId = req.query.reportId || "";
+  let reportId = String(req.query.reportId || "").trim();
 
-if (
-  reportId &&
-  !String(reportId).startsWith("RPT-")
-) {
-  reportId = `RPT-${reportId}`;
-}
+  if (
+    reportId &&
+    !reportId.startsWith("RPT-")
+  ) {
+    reportId = `RPT-${reportId}`;
+  }
+
   try {
-    const reportId = String(req.query.reportId || "").trim();
-
     if (!reportId) {
-      return res.status(400).json({ ok: false, message: "Report ID requerido" });
+      return res.status(400).json({
+        ok: false,
+        message: "Report ID requerido"
+      });
     }
 
     const photos = await getReportPhotosByReportId(reportId);
@@ -2353,9 +2354,15 @@ if (
       count: photos.length,
       photos,
     });
+
   } catch (error) {
     console.error("Error en /report-photos:", error.message);
-    res.status(500).json({ ok: false, message: error.message, photos: [] });
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+      photos: []
+    });
   }
 });
 
