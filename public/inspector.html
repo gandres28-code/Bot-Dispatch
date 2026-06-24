@@ -3,45 +3,122 @@
 <head>
   <title>Panel de Inspectores</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
 
   <style>
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --green:#059669;
+      --red:#dc2626;
+      --blue:#2563eb;
+      --purple:#7c3aed;
+      --orange:#f59e0b;
+      --dark:#111827;
+      --shadow:0 14px 35px rgba(17,24,39,.10);
+    }
+
+    *{
+      box-sizing:border-box;
+    }
+
     body{
-      font-family:Arial,sans-serif;
-      padding:20px;
-      background:#f4f4f4;
-      max-width:600px;
+      font-family:Arial, sans-serif;
+      margin:0;
+      padding:16px;
+      background:linear-gradient(180deg,#eef2ff 0%,#f9fafb 35%,#f3f4f6 100%);
+      color:var(--text);
+      max-width:720px;
       margin:auto;
     }
 
-    h2{
-      text-align:center;
-      margin-bottom:20px;
+    .app-shell{
+      padding-bottom:40px;
+    }
+
+    .top-card{
+      background:var(--dark);
+      color:white;
+      padding:22px;
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      margin-bottom:16px;
+    }
+
+    .top-card h1{
+      margin:0;
+      font-size:26px;
+      letter-spacing:-.5px;
+    }
+
+    .top-card p{
+      margin:8px 0 0;
+      color:#d1d5db;
+      font-size:14px;
+      line-height:1.4;
+    }
+
+    .card{
+      background:var(--card);
+      padding:18px;
+      border-radius:22px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(229,231,235,.9);
+      margin-bottom:16px;
+    }
+
+    .section-title{
+      font-weight:800;
+      font-size:16px;
+      margin-bottom:10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+
+    .muted{
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.35;
     }
 
     input, textarea{
       width:100%;
       padding:15px;
-      margin:10px 0;
-      font-size:18px;
-      border-radius:10px;
-      border:1px solid #ccc;
+      margin:8px 0;
+      font-size:16px;
+      border-radius:16px;
+      border:1px solid var(--border);
       box-sizing:border-box;
+      background:#fff;
+      outline:none;
+    }
+
+    input:focus, textarea:focus{
+      border-color:#6366f1;
+      box-shadow:0 0 0 4px rgba(99,102,241,.12);
     }
 
     textarea{
-      min-height:110px;
+      min-height:115px;
+      resize:vertical;
     }
 
     button{
       width:100%;
-      padding:18px;
-      margin:10px 0;
-      font-size:19px;
+      padding:16px;
+      margin:8px 0;
+      font-size:16px;
       border:none;
-      border-radius:12px;
+      border-radius:16px;
       color:white;
       cursor:pointer;
-      font-weight:bold;
+      font-weight:800;
+      letter-spacing:.1px;
     }
 
     button:disabled{
@@ -49,17 +126,180 @@
       cursor:not-allowed;
     }
 
-    .start{ background:#7c3aed; }
-    .ready{ background:#059669; }
-    .report{ background:#f59e0b; }
-    .supplies{ background:#2563eb; }
-    .lost{ background:#111827; }
+    .btn-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .btn-row button{
+      margin:0;
+    }
+
+    .start{ background:var(--purple); }
+    .ready{ background:var(--green); }
+    .report{ background:var(--orange); }
+    .supplies{ background:var(--blue); }
+    .lost{ background:var(--dark); }
+    .secondary{ background:#4b5563; }
+    .danger{ background:var(--red); }
+
+    .assignment-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:12px;
+    }
+
+    .assignment-card{
+      padding:16px;
+      border-radius:18px;
+      background:#ffffff;
+      border:1px solid var(--border);
+      box-shadow:0 8px 20px rgba(17,24,39,.06);
+      cursor:pointer;
+      transition:.15s ease;
+      min-height:110px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+
+    .assignment-card:active{
+      transform:scale(.98);
+    }
+
+    .assignment-card.selected{
+      outline:4px solid rgba(17,24,39,.15);
+      border-color:#111827;
+    }
+
+    .unit-title{
+      font-size:20px;
+      font-weight:900;
+      letter-spacing:-.3px;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:max-content;
+      padding:5px 9px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+      background:#eef2ff;
+      color:#3730a3;
+      margin-top:8px;
+    }
+
+    .assignment-card.orange{
+      background:#fff7ed;
+      border-color:#fed7aa;
+    }
+
+    .assignment-card.green{
+      background:#ecfdf5;
+      border-color:#a7f3d0;
+    }
+
+    .assignment-card.purple{
+      background:#f5f3ff;
+      border-color:#ddd6fe;
+    }
+
+    .assignment-card.urgent{
+      background:#fef2f2;
+      border-color:#fecaca;
+      animation:pulseBorder 1.2s infinite;
+    }
+
+    .assignment-card.urgent .pill{
+      background:#dc2626;
+      color:white;
+    }
+
+    @keyframes pulseBorder{
+      0%{ box-shadow:0 0 0 0 rgba(220,38,38,.38); }
+      70%{ box-shadow:0 0 0 10px rgba(220,38,38,0); }
+      100%{ box-shadow:0 0 0 0 rgba(220,38,38,0); }
+    }
+
+    .selected-unit-box{
+      display:none;
+      background:#f9fafb;
+      border:1px solid var(--border);
+      padding:14px;
+      border-radius:16px;
+      margin-bottom:12px;
+      font-weight:900;
+    }
+
+    .file-box{
+      border:1.5px dashed #c7d2fe;
+      background:#eef2ff;
+      padding:14px;
+      border-radius:18px;
+      margin:8px 0 12px;
+    }
+
+    .file-box label{
+      font-weight:900;
+      display:block;
+      margin-bottom:4px;
+    }
+
+    .photo-preview{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      margin-top:10px;
+    }
+
+    .photo-preview img{
+      width:100%;
+      height:82px;
+      object-fit:cover;
+      border-radius:12px;
+      border:1px solid #c7d2fe;
+    }
+
+    .history-list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:10px;
+    }
+
+    .history-item{
+      background:#f9fafb;
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+    }
+
+    .history-top{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      font-weight:900;
+      font-size:13px;
+    }
+
+    .history-note{
+      margin-top:6px;
+      color:#374151;
+      font-size:13px;
+      line-height:1.35;
+      white-space:pre-wrap;
+    }
 
     #status{
       text-align:center;
-      font-weight:bold;
-      margin-top:20px;
-      font-size:18px;
+      font-weight:900;
+      margin-top:14px;
+      font-size:16px;
     }
 
     #bigStatus{
@@ -68,94 +308,68 @@
       top:0;
       left:0;
       width:100%;
-      padding:22px;
+      padding:20px 18px;
       box-sizing:border-box;
       color:white;
-      font-size:22px;
-      font-weight:bold;
+      font-size:18px;
+      font-weight:900;
       text-align:center;
       z-index:9999;
-      box-shadow:0 4px 14px rgba(0,0,0,.25);
+      box-shadow:0 8px 25px rgba(0,0,0,.25);
     }
 
-    #bigStatus.success{
-      background:#16a34a;
+    #bigStatus.success{ background:var(--green); }
+    #bigStatus.error{ background:var(--red); }
+    #bigStatus.loading{ background:var(--blue); }
+
+    .mini-stats{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-top:14px;
     }
 
-    #bigStatus.error{
-      background:#dc2626;
-    }
-
-    #bigStatus.loading{
-      background:#2563eb;
-    }
-
-    .card{
-      background:white;
-      padding:20px;
-      border-radius:15px;
-      box-shadow:0 2px 10px rgba(0,0,0,.08);
-    }
-
-    .note-title{
-      font-size:14px;
-      color:#666;
-      margin-top:15px;
-    }
-
-    .help{
-      font-size:13px;
-      color:#777;
-      line-height:1.4;
-      margin-bottom:10px;
+    .stat{
+      background:rgba(255,255,255,.12);
+      padding:11px;
+      border-radius:16px;
       text-align:center;
-    }.assignment-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:12px;
-  margin:15px 0;
-}
+    }
 
-.assignment-card{
-  padding:16px;
-  border-radius:14px;
-  background:#e5e7eb;
-  font-weight:bold;
-  text-align:center;
-  cursor:pointer;
-  border:2px solid transparent;
-}
+    .stat strong{
+      display:block;
+      font-size:20px;
+    }
 
-.assignment-card.orange{
-  background:#f59e0b;
-  color:white;
-}
+    .stat span{
+      font-size:11px;
+      color:#d1d5db;
+    }
 
-.assignment-card.green{
-  background:#16a34a;
-  color:white;
-}
+    .empty{
+      text-align:center;
+      padding:22px 10px;
+      color:var(--muted);
+      font-weight:700;
+    }
 
-.assignment-card.purple{
-  background:#7c3aed;
-  color:white;
-}
+    @media(max-width:520px){
+      body{
+        padding:12px;
+      }
 
-.assignment-card.urgent{
-  background:#dc2626;
-  color:white;
-  animation: blink 1s infinite;
-}
+      .assignment-grid{
+        grid-template-columns:1fr;
+      }
 
-.assignment-card.selected{
-  border:3px solid #111827;
-}
+      .btn-row{
+        grid-template-columns:1fr;
+      }
 
-@keyframes blink{
-  0%{ opacity:1; }
-  50%{ opacity:.45; }
-  100%{ opacity:1; }
-}
+      .photo-preview{
+        grid-template-columns:repeat(2,1fr);
+      }
+    }
   </style>
 </head>
 
@@ -163,79 +377,148 @@
 
 <div id="bigStatus"></div>
 
-<div class="card">
+<div class="app-shell">
 
-<h2>🔍 Panel de Inspectores</h2>
+  <div class="top-card">
+    <h1>🔍 Panel de Inspectores</h1>
+    <p>Revisa tus unidades, inicia inspección, marca Ready for Guest y envía reportes con varias fotos. Tú escribes libre, la IA clasifica atrás.</p>
 
-<p class="help">
-Usa este panel para iniciar inspección, marcar una unidad lista, reportar errores de limpieza o pedir supplies.
-</p>
+    <div class="mini-stats">
+      <div class="stat">
+        <strong id="statTotal">0</strong>
+        <span>Asignadas</span>
+      </div>
+      <div class="stat">
+        <strong id="statReady">0</strong>
+        <span>Ready</span>
+      </div>
+      <div class="stat">
+        <strong id="statPending">0</strong>
+        <span>Pendientes</span>
+      </div>
+    </div>
+  </div>
 
-<input id="code" placeholder="Código del inspector">
+  <div class="card">
+    <div class="section-title">
+      <span>Acceso</span>
+      <span class="muted">Código de inspector</span>
+    </div>
 
-<button class="start action-btn" onclick="loadInspectorAssignments()">
-  🔎 Ver mis inspecciones
-</button>
+    <input id="code" placeholder="Código del inspector" autocomplete="off">
 
-<div id="inspectorName" style="text-align:center; font-weight:bold; margin:15px 0;"></div>
+    <button class="start action-btn" onclick="loadInspectorAssignments()">
+      🔎 Ver mis inspecciones
+    </button>
 
-<div id="assignments"></div>
+    <div id="inspectorName" style="text-align:center; font-weight:900; margin:12px 0;"></div>
+  </div>
 
-<input id="name" placeholder="Nombre del inspector" style="display:none;">
+  <div class="card">
+    <div class="section-title">
+      <span>Mis unidades de hoy</span>
+      <button class="secondary action-btn" style="width:auto; padding:9px 12px; font-size:12px;" onclick="loadInspectorAssignments()">Actualizar</button>
+    </div>
 
-<input
-  id="unit"
-  placeholder="Unidad"
-  style="display:none;"
->
-<div id="inspectionPanel" style="display:none;">
-<div class="note-title">
-Informe / Problema / Supplies
+    <div id="assignments" class="empty">Ingresa tu código para ver tus inspecciones.</div>
+  </div>
+
+  <input id="name" placeholder="Nombre del inspector" style="display:none;">
+  <input id="unit" placeholder="Unidad" style="display:none;">
+
+  <div id="inspectionPanel" class="card" style="display:none;">
+    <div id="selectedUnitBox" class="selected-unit-box"></div>
+
+    <div class="section-title">
+      <span>Acciones rápidas</span>
+      <span class="muted">Se guardan al momento</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="start action-btn" onclick="sendInspectionAction('INSPECTION_START')">
+        🔍 Iniciar inspección
+      </button>
+
+      <button class="ready action-btn" onclick="sendInspectionAction('READY_GUEST')">
+        ✅ Ready Guest
+      </button>
+    </div>
+
+    <div class="section-title" style="margin-top:18px;">
+      <span>Enviar reporte</span>
+      <span class="muted">Mensaje libre + fotos</span>
+    </div>
+
+    <textarea
+      id="note"
+      placeholder="Ejemplo: faltan towels, hay cabello en el baño, el sink está tapado, encontré una cartera..."
+    ></textarea>
+
+    <div class="file-box">
+      <label>Fotos opcionales o evidencia</label>
+      <div class="muted">Puedes seleccionar varias fotos a la vez.</div>
+      <input
+        type="file"
+        id="photoInput"
+        accept="image/*"
+        capture="environment"
+        multiple
+        onchange="previewPhotos()"
+      >
+      <div id="photoPreview" class="photo-preview"></div>
+    </div>
+
+    <button class="report action-btn" onclick="sendSmartReport('INSPECTION_REPORT')">
+      📝 Enviar reporte inteligente
+    </button>
+
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="supplies action-btn" onclick="sendSmartReport('INSPECTION_SUPPLIES')">
+        🧺 Pedir algo
+      </button>
+
+      <button class="lost action-btn" onclick="sendSmartReport('LOST_FOUND')">
+        🎒 Lost & Found
+      </button>
+    </div>
+
+    <p id="status"></p>
+  </div>
+
+  <div id="historyCard" class="card" style="display:none;">
+    <div class="section-title">
+      <span>Historial de hoy</span>
+      <button class="secondary action-btn" style="width:auto; padding:9px 12px; font-size:12px;" onclick="loadMyHistory()">Actualizar</button>
+    </div>
+
+    <div id="historyList" class="history-list"></div>
+  </div>
+
 </div>
 
-<textarea
-  id="note"
-  placeholder="Escribe aquí qué salió mal, qué falta o qué necesita la unidad..."
-></textarea>
-
-  <div class="note-title">
-Foto opcional para problemas / Lost & Found
-</div>
-
-<input
-  type="file"
-  id="photoInput"
-  accept="image/*"
-  capture="environment"
-/>
-<button class="start action-btn" onclick="sendInspectionAction('INSPECTION_START')">
-  🔍 Empezar inspección
-</button>
-
-<button class="ready action-btn" onclick="sendInspectionAction('READY_GUEST')">
-  ✅ Ready for Guest
-</button>
-
-<button class="report action-btn" onclick="sendInspectionAction('INSPECTION_REPORT')">
-  📝 Informe de error de limpieza
-</button>
- 
-<button class="lost action-btn" onclick="sendInspectionAction('LOST_FOUND')">
-  🎒 Lost & Found
-</button>
-
-<button class="supplies action-btn" onclick="sendInspectionAction('INSPECTION_SUPPLIES')">
-  🧺 Pedir algo para la unidad
-</button>
-</div>
-<p id="status"></p>
-
-</div>
-  
+<script src="/socket.io/socket.io.js"></script>
 <script>
 let isSending = false;
 let lastSendKey = "";
 let lastSendTime = 0;
+let selectedUnit = "";
+let currentInspectorCode = "";
+let currentInspectorName = "";
+let autoRefreshTimer = null;
+let lastUnits = [];
+
+function escapeHtml(value){
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function safeJsString(value){
+  return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
 
 function setButtonsDisabled(disabled){
   document.querySelectorAll(".action-btn").forEach(button => {
@@ -289,39 +572,6 @@ function vibratePhone(type){
   }
 }
 
-async function uploadInspectionPhotoIfNeeded(unit, name, action, note){
-  const photoInput = document.getElementById("photoInput");
-  const file = photoInput.files[0];
-
-  if(!file){
-    return "";
-  }
-
-  const formData = new FormData();
-  formData.append("photo", file);
-  formData.append("unit", unit);
-  formData.append("name", name);
-  formData.append("role", "Inspector");
-  formData.append("action", action);
-  formData.append("note", note);
-
-  const response = await fetch("/upload-photo", {
-    method: "POST",
-    body: formData
-  });
-
-  const data = await response.json();
-
-  if(!data.success){
-    throw new Error(data.error || "Error subiendo foto");
-  }
-
-  return data.photoUrl;
-}
-let selectedUnit = "";
-let currentInspectorCode = "";
-let autoRefreshTimer = null;
-
 function getCardClass(status, priority){
   if(String(priority || "").toLowerCase() === "urgent"){
     return "urgent";
@@ -342,17 +592,47 @@ function getCardClass(status, priority){
   return "";
 }
 
+function statusLabel(status, priority){
+  if(String(priority || "").toLowerCase() === "urgent"){
+    return "🚨 URGENTE";
+  }
+
+  if(status === "Cleaned - Awaiting Inspection"){
+    return "Lista para inspección";
+  }
+
+  if(status === "Inspection Started"){
+    return "Inspección iniciada";
+  }
+
+  if(status === "Ready for Guest"){
+    return "Ready for Guest";
+  }
+
+  return status || "Pendiente";
+}
+
+function updateStats(units){
+  const total = units.length;
+  const ready = units.filter(u => u.status === "Ready for Guest").length;
+  const pending = total - ready;
+
+  document.getElementById("statTotal").innerText = total;
+  document.getElementById("statReady").innerText = ready;
+  document.getElementById("statPending").innerText = pending;
+}
+
 async function loadInspectorAssignments(){
   const code = document.getElementById("code").value.trim();
   currentInspectorCode = code;
-localStorage.setItem("inspectorCode", code);
+  localStorage.setItem("inspectorCode", code);
 
   if(!code){
     alert("Escribe tu código");
     return;
   }
 
-  document.getElementById("assignments").innerHTML = "⏳ Cargando...";
+  document.getElementById("assignments").innerHTML = "⏳ Cargando inspecciones...";
 
   try{
     const response = await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}`);
@@ -362,33 +642,42 @@ localStorage.setItem("inspectorCode", code);
       document.getElementById("assignments").innerHTML = "";
       alert(data.message || "No se pudieron cargar las inspecciones");
       return;
-      
-      startInspectorAutoRefresh();
     }
 
-    document.getElementById("name").value = data.inspector;
-    document.getElementById("inspectorName").innerText = `Inspector: ${data.inspector}`;
+    currentInspectorName = data.inspector || "";
+    document.getElementById("name").value = currentInspectorName;
+    document.getElementById("inspectorName").innerText = `Inspector: ${currentInspectorName}`;
 
-    if(!data.units || data.units.length === 0){
+    lastUnits = data.units || [];
+    updateStats(lastUnits);
+
+    if(!lastUnits.length){
       document.getElementById("assignments").innerHTML =
-        "<p style='text-align:center;'>No tienes unidades asignadas hoy.</p>";
+        "<div class='empty'>No tienes unidades asignadas hoy.</div>";
+      startInspectorAutoRefresh();
+      loadMyHistory();
       return;
     }
 
     let html = `<div class="assignment-grid">`;
 
-    data.units.forEach(item => {
+    lastUnits.forEach(item => {
       const cardClass = getCardClass(item.status, item.priority);
+      const cleanUnit = escapeHtml(item.unit);
+      const idUnit = String(item.unit || "").replace(/[^a-zA-Z0-9]/g, "");
 
       html += `
         <div
           class="assignment-card ${cardClass}"
-          onclick="selectAssignment('${item.unit.replace(/'/g, "\\'")}')"
-          id="card-${item.unit.replace(/[^a-zA-Z0-9]/g, "")}"
+          onclick="selectAssignment('${safeJsString(item.unit)}')"
+          id="card-${idUnit}"
         >
-          <div>${item.unit}</div>
-          <div style="font-size:12px; margin-top:6px;">
-            ${item.priority === "Urgent" ? "🚨 URGENTE" : item.status || "Pendiente"}
+          <div>
+            <div class="unit-title">${cleanUnit}</div>
+            <div class="pill">${escapeHtml(statusLabel(item.status, item.priority))}</div>
+          </div>
+          <div class="muted" style="margin-top:10px;">
+            ${escapeHtml(item.priority || "Normal")}
           </div>
         </div>
       `;
@@ -398,10 +687,32 @@ localStorage.setItem("inspectorCode", code);
 
     document.getElementById("assignments").innerHTML = html;
 
+    if(selectedUnit){
+      const stillExists = lastUnits.some(item => item.unit === selectedUnit);
+      if(stillExists){
+        markSelectedCard(selectedUnit);
+      }
+    }
+
+    startInspectorAutoRefresh();
+    loadMyHistory();
+
   }catch(error){
     document.getElementById("assignments").innerHTML = "";
-    document.getElementById("inspectionPanel").style.display = "block";
-    alert("Error cargando inspecciones");
+    alert("Error cargando inspecciones: " + error.message);
+  }
+}
+
+function markSelectedCard(unit){
+  document.querySelectorAll(".assignment-card").forEach(card => {
+    card.classList.remove("selected");
+  });
+
+  const cardId = "card-" + String(unit || "").replace(/[^a-zA-Z0-9]/g, "");
+  const card = document.getElementById(cardId);
+
+  if(card){
+    card.classList.add("selected");
   }
 }
 
@@ -409,42 +720,47 @@ function selectAssignment(unit){
   selectedUnit = unit;
 
   document.getElementById("unit").value = unit;
+  document.getElementById("inspectionPanel").style.display = "block";
 
-  document.querySelectorAll(".assignment-card").forEach(card => {
-    card.classList.remove("selected");
-  });
+  const selectedBox = document.getElementById("selectedUnitBox");
+  selectedBox.style.display = "block";
+  selectedBox.innerText = `Unidad seleccionada: ${unit}`;
 
-  const cardId = "card-" + unit.replace(/[^a-zA-Z0-9]/g, "");
-  const card = document.getElementById(cardId);
-
- if(card){
-  card.classList.add("selected");
+  markSelectedCard(unit);
+  showBigStatus(`Unidad seleccionada: ${unit}`, "success");
+  loadMyHistory();
 }
 
-document.getElementById("inspectionPanel").style.display = "block";
-
-showBigStatus(`Unidad seleccionada: ${unit}`, "success");
-}
-  function startInspectorAutoRefresh(){
+function startInspectorAutoRefresh(){
   if(autoRefreshTimer){
     return;
   }
 
   autoRefreshTimer = setInterval(() => {
-    if(currentInspectorCode){
+    if(currentInspectorCode && !isSending){
       loadInspectorAssignments();
     }
-  }, 10000);
+  }, 15000);
 }
-async function sendInspectionAction(action){
 
+function previewPhotos(){
+  const input = document.getElementById("photoInput");
+  const preview = document.getElementById("photoPreview");
+  preview.innerHTML = "";
+
+  Array.from(input.files || []).slice(0, 9).forEach(file => {
+    const url = URL.createObjectURL(file);
+    preview.innerHTML += `<img src="${url}" alt="Preview">`;
+  });
+}
+
+async function sendInspectionAction(action){
   if(isSending){
     return;
   }
 
   const name = document.getElementById("name").value.trim();
   const unit = document.getElementById("unit").value.trim().toUpperCase();
-  const note = document.getElementById("note").value.trim();
 
   if(!name){
     alert("Escribe tu nombre");
@@ -452,24 +768,11 @@ async function sendInspectionAction(action){
   }
 
   if(!unit){
-    alert("Escribe la unidad");
+    alert("Selecciona una unidad");
     return;
   }
 
-  if((action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES" || action === "LOST_FOUND") && !note){
-    alert("Debes escribir un informe o nota");
-    return;
-  }
-
-  const photoInput = document.getElementById("photoInput");
-  const hasPhoto = photoInput.files.length > 0;
-
-  if((action === "INSPECTION_REPORT" || action === "LOST_FOUND") && !hasPhoto){
-    alert("Debes agregar una foto");
-    return;
-  }
-
-  const sendKey = `${action}-${unit}-${name}-${note}-${hasPhoto}`;
+  const sendKey = `${action}-${unit}-${name}`;
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
@@ -484,21 +787,10 @@ async function sendInspectionAction(action){
   lastSendTime = now;
 
   setButtonsDisabled(true);
-
   document.getElementById("status").innerText = "⏳ Enviando...";
-  showBigStatus("⏳ Enviando...", "loading");
+  showBigStatus("⏳ Enviando acción...", "loading");
 
   try{
-
-    let photoUrl = "";
-
-    if(hasPhoto){
-      showBigStatus("📸 Subiendo foto...", "loading");
-      photoUrl = await uploadInspectionPhotoIfNeeded(unit, name, action, note);
-    }
-
-    showBigStatus("⏳ Enviando reporte...", "loading");
-
     const response = await fetch("/inspector-action",{
       method:"POST",
       headers:{
@@ -507,41 +799,31 @@ async function sendInspectionAction(action){
       body:JSON.stringify({
         action,
         unit,
-        note,
+        note:"",
         name,
-        photoUrl
+        photoUrl:""
       })
     });
 
     const data = await response.json();
 
     if(data.success){
-      document.getElementById("status").innerText =
-        data.message || "✅ Enviado";
-
+      document.getElementById("status").innerText = data.message || "✅ Enviado";
       showBigStatus(data.message || "✅ Enviado correctamente", "success");
       playBeep("success");
       vibratePhone("success");
 
-      if(action !== "INSPECTION_START"){
-        document.getElementById("note").value = "";
-      }
-
-      document.getElementById("photoInput").value = "";
-
+      await loadInspectorAssignments();
+      await loadMyHistory();
     }else{
-      document.getElementById("status").innerText =
-        data.message || "❌ Error";
-
+      document.getElementById("status").innerText = data.message || "❌ Error";
       showBigStatus(data.message || "❌ Error", "error");
       playBeep("error");
       vibratePhone("error");
     }
 
   }catch(error){
-    document.getElementById("status").innerText =
-      "❌ Error: " + error.message;
-
+    document.getElementById("status").innerText = "❌ Error: " + error.message;
     showBigStatus("❌ Error: " + error.message, "error");
     playBeep("error");
     vibratePhone("error");
@@ -550,26 +832,181 @@ async function sendInspectionAction(action){
     setButtonsDisabled(false);
   }
 }
-  const socket = io();
+
+async function sendSmartReport(action){
+  if(isSending){
+    return;
+  }
+
+  const name = document.getElementById("name").value.trim();
+  const unit = document.getElementById("unit").value.trim().toUpperCase();
+  const message = document.getElementById("note").value.trim();
+  const photoInput = document.getElementById("photoInput");
+  const hasPhotos = photoInput.files.length > 0;
+
+  if(!name){
+    alert("Escribe tu nombre");
+    return;
+  }
+
+  if(!unit){
+    alert("Selecciona una unidad");
+    return;
+  }
+
+  if(!message){
+    alert("Escribe el mensaje del reporte");
+    return;
+  }
+
+  if((action === "INSPECTION_REPORT" || action === "LOST_FOUND") && !hasPhotos){
+    alert("Debes agregar al menos una foto");
+    return;
+  }
+
+  const sendKey = `${action}-${unit}-${name}-${message}-${photoInput.files.length}`;
+  const now = Date.now();
+
+  if(sendKey === lastSendKey && now - lastSendTime < 30000){
+    showBigStatus("⚠️ Ya fue enviado. Espera unos segundos.", "error");
+    playBeep("error");
+    vibratePhone("error");
+    return;
+  }
+
+  isSending = true;
+  lastSendKey = sendKey;
+  lastSendTime = now;
+
+  setButtonsDisabled(true);
+  document.getElementById("status").innerText = "⏳ Enviando reporte...";
+  showBigStatus("📸 Subiendo reporte y fotos...", "loading");
+
+  try{
+    const formData = new FormData();
+    formData.append("unit", unit);
+    formData.append("employee", name);
+    formData.append("name", name);
+    formData.append("role", "Inspector");
+    formData.append("action", action);
+    formData.append("message", message);
+    formData.append("note", message);
+    formData.append("sourcePanel", "Inspector Panel");
+
+    Array.from(photoInput.files || []).forEach(file => {
+      formData.append("photos", file);
+    });
+
+    const response = await fetch("/submit-report", {
+      method:"POST",
+      body:formData
+    });
+
+    const data = await response.json();
+
+    if(data.success || data.ok){
+      document.getElementById("status").innerText = data.message || "✅ Reporte enviado";
+      showBigStatus(data.message || "✅ Reporte enviado correctamente", "success");
+      playBeep("success");
+      vibratePhone("success");
+
+      document.getElementById("note").value = "";
+      photoInput.value = "";
+      document.getElementById("photoPreview").innerHTML = "";
+
+      await loadMyHistory();
+    }else{
+      document.getElementById("status").innerText = data.message || data.error || "❌ Error";
+      showBigStatus(data.message || data.error || "❌ Error", "error");
+      playBeep("error");
+      vibratePhone("error");
+    }
+
+  }catch(error){
+    document.getElementById("status").innerText = "❌ Error: " + error.message;
+    showBigStatus("❌ Error: " + error.message, "error");
+    playBeep("error");
+    vibratePhone("error");
+  }finally{
+    isSending = false;
+    setButtonsDisabled(false);
+  }
+}
+
+async function loadMyHistory(){
+  const name = document.getElementById("name").value.trim() || currentInspectorName;
+  const historyCard = document.getElementById("historyCard");
+  const historyList = document.getElementById("historyList");
+
+  if(!name){
+    historyCard.style.display = "none";
+    return;
+  }
+
+  historyCard.style.display = "block";
+  historyList.innerHTML = "⏳ Cargando historial...";
+
+  try{
+    const params = new URLSearchParams({
+      employee:name,
+      role:"Inspector"
+    });
+
+    if(selectedUnit){
+      params.append("unit", selectedUnit);
+    }
+
+    const response = await fetch(`/my-reports?${params.toString()}`);
+    const data = await response.json();
+
+    const reports = data.reports || data.events || [];
+
+    if(!reports.length){
+      historyList.innerHTML = "<div class='empty'>Todavía no hay reportes enviados hoy.</div>";
+      return;
+    }
+
+    let html = "";
+
+    reports.slice(0, 20).forEach(item => {
+      const time = item.time || item.displayTime || "";
+      const unit = item.unit || "";
+      const action = item.action || item.category || "Reporte";
+      const msg = item.message || item.originalMessage || item.note || item.summary || "";
+      const sent = item.hotsosSent ? "HotSOS enviado ✅" : "Recibido ✅";
+
+      html += `
+        <div class="history-item">
+          <div class="history-top">
+            <span>${escapeHtml(time)} · ${escapeHtml(unit)}</span>
+            <span>${escapeHtml(sent)}</span>
+          </div>
+          <div class="muted">${escapeHtml(action)}</div>
+          ${msg ? `<div class="history-note">${escapeHtml(msg)}</div>` : ""}
+        </div>
+      `;
+    });
+
+    historyList.innerHTML = html;
+
+  }catch(error){
+    historyList.innerHTML = "<div class='empty'>No se pudo cargar el historial.</div>";
+  }
+}
+
+const socket = io();
 
 socket.on("ops-update", () => {
-  if(typeof loadMaster === "function"){
-    loadMaster();
-  }
-
-  if(typeof loadCleanerAssignments === "function" && typeof currentCleanerName !== "undefined" && currentCleanerName){
-    loadCleanerAssignments();
-  }
-
-  if(typeof loadInspectorAssignments === "function" && typeof currentInspectorCode !== "undefined" && currentInspectorCode){
+  if(currentInspectorCode && !isSending){
     loadInspectorAssignments();
   }
 
-  if(typeof loadEvents === "function"){
-    loadEvents();
+  if(currentInspectorName){
+    loadMyHistory();
   }
 });
-  window.addEventListener("load", () => {
+
+window.addEventListener("load", () => {
   const savedCode = localStorage.getItem("inspectorCode");
 
   if(savedCode){
@@ -578,8 +1015,6 @@ socket.on("ops-update", () => {
     loadInspectorAssignments();
   }
 });
-  
 </script>
-<script src="/socket.io/socket.io.js"></script>
 </body>
 </html>
