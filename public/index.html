@@ -971,11 +971,32 @@ async function loadMyReports(){
 
     data.reports.forEach(item => {
       const time = item.timeDisplay || item.time || "";
-      const action = item.action || item.aiCategory || "Reporte";
-      const unit = item.unit || "";
-      const note = item.originalMessage || item.note || "";
-      const sent = item.hotsosSent ? "HotSOS enviado ✅" : (item.needsHotsos ? "Pendiente HotSOS" : "Guardado ✅");
-      const photosCount = Number(item.photosCount || 0);
+      const action =
+  item.aiCategory ||
+  item.category ||
+  item.action ||
+  "Reporte";
+
+const note =
+  item.message ||
+  item.originalMessage ||
+  item.note ||
+  item.aiSummary ||
+  "";
+
+const sent =
+  item.hotsosSent
+    ? "HotSOS enviado ✅"
+    : (item.needsHotSOS
+        ? "Pendiente HotSOS"
+        : "Guardado ✅");
+
+const photos =
+  item.photos || [];
+
+const photosCount =
+  photos.length ||
+  Number(item.photosCount || 0);
 
       html += `
         <div class="history-item">
@@ -985,7 +1006,37 @@ async function loadMyReports(){
           </div>
           <div class="history-action">${escapeHtml(action)}</div>
           ${note ? `<div class="history-note">${escapeHtml(note)}</div>` : ""}
-          ${photosCount > 0 ? `<div class="history-photos">📸 ${photosCount} foto${photosCount === 1 ? "" : "s"}</div>` : ""}
+         ${
+  photos.length > 0
+    ? `
+      <div class="photo-preview" style="margin-top:10px;">
+        ${photos.map(photo => {
+          const url =
+            photo.url ||
+            photo.photoUrl ||
+            "";
+
+          if(!url) return "";
+
+          return `
+            <a href="${url}" target="_blank">
+              <img
+                src="${url}"
+                style="
+                  width:90px;
+                  height:90px;
+                  object-fit:cover;
+                  border-radius:12px;
+                  margin-right:6px;
+                "
+              >
+            </a>
+          `;
+        }).join("")}
+      </div>
+    `
+    : ""
+}
         </div>
       `;
     });
