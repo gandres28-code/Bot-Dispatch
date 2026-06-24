@@ -406,7 +406,7 @@
 
   <div class="hero">
     <h1>Panel de Limpieza</h1>
-    <p>Ve tus unidades, marca inicio/terminado y envía reportes con varias fotos. La IA clasifica el mensaje automáticamente para operaciones.</p>
+    <p>Ve tus unidades, marca inicio/terminado y envía un solo reporte inteligente. La IA clasifica el mensaje automáticamente para operaciones.</p>
   </div>
 
   <div class="card">
@@ -463,27 +463,14 @@
 
     <div class="photo-box">
       <label for="photoInput" style="margin-top:0;">Fotos opcionales</label>
-      <input type="file" id="photoInput" accept="image/*" multiple capture="environment" onchange="updatePhotoCount()">
-      <div id="photoCount" class="photo-meta">Puedes subir varias fotos en el mismo reporte.</div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" multiple onchange="addSelectedPhotos()">
+      <div id="photoCount" class="photo-meta">Toca para abrir la cámara. Toma una foto, luego vuelve a tocar para tomar otra. Todas se quedan guardadas hasta enviar.</div>
     </div>
 
     <button class="report action-btn" onclick="sendSmartReport()">
       📨 Enviar reporte con IA
     </button>
 
-    <div class="btn-row">
-      <button class="supplies action-btn" onclick="sendQuickReport('SUPPLIES')">
-        🧺 Enviar como supplies
-      </button>
-
-      <button class="issue action-btn" onclick="sendQuickReport('ISSUE')">
-        ⚠️ Enviar problema
-      </button>
-    </div>
-
-    <button class="lost action-btn" onclick="sendQuickReport('LOST_FOUND')">
-      🎒 Lost & Found
-    </button>
   </div>
 
   <div class="card">
@@ -505,6 +492,7 @@ let cleanerRefreshTimer = null;
 let isSending = false;
 let lastSendKey = "";
 let lastSendTime = 0;
+let selectedReportFiles = [];
 let selectedUnit = "";
 let selectedUnitStatus = "";
 let selectedUnitArrival = false;
@@ -735,14 +723,32 @@ function selectCleanerAssignment(unit, status, arrival){
   loadMyReports();
 }
 
-function updatePhotoCount(){
+function addSelectedPhotos(){
   const photoInput = document.getElementById("photoInput");
-  const count = photoInput.files.length;
+  const newFiles = Array.from(photoInput.files || []);
+
+  newFiles.forEach(file => {
+    const key = `${file.name}-${file.size}-${file.lastModified}`;
+    const exists = selectedReportFiles.some(existing =>
+      `${existing.name}-${existing.size}-${existing.lastModified}` === key
+    );
+
+    if(!exists){
+      selectedReportFiles.push(file);
+    }
+  });
+
+  photoInput.value = "";
+  updatePhotoCount();
+}
+
+function updatePhotoCount(){
+  const count = selectedReportFiles.length;
 
   document.getElementById("photoCount").innerText =
     count > 0
-      ? `${count} foto${count === 1 ? "" : "s"} seleccionada${count === 1 ? "" : "s"}`
-      : "Puedes subir varias fotos en el mismo reporte.";
+      ? `${count} foto${count === 1 ? "" : "s"} lista${count === 1 ? "" : "s"} para enviar`
+      : "Toca para abrir la cámara. Toma una foto, luego vuelve a tocar para tomar otra.";
 }
 
 async function uploadPhotosWithReport({ unit, name, action, note, role }){
@@ -757,7 +763,7 @@ async function uploadPhotosWithReport({ unit, name, action, note, role }){
   formData.append("message", note || "");
   formData.append("note", note || "");
 
-  Array.from(photoInput.files || []).forEach(file => {
+  selectedReportFiles.forEach(file => {
     formData.append("photos", file);
   });
 
@@ -857,9 +863,6 @@ async function sendSmartReport(){
   await submitReportToAI("GENERAL_REPORT");
 }
 
-async function sendQuickReport(action){
-  await submitReportToAI(action);
-}
 
 async function submitReportToAI(action){
   if(isSending){
@@ -869,8 +872,7 @@ async function submitReportToAI(action){
   const name = document.getElementById("name").value.trim();
   const unit = document.getElementById("unit").value.trim().toUpperCase();
   const note = document.getElementById("note").value.trim();
-  const photoInput = document.getElementById("photoInput");
-  const hasPhotos = photoInput.files.length > 0;
+  const hasPhotos = selectedReportFiles.length > 0;
 
   if(!name){
     alert("Escribe tu nombre");
@@ -887,7 +889,7 @@ async function submitReportToAI(action){
     return;
   }
 
-  const sendKey = `REPORT-${action}-${unit}-${name}-${note}-${photoInput.files.length}`;
+  const sendKey = `REPORT-${action}-${unit}-${name}-${note}-${selectedReportFiles.length}`;
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
@@ -919,6 +921,7 @@ async function submitReportToAI(action){
     vibratePhone("success");
 
     document.getElementById("note").value = "";
+    selectedReportFiles = [];
     document.getElementById("photoInput").value = "";
     updatePhotoCount();
 
