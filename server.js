@@ -100,6 +100,15 @@ const NOTION_TIME_CLOCK_DATABASE_ID =
 
 const NOTION_EMPLOYEES_DATABASE_ID =
   process.env.NOTION_EMPLOYEES_DATABASE_ID || "";
+const NOTION_REPORTS_DATABASE_ID =
+  process.env.NOTION_REPORTS_DB_ID ||
+  process.env.NOTION_REPORTS_DATABASE_ID ||
+  process.env.NOTION_REPORT_MESSAGES_DB_ID ||
+  "";
+const NOTION_REPORT_PHOTOS_DATABASE_ID =
+  process.env.NOTION_REPORT_PHOTOS_DB_ID ||
+  process.env.NOTION_REPORT_PHOTOS_DATABASE_ID ||
+  "";
 const OPENAI_API_KEY =
 process.env.OPENAI_API_KEY || "";
 console.log("■ ENV CHECK");
@@ -109,6 +118,8 @@ console.log("NOTION_LOG_DATABASE_ID existe:", !!NOTION_LOG_DATABASE_ID);
 console.log("NOTION_PAYROLL_DATABASE_ID existe:", !!NOTION_PAYROLL_DATABASE_ID);
 console.log("NOTION_TIME_CLOCK_DATABASE_ID existe:", !!NOTION_TIME_CLOCK_DATABASE_ID);
 console.log("NOTION_EMPLOYEES_DATABASE_ID existe:", !!NOTION_EMPLOYEES_DATABASE_ID);
+console.log("NOTION_REPORTS_DATABASE_ID existe:", !!NOTION_REPORTS_DATABASE_ID);
+console.log("NOTION_REPORT_PHOTOS_DATABASE_ID existe:", !!NOTION_REPORT_PHOTOS_DATABASE_ID);
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
 console.log("PAYROLL RAW:", process.env.NOTION_PAYROLL_DATABASE_ID);
 const notion = new Client({ auth: NOTION_API_KEY });
@@ -133,6 +144,8 @@ notionApiKeyExists: !!NOTION_API_KEY,
 notionDatabaseIdExists: !!NOTION_DATABASE_ID,
 notionLogDatabaseIdExists: !!NOTION_LOG_DATABASE_ID,
 notionPayrollDatabaseIdExists: !!NOTION_PAYROLL_DATABASE_ID,
+notionReportsDatabaseIdExists: !!NOTION_REPORTS_DATABASE_ID,
+notionReportPhotosDatabaseIdExists: !!NOTION_REPORT_PHOTOS_DATABASE_ID,
 openAiKeyExists: !!OPENAI_API_KEY,
 notionDatabaseIdPreview: NOTION_DATABASE_ID
 ? NOTION_DATABASE_ID.slice(0, 6) + "..." + NOTION_DATABASE_ID.slice(-6)
@@ -142,6 +155,12 @@ notionLogDatabaseIdPreview: NOTION_LOG_DATABASE_ID
 : null,
 notionPayrollDatabaseIdPreview: NOTION_PAYROLL_DATABASE_ID
 ? NOTION_PAYROLL_DATABASE_ID.slice(0, 6) + "..." + NOTION_PAYROLL_DATABASE_ID.slice(-6)
+: null,
+notionReportsDatabaseIdPreview: NOTION_REPORTS_DATABASE_ID
+? NOTION_REPORTS_DATABASE_ID.slice(0, 6) + "..." + NOTION_REPORTS_DATABASE_ID.slice(-6)
+: null,
+notionReportPhotosDatabaseIdPreview: NOTION_REPORT_PHOTOS_DATABASE_ID
+? NOTION_REPORT_PHOTOS_DATABASE_ID.slice(0, 6) + "..." + NOTION_REPORT_PHOTOS_DATABASE_ID.slice(-6)
 : null,
 });
 });
@@ -309,6 +328,13 @@ async function queryTodayRooms() {
 let pages = [];
 let cursor = undefined;
 const today = todayISO();
+const cacheKey = `todayRooms:${today}`;
+const cached = getCache(cacheKey);
+
+if (cached) {
+  return cached;
+}
+
 do {
 const body = {
 page_size: 100,
@@ -342,10 +368,18 @@ return pageDate === today && roomTitle;
 pages = pages.concat(todayPages);
 cursor = data.has_more ? data.next_cursor : undefined;
 } while (cursor);
+setCache(cacheKey, pages, 30000);
 return pages;
 }
 // ■ Buscar unidades de cualquier fecha en la página central de Notion
 async function queryRoomsByDate(date) {
+  const cacheKey = `roomsByDate:${date}`;
+  const cached = getCache(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
   let pages = [];
   let cursor = undefined;
 
@@ -390,6 +424,7 @@ async function queryRoomsByDate(date) {
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
 
+  setCache(cacheKey, pages, 60000);
   return pages;
 }
 // ■ Status de Notion
@@ -1791,6 +1826,666 @@ async function generateDailyReport(date = todayISO()) {
     totalUnits,
   };
 }
+
+
+// =========================================================
+// NUEVO MÓDULO: REPORTES INTELIGENTES + FOTOS MÚLTIPLES
+// =========================================================
+function limitText(value, max = 1900) {
+  return String(value || "").slice(0, max);
+}
+
+function readPlainTextFromProp(prop) {
+  if (!prop) return "";
+  if (prop.title) return prop.title.map((t) => t.plain_text).join("");
+  if (prop.rich_text) return prop.rich_text.map((t) => t.plain_text).join("");
+  if (prop.select) return prop.select.name || "";
+  if (prop.status) return prop.status.name || "";
+  if (prop.date) return prop.date.start || "";
+  if (prop.url) return prop.url || "";
+  if (prop.checkbox !== undefined) return prop.checkbox ? "Yes" : "No";
+  if (prop.number !== null && prop.number !== undefined) return String(prop.number);
+  return "";
+}
+
+function buildRichTextValue(value) {
+  return {
+    rich_text: [
+      {
+        text: {
+          content: limitText(value, 1900),
+        },
+      },
+    ],
+  };
+}
+
+function buildTitleValue(value) {
+  return {
+    title: [
+      {
+        text: {
+          content: limitText(value, 180),
+        },
+      },
+    ],
+  };
+}
+
+function buildNotionProp(schema, names, value, forcedType = null) {
+  const name = findPropName(schema, names);
+  if (!name) return null;
+
+  const type = forcedType || schema[name].type;
+  const text = String(value ?? "");
+
+  if (type === "title") return { name, value: buildTitleValue(text) };
+  if (type === "rich_text") return { name, value: buildRichTextValue(text) };
+  if (type === "date") return { name, value: { date: { start: text } } };
+  if (type === "select") return { name, value: { select: { name: text || "Other" } } };
+  if (type === "status") return { name, value: { status: { name: text || "Received" } } };
+  if (type === "checkbox") return { name, value: { checkbox: !!value } };
+  if (type === "number") return { name, value: { number: Number(value || 0) } };
+  if (type === "url") return { name, value: { url: text || null } };
+
+  return null;
+}
+
+function addNotionProp(props, schema, names, value, forcedType = null) {
+  const prop = buildNotionProp(schema, names, value, forcedType);
+  if (prop) props[prop.name] = prop.value;
+}
+
+async function uploadBufferToCloudinary(file, folder = "housekeeping/reports") {
+  const base64 = file.buffer.toString("base64");
+  const dataUri = `data:${file.mimetype};base64,${base64}`;
+
+  return cloudinary.uploader.upload(dataUri, {
+    folder,
+    resource_type: "image",
+    quality: "auto:best",
+  });
+}
+
+async function analyzeReportMessageWithAI({ unit, employee, role, message, action }) {
+  const safeMessage = String(message || "").trim();
+
+  if (!OPENAI_API_KEY || !safeMessage) {
+    return {
+      category: "General Message",
+      priority: "Normal",
+      summary: safeMessage || "Sin mensaje",
+      suggestedHotSOS: "",
+      needsHotSOS: false,
+      detectedItems: "",
+    };
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Eres un asistente de operaciones de housekeeping hotelero. Clasifica mensajes de limpiadores e inspectores. Responde solo JSON válido, sin markdown.",
+        },
+        {
+          role: "user",
+          content: `
+Unidad: ${unit}
+Empleado: ${employee}
+Rol: ${role}
+Acción: ${action || "REPORT"}
+Mensaje original: ${safeMessage}
+
+Clasifica el mensaje sin pedir categorías al empleado.
+Devuelve exactamente este JSON:
+{
+  "category": "Supplies | Maintenance | Lost & Found | Cleaner Error | Damage | Ready Note | Guest Request | General Message | Multiple",
+  "priority": "Normal | Urgent | Blocking Room",
+  "summary": "resumen corto en español para operaciones",
+  "suggestedHotSOS": "texto corto en inglés para copiar y pegar en HotSOS, o vacío si no aplica",
+  "needsHotSOS": true,
+  "detectedItems": "lista corta de cosas detectadas, como towels, toilet clogged, hair, remote missing"
+}
+
+Reglas:
+- Si hay mantenimiento, daño, falta de supplies, objeto perdido, bloqueo de unidad o error importante, needsHotSOS debe ser true.
+- Si sólo dice que terminó, inició, o es una nota general sin acción externa, needsHotSOS debe ser false.
+- Si hay más de una categoría, usa Multiple.
+`,
+        },
+      ],
+    });
+
+    const text = response.choices[0].message.content || "{}";
+    const cleanText = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(cleanText);
+
+    return {
+      category: parsed.category || "General Message",
+      priority: parsed.priority || "Normal",
+      summary: parsed.summary || safeMessage,
+      suggestedHotSOS: parsed.suggestedHotSOS || "",
+      needsHotSOS: !!parsed.needsHotSOS,
+      detectedItems: parsed.detectedItems || "",
+    };
+  } catch (error) {
+    console.log("■■ OpenAI report error:", error.message);
+    return {
+      category: "General Message",
+      priority: "Normal",
+      summary: safeMessage || "Sin mensaje",
+      suggestedHotSOS: "",
+      needsHotSOS: false,
+      detectedItems: "",
+    };
+  }
+}
+
+async function createReportMessage({
+  unit,
+  employee,
+  role,
+  action = "REPORT",
+  message,
+  ai,
+  photoUrls = [],
+  sourcePanel = "Unknown",
+}) {
+  if (!NOTION_REPORTS_DATABASE_ID) {
+    throw new Error("Falta NOTION_REPORTS_DB_ID en Render");
+  }
+
+  const now = new Date().toISOString();
+  const reportId = `RPT-${Date.now()}`;
+  const schema = await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID);
+  const props = {};
+
+  addNotionProp(props, schema, ["Report ID", "Report", "Name", "Title"], `${reportId} - ${unit}`, "title");
+  addNotionProp(props, schema, ["Date", "date"], todayISO(), "date");
+  addNotionProp(props, schema, ["Time", "time", "Created At"], now, "date");
+  addNotionProp(props, schema, ["Unit", "unit"], unit);
+  addNotionProp(props, schema, ["Employee", "Employee Name", "Name"], employee);
+  addNotionProp(props, schema, ["Role", "role"], role || "Cleaner", "select");
+  addNotionProp(props, schema, ["Action", "action"], action || "REPORT", "select");
+  addNotionProp(props, schema, ["Original Message", "Message", "Note"], message || "");
+  addNotionProp(props, schema, ["AI Category", "Category"], ai?.category || "General Message", "select");
+  addNotionProp(props, schema, ["AI Priority", "Priority"], ai?.priority || "Normal", "select");
+  addNotionProp(props, schema, ["AI Summary", "Summary"], ai?.summary || message || "");
+  addNotionProp(props, schema, ["Suggested HotSOS Text", "HotSOS Text", "HOTSOS Text"], ai?.suggestedHotSOS || "");
+  addNotionProp(props, schema, ["Needs HotSOS", "Needs HOTSOS"], !!ai?.needsHotSOS, "checkbox");
+  addNotionProp(props, schema, ["HotSOS Sent", "HOTSOS Sent"], false, "checkbox");
+  addNotionProp(props, schema, ["Photos Count", "Photo Count"], photoUrls.length, "number");
+  addNotionProp(props, schema, ["Status", "status"], "Received", "select");
+  addNotionProp(props, schema, ["Source Panel", "Source"], sourcePanel, "select");
+  addNotionProp(props, schema, ["Detected Items", "Items Detected"], ai?.detectedItems || "");
+
+  if (schema["First Photo URL"] && photoUrls[0]) {
+    props["First Photo URL"] = { url: photoUrls[0] };
+  }
+
+  const page = await notion.pages.create({
+    parent: {
+      database_id: NOTION_REPORTS_DATABASE_ID,
+    },
+    properties: props,
+  });
+
+  return {
+    reportId,
+    notionPageId: page.id,
+    createdAt: now,
+  };
+}
+
+async function saveReportPhotos({ reportId, reportPageId, unit, employee, photoUrls }) {
+  if (!NOTION_REPORT_PHOTOS_DATABASE_ID || !photoUrls || photoUrls.length === 0) {
+    return [];
+  }
+
+  const schema = await getDatabaseSchema(NOTION_REPORT_PHOTOS_DATABASE_ID);
+  const created = [];
+
+  for (let i = 0; i < photoUrls.length; i++) {
+    const url = photoUrls[i];
+    const photoId = `${reportId}-PHOTO-${i + 1}`;
+    const props = {};
+
+    addNotionProp(props, schema, ["Photo ID", "Photo", "Name", "Title"], photoId, "title");
+    addNotionProp(props, schema, ["Report ID", "Report"], reportId);
+    addNotionProp(props, schema, ["Report Page ID", "Report Page"], reportPageId);
+    addNotionProp(props, schema, ["Date", "date"], todayISO(), "date");
+    addNotionProp(props, schema, ["Unit", "unit"], unit);
+    addNotionProp(props, schema, ["Employee", "Employee Name", "Name"], employee);
+    addNotionProp(props, schema, ["Photo URL", "URL", "Image URL"], url, "url");
+
+    const page = await notion.pages.create({
+      parent: {
+        database_id: NOTION_REPORT_PHOTOS_DATABASE_ID,
+      },
+      properties: props,
+    });
+
+    created.push({ id: page.id, photoId, url });
+  }
+
+  return created;
+}
+
+function reportPageToObject(page) {
+  const p = page.properties || {};
+  const dateValue = readPlainTextFromProp(p.Date || p.date);
+  const timeValue = readPlainTextFromProp(p.Time || p.time || p["Created At"]);
+
+  return {
+    id: page.id,
+    reportId: readPlainTextFromProp(p["Report ID"] || p.Report || p.Name || p.Title),
+    date: dateValue,
+    timeRaw: timeValue,
+    time: timeValue
+      ? new Date(timeValue).toLocaleString("en-US", {
+          timeZone: "America/Chicago",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })
+      : "",
+    unit: readPlainTextFromProp(p.Unit || p.unit),
+    employee: readPlainTextFromProp(p.Employee || p["Employee Name"] || p.Name),
+    role: readPlainTextFromProp(p.Role || p.role),
+    action: readPlainTextFromProp(p.Action || p.action),
+    message: readPlainTextFromProp(p["Original Message"] || p.Message || p.Note),
+    aiCategory: readPlainTextFromProp(p["AI Category"] || p.Category),
+    aiPriority: readPlainTextFromProp(p["AI Priority"] || p.Priority),
+    aiSummary: readPlainTextFromProp(p["AI Summary"] || p.Summary),
+    suggestedHotSOS: readPlainTextFromProp(p["Suggested HotSOS Text"] || p["HotSOS Text"] || p["HOTSOS Text"]),
+    needsHotSOS: !!(p["Needs HotSOS"] || p["Needs HOTSOS"])?.checkbox,
+    hotsosSent: !!(p["HotSOS Sent"] || p["HOTSOS Sent"])?.checkbox,
+    photosCount: (p["Photos Count"] || p["Photo Count"])?.number || 0,
+    status: readPlainTextFromProp(p.Status || p.status),
+    sourcePanel: readPlainTextFromProp(p["Source Panel"] || p.Source),
+    detectedItems: readPlainTextFromProp(p["Detected Items"] || p["Items Detected"]),
+    firstPhotoUrl: (p["First Photo URL"] || {})?.url || "",
+  };
+}
+
+async function getReportPhotosByReportId(reportId) {
+  if (!NOTION_REPORT_PHOTOS_DATABASE_ID || !reportId) return [];
+
+  const response = await notion.databases.query({
+    database_id: NOTION_REPORT_PHOTOS_DATABASE_ID,
+    page_size: 100,
+    filter: {
+      property: "Report ID",
+      rich_text: {
+        equals: reportId,
+      },
+    },
+  });
+
+  return response.results.map((page) => {
+    const p = page.properties || {};
+    return {
+      id: page.id,
+      photoId: readPlainTextFromProp(p["Photo ID"] || p.Photo || p.Name || p.Title),
+      reportId: readPlainTextFromProp(p["Report ID"] || p.Report),
+      unit: readPlainTextFromProp(p.Unit || p.unit),
+      employee: readPlainTextFromProp(p.Employee || p["Employee Name"] || p.Name),
+      url: (p["Photo URL"] || p.URL || p["Image URL"] || {})?.url || "",
+    };
+  });
+}
+
+
+app.post("/submit-report", upload.array("photos", 20), async (req, res) => {
+  try {
+    const unit = String(req.body.unit || "").trim();
+    const employee = String(req.body.employee || req.body.name || "").trim();
+    const role = String(req.body.role || "Cleaner").trim();
+    const action = String(req.body.action || "REPORT").trim();
+    const message = String(req.body.message || req.body.note || "").trim();
+    const sourcePanel = String(req.body.sourcePanel || role || "Unknown").trim();
+
+    if (!unit || !employee || !message) {
+      return res.status(400).json({
+        ok: false,
+        success: false,
+        message: "Falta unidad, empleado o mensaje",
+      });
+    }
+
+    const files = req.files || [];
+    const uploadResults = [];
+
+    for (const file of files) {
+      const uploaded = await uploadBufferToCloudinary(
+        file,
+        `housekeeping/reports/${todayISO()}/${normalizeRoom(unit) || "unknown"}`
+      );
+      uploadResults.push(uploaded.secure_url);
+    }
+
+    const ai = await analyzeReportMessageWithAI({
+      unit,
+      employee,
+      role,
+      message,
+      action,
+    });
+
+    const report = await createReportMessage({
+      unit,
+      employee,
+      role,
+      action,
+      message,
+      ai,
+      photoUrls: uploadResults,
+      sourcePanel,
+    });
+
+    const photos = await saveReportPhotos({
+      reportId: report.reportId,
+      reportPageId: report.notionPageId,
+      unit,
+      employee,
+      photoUrls: uploadResults,
+    });
+
+    broadcastOpsUpdate({
+      type: "report",
+      unit,
+      employee,
+      reportId: report.reportId,
+    });
+
+    res.json({
+      ok: true,
+      success: true,
+      message: "Reporte enviado correctamente",
+      reportId: report.reportId,
+      notionPageId: report.notionPageId,
+      photosCount: uploadResults.length,
+      photoUrls: uploadResults,
+      photos,
+      ai,
+    });
+  } catch (error) {
+    console.error("Error en /submit-report:", error.message);
+    res.status(500).json({
+      ok: false,
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/my-reports", async (req, res) => {
+  try {
+    if (!NOTION_REPORTS_DATABASE_ID) {
+      return res.json({ ok: true, count: 0, reports: [] });
+    }
+
+    const employee = String(req.query.employee || req.query.name || "").trim().toLowerCase();
+    const role = String(req.query.role || "").trim().toLowerCase();
+    const date = String(req.query.date || todayISO()).trim();
+
+    const response = await notion.databases.query({
+      database_id: NOTION_REPORTS_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: {
+          equals: date,
+        },
+      },
+      sorts: [
+        {
+          property: "Time",
+          direction: "descending",
+        },
+      ],
+    });
+
+    let reports = response.results.map(reportPageToObject);
+
+    if (employee) {
+      reports = reports.filter((r) => String(r.employee || "").toLowerCase().trim() === employee);
+    }
+
+    if (role) {
+      reports = reports.filter((r) => String(r.role || "").toLowerCase().trim() === role);
+    }
+
+    res.json({
+      ok: true,
+      date,
+      count: reports.length,
+      reports,
+    });
+  } catch (error) {
+    console.error("Error en /my-reports:", error.message);
+    res.status(500).json({ ok: false, message: error.message, reports: [] });
+  }
+});
+
+app.get("/operations-reports", async (req, res) => {
+  try {
+    if (!NOTION_REPORTS_DATABASE_ID) {
+      return res.json({ ok: true, count: 0, reports: [] });
+    }
+
+    const date = String(req.query.date || todayISO()).trim();
+    const includePhotos = String(req.query.includePhotos || "false") === "true";
+    const cacheKey = `operations-reports:${date}:${includePhotos}`;
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const response = await notion.databases.query({
+      database_id: NOTION_REPORTS_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: {
+          equals: date,
+        },
+      },
+      sorts: [
+        {
+          property: "Time",
+          direction: "descending",
+        },
+      ],
+    });
+
+    const reports = [];
+
+    for (const page of response.results) {
+      const report = reportPageToObject(page);
+      if (includePhotos && report.reportId) {
+        report.photos = await getReportPhotosByReportId(report.reportId.split(" - ")[0]);
+      }
+      reports.push(report);
+    }
+
+    const payload = {
+      ok: true,
+      date,
+      count: reports.length,
+      reports,
+    };
+
+    setCache(cacheKey, payload, 5000);
+    res.json(payload);
+  } catch (error) {
+    console.error("Error en /operations-reports:", error.message);
+    res.status(500).json({ ok: false, message: error.message, reports: [] });
+  }
+});
+
+app.get("/report-photos", async (req, res) => {
+  try {
+    const reportId = String(req.query.reportId || "").trim();
+
+    if (!reportId) {
+      return res.status(400).json({ ok: false, message: "Report ID requerido" });
+    }
+
+    const photos = await getReportPhotosByReportId(reportId);
+
+    res.json({
+      ok: true,
+      reportId,
+      count: photos.length,
+      photos,
+    });
+  } catch (error) {
+    console.error("Error en /report-photos:", error.message);
+    res.status(500).json({ ok: false, message: error.message, photos: [] });
+  }
+});
+
+app.post("/mark-hotsos-sent", async (req, res) => {
+  try {
+    const reportPageId = String(req.body.reportPageId || req.body.id || "").trim();
+
+    if (!reportPageId) {
+      return res.status(400).json({ ok: false, message: "Falta reportPageId" });
+    }
+
+    if (!NOTION_REPORTS_DATABASE_ID) {
+      throw new Error("Falta NOTION_REPORTS_DB_ID en Render");
+    }
+
+    const schema = await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID);
+    const props = {};
+
+    addNotionProp(props, schema, ["HotSOS Sent", "HOTSOS Sent"], true, "checkbox");
+    addNotionProp(props, schema, ["Status", "status"], "Sent to HotSOS", "select");
+
+    await notion.pages.update({
+      page_id: reportPageId,
+      properties: props,
+    });
+
+    broadcastOpsUpdate({
+      type: "hotsos-sent",
+      reportPageId,
+    });
+
+    res.json({ ok: true, message: "Reporte marcado como enviado a HotSOS" });
+  } catch (error) {
+    console.error("Error en /mark-hotsos-sent:", error.message);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/unit-history", async (req, res) => {
+  try {
+    const unit = String(req.query.unit || "").trim();
+    const employee = String(req.query.employee || req.query.name || "").trim().toLowerCase();
+    const date = String(req.query.date || todayISO()).trim();
+
+    if (!unit) {
+      return res.status(400).json({ ok: false, message: "Unidad requerida" });
+    }
+
+    const normalizedTarget = normalizeRoom(unit);
+    const targetDigits = roomDigits(unit);
+    const history = [];
+
+    if (NOTION_LOG_DATABASE_ID) {
+      const logs = await getDailyLogsForReport(date);
+      logs.forEach((log) => {
+        const p = log.properties || {};
+        const logUnit = readPlainTextFromProp(p.Unit || p.unit);
+        const cleaner = readPlainTextFromProp(p.Cleaner || p.cleaner);
+        const inspector = readPlainTextFromProp(p.Inspector || p.inspector);
+        const person = cleaner || inspector;
+
+        const sameUnit = normalizeRoom(logUnit) === normalizedTarget || roomDigits(logUnit) === targetDigits;
+        const sameEmployee = !employee || String(person || "").toLowerCase().trim() === employee;
+
+        if (sameUnit && sameEmployee) {
+          history.push({
+            source: "Daily Log",
+            id: log.id,
+            timeRaw: readPlainTextFromProp(p.Time || p.time),
+            unit: logUnit,
+            employee: person,
+            action: readPlainTextFromProp(p.Action || p.action),
+            message: readPlainTextFromProp(p.Note || p.note),
+            photoUrl: (p["Photo URL"] || {})?.url || "",
+          });
+        }
+      });
+    }
+
+    if (NOTION_REPORTS_DATABASE_ID) {
+      const reportsResponse = await notion.databases.query({
+        database_id: NOTION_REPORTS_DATABASE_ID,
+        page_size: 100,
+        filter: {
+          property: "Date",
+          date: {
+            equals: date,
+          },
+        },
+      });
+
+      reportsResponse.results.map(reportPageToObject).forEach((report) => {
+        const sameUnit = normalizeRoom(report.unit) === normalizedTarget || roomDigits(report.unit) === targetDigits;
+        const sameEmployee = !employee || String(report.employee || "").toLowerCase().trim() === employee;
+
+        if (sameUnit && sameEmployee) {
+          history.push({
+            source: "Report",
+            id: report.id,
+            timeRaw: report.timeRaw,
+            unit: report.unit,
+            employee: report.employee,
+            action: report.action,
+            message: report.message,
+            aiCategory: report.aiCategory,
+            aiPriority: report.aiPriority,
+            hotsosSent: report.hotsosSent,
+            photosCount: report.photosCount,
+            firstPhotoUrl: report.firstPhotoUrl,
+          });
+        }
+      });
+    }
+
+    history.sort((a, b) => String(b.timeRaw || "").localeCompare(String(a.timeRaw || "")));
+
+    res.json({
+      ok: true,
+      date,
+      unit,
+      count: history.length,
+      history: history.map((item) => ({
+        ...item,
+        time: item.timeRaw
+          ? new Date(item.timeRaw).toLocaleString("en-US", {
+              timeZone: "America/Chicago",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            })
+          : "",
+      })),
+    });
+  } catch (error) {
+    console.error("Error en /unit-history:", error.message);
+    res.status(500).json({ ok: false, message: error.message, history: [] });
+  }
+});
 
 app.post("/action", async (req, res) => {
   try {
