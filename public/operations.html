@@ -428,10 +428,12 @@ async function copyText(text){
 
 async function markHotSosSent(reportId){
   try{
+    const normalizedReportId = normalizeReportId(reportId);
+
     const response = await fetch("/mark-hotsos-sent", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ reportId })
+      body:JSON.stringify({ reportId: normalizedReportId })
     });
 
     const data = await response.json();
@@ -450,15 +452,22 @@ function getReportId(report){
   return report.reportId || report.reportID || report.id || report.pageId || "";
 }
 
-async function loadPhotosForReport(report){
-  let reportId = getReportId(report);
+function normalizeReportId(reportId){
+  reportId = String(reportId || "").trim();
 
-if (
-  reportId &&
-  !String(reportId).startsWith("RPT-")
-){
-  reportId = `RPT-${reportId}`;
+  if(reportId && !reportId.startsWith("RPT-")){
+    reportId = `RPT-${reportId}`;
+  }
+
+  return reportId;
 }
+
+function photoContainerId(reportId){
+  return "photos-" + normalizeReportId(reportId).replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+async function loadPhotosForReport(report){
+  const reportId = normalizeReportId(getReportId(report));
 
   if(!reportId){
     return [];
@@ -487,8 +496,8 @@ function getPhotoUrl(photo){
 }
 
 async function renderPhotoGrid(report){
-  const reportId = getReportId(report);
-  const target = document.getElementById(`photos-${reportId}`);
+  const reportId = normalizeReportId(getReportId(report));
+  const target = document.getElementById(photoContainerId(reportId));
 
   if(!target){
     return;
@@ -526,7 +535,7 @@ async function loadReports(){
     const newest = allReports.length > 0 ? allReports[0] : null;
 
     if(newest){
-      const newestId = getReportId(newest);
+      const newestId = normalizeReportId(getReportId(newest));
 
       if(firstReportLoad){
         lastReportId = newestId;
@@ -592,7 +601,7 @@ function renderReports(){
   }
 
   container.innerHTML = reports.map(report => {
-    const reportId = getReportId(report);
+    const reportId = normalizeReportId(getReportId(report));
     const unit = report.unit || "";
     const employee = report.employee || report.person || "";
     const role = report.role || "";
@@ -605,6 +614,9 @@ function renderReports(){
     const photosCount = report.photosCount || report.photoCount || 0;
     const sent = !!(report.hotSosSent || report.hotsosSent || report.hotSOSSent);
     const urgent = String(priority || "").toLowerCase().includes("urgent") || String(priority || "").toLowerCase().includes("blocking");
+    const hotsosJson = JSON.stringify(hotsosText || "");
+    const reportIdJson = JSON.stringify(reportId);
+    const containerId = photoContainerId(reportId);
 
     return `
       <div class="card report-card ${urgent ? "urgent" : ""} ${sent ? "sent" : ""}">
@@ -625,13 +637,13 @@ function renderReports(){
 
         ${hotsosText ? `<div class="hotsos-box"><b>Texto sugerido HotSOS:</b><br>${escapeHtml(hotsosText)}</div>` : ""}
 
-        <div id="photos-${escapeHtml(reportId)}" class="photo-loading">
+        <div id="${escapeHtml(containerId)}" class="photo-loading">
           ${photosCount ? "Cargando fotos..." : "Sin fotos"}
         </div>
 
         <div style="margin-top:10px;">
-          ${hotsosText ? `<button class="copy-btn small-btn" onclick="copyText(\`${String(hotsosText).replace(/`/g,"'").replace(/\\/g,"\\\\")}\`)">📋 Copiar HotSOS</button>` : ""}
-          ${reportId ? `<button class="sent-btn small-btn" onclick="markHotSosSent('${escapeHtml(reportId)}')">✅ Marcar enviado</button>` : ""}
+          ${hotsosText ? `<button class="copy-btn small-btn" onclick='copyText(${hotsosJson})'>📋 Copiar HotSOS</button>` : ""}
+          ${reportId ? `<button class="sent-btn small-btn" onclick='markHotSosSent(${reportIdJson})'>✅ Marcar enviado</button>` : ""}
         </div>
       </div>
     `;
