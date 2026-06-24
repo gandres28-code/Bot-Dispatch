@@ -2279,8 +2279,8 @@ app.get("/operations-reports", async (req, res) => {
     }
 
     const date = String(req.query.date || todayISO()).trim();
-    const includePhotos = String(req.query.includePhotos || "false") === "true";
-    const cacheKey = `operations-reports:${date}:${includePhotos}`;
+    const includePhotos = true;
+    const cacheKey = `operations-reports:${date}:with-photos`;
     const cached = getCache(cacheKey);
 
     if (cached) {
@@ -2308,9 +2308,17 @@ app.get("/operations-reports", async (req, res) => {
 
     for (const page of response.results) {
       const report = reportPageToObject(page);
-      if (includePhotos && report.reportId) {
-        report.photos = await getReportPhotosByReportId(report.reportId.split(" - ")[0]);
-      }
+    if (report.reportId) {
+  let cleanReportId = String(report.reportId || "").trim().split(" - ")[0];
+
+  if (cleanReportId && !cleanReportId.startsWith("RPT-")) {
+    cleanReportId = `RPT-${cleanReportId}`;
+  }
+
+  report.reportId = cleanReportId;
+  report.photos = await getReportPhotosByReportId(cleanReportId);
+  report.photosCount = report.photos.length;
+}
       reports.push(report);
     }
 
