@@ -1016,11 +1016,42 @@ async function loadMyHistory(silent = false){
     let html = "";
 
     reports.slice(0, 20).forEach(item => {
-      const time = item.time || item.displayTime || "";
-      const unit = item.unit || "";
-      const action = item.action || item.category || "Reporte";
-      const msg = item.message || item.originalMessage || item.note || item.summary || "";
-      const sent = item.hotsosSent ? "HotSOS enviado ✅" : "Recibido ✅";
+    const time =
+  item.timeDisplay ||
+  item.time ||
+  item.displayTime ||
+  "";
+
+const unit =
+  item.unit || "";
+
+const action =
+  item.aiCategory ||
+  item.category ||
+  item.action ||
+  "Reporte";
+
+const msg =
+  item.message ||
+  item.originalMessage ||
+  item.note ||
+  item.aiSummary ||
+  item.summary ||
+  "";
+
+const sent =
+  item.hotsosSent
+    ? "HotSOS enviado ✅"
+    : (item.needsHotSOS
+        ? "Pendiente HotSOS"
+        : "Recibido ✅");
+
+const photos =
+  item.photos || [];
+
+const photosCount =
+  photos.length ||
+  Number(item.photosCount || 0);
 
       html += `
         <div class="history-item">
@@ -1029,7 +1060,30 @@ async function loadMyHistory(silent = false){
             <span>${escapeHtml(sent)}</span>
           </div>
           <div class="muted">${escapeHtml(action)}</div>
-          ${msg ? `<div class="history-note">${escapeHtml(msg)}</div>` : ""}
+         ${msg ? `<div class="history-note">${escapeHtml(msg)}</div>` : ""}
+
+${
+  photos.length > 0
+    ? `
+      <div class="photo-preview" style="margin-top:10px;">
+        ${photos.map(photo => {
+          const url =
+            photo.url ||
+            photo.photoUrl ||
+            "";
+
+          if(!url) return "";
+
+          return `
+            <a href="${url}" target="_blank">
+              <img src="${url}">
+            </a>
+          `;
+        }).join("")}
+      </div>
+    `
+    : ""
+}
         </div>
       `;
     });
