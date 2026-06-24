@@ -451,7 +451,14 @@ function getReportId(report){
 }
 
 async function loadPhotosForReport(report){
-  const reportId = getReportId(report);
+  let reportId = getReportId(report);
+
+if (
+  reportId &&
+  !String(reportId).startsWith("RPT-")
+){
+  reportId = `RPT-${reportId}`;
+}
 
   if(!reportId){
     return [];
