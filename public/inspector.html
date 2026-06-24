@@ -381,7 +381,7 @@
 
   <div class="top-card">
     <h1>🔍 Panel de Inspectores</h1>
-    <p>Revisa tus unidades, inicia inspección, marca Ready for Guest y envía reportes con varias fotos. Tú escribes libre, la IA clasifica atrás.</p>
+    <p>Revisa tus unidades, inicia inspección, marca Ready for Guest y envía un solo reporte inteligente. Tú escribes libre, la IA clasifica atrás.</p>
 
     <div class="mini-stats">
       <div class="stat">
@@ -456,31 +456,22 @@
 
     <div class="file-box">
       <label>Fotos opcionales o evidencia</label>
-      <div class="muted">Puedes seleccionar varias fotos a la vez.</div>
+      <div class="muted">Toca para abrir la cámara. Toma una foto, luego vuelve a tocar para tomar otra. Todas se quedan guardadas hasta enviar.</div>
       <input
         type="file"
         id="photoInput"
         accept="image/*"
         capture="environment"
         multiple
-        onchange="previewPhotos()"
+        onchange="addSelectedPhotos()"
       >
       <div id="photoPreview" class="photo-preview"></div>
     </div>
 
     <button class="report action-btn" onclick="sendSmartReport('INSPECTION_REPORT')">
-      📝 Enviar reporte inteligente
+      📨 Enviar reporte con IA
     </button>
 
-    <div class="btn-row" style="margin-top:10px;">
-      <button class="supplies action-btn" onclick="sendSmartReport('INSPECTION_SUPPLIES')">
-        🧺 Pedir algo
-      </button>
-
-      <button class="lost action-btn" onclick="sendSmartReport('LOST_FOUND')">
-        🎒 Lost & Found
-      </button>
-    </div>
 
     <p id="status"></p>
   </div>
@@ -501,6 +492,7 @@
 let isSending = false;
 let lastSendKey = "";
 let lastSendTime = 0;
+let selectedReportFiles = [];
 let selectedUnit = "";
 let currentInspectorCode = "";
 let currentInspectorName = "";
@@ -743,15 +735,42 @@ function startInspectorAutoRefresh(){
   }, 15000);
 }
 
-function previewPhotos(){
+function addSelectedPhotos(){
   const input = document.getElementById("photoInput");
+  const newFiles = Array.from(input.files || []);
+
+  newFiles.forEach(file => {
+    const key = `${file.name}-${file.size}-${file.lastModified}`;
+    const exists = selectedReportFiles.some(existing =>
+      `${existing.name}-${existing.size}-${existing.lastModified}` === key
+    );
+
+    if(!exists){
+      selectedReportFiles.push(file);
+    }
+  });
+
+  input.value = "";
+  previewPhotos();
+}
+
+function previewPhotos(){
   const preview = document.getElementById("photoPreview");
   preview.innerHTML = "";
 
-  Array.from(input.files || []).slice(0, 9).forEach(file => {
+  selectedReportFiles.slice(0, 12).forEach((file, index) => {
     const url = URL.createObjectURL(file);
-    preview.innerHTML += `<img src="${url}" alt="Preview">`;
+    preview.innerHTML += `<div style="position:relative;"><img src="${url}" alt="Preview"><button type="button" onclick="removeSelectedPhoto(${index})" style="position:absolute;right:3px;top:3px;width:24px;height:24px;padding:0;border-radius:999px;background:#dc2626;font-size:12px;line-height:1;">×</button></div>`;
   });
+
+  if(selectedReportFiles.length > 12){
+    preview.innerHTML += `<div class="muted">+${selectedReportFiles.length - 12} fotos más</div>`;
+  }
+}
+
+function removeSelectedPhoto(index){
+  selectedReportFiles.splice(index, 1);
+  previewPhotos();
 }
 
 async function sendInspectionAction(action){
@@ -842,7 +861,7 @@ async function sendSmartReport(action){
   const unit = document.getElementById("unit").value.trim().toUpperCase();
   const message = document.getElementById("note").value.trim();
   const photoInput = document.getElementById("photoInput");
-  const hasPhotos = photoInput.files.length > 0;
+  const hasPhotos = selectedReportFiles.length > 0;
 
   if(!name){
     alert("Escribe tu nombre");
@@ -859,12 +878,7 @@ async function sendSmartReport(action){
     return;
   }
 
-  if((action === "INSPECTION_REPORT" || action === "LOST_FOUND") && !hasPhotos){
-    alert("Debes agregar al menos una foto");
-    return;
-  }
-
-  const sendKey = `${action}-${unit}-${name}-${message}-${photoInput.files.length}`;
+  const sendKey = `${action}-${unit}-${name}-${message}-${selectedReportFiles.length}`;
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
@@ -893,7 +907,7 @@ async function sendSmartReport(action){
     formData.append("note", message);
     formData.append("sourcePanel", "Inspector Panel");
 
-    Array.from(photoInput.files || []).forEach(file => {
+    selectedReportFiles.forEach(file => {
       formData.append("photos", file);
     });
 
@@ -911,6 +925,7 @@ async function sendSmartReport(action){
       vibratePhone("success");
 
       document.getElementById("note").value = "";
+      selectedReportFiles = [];
       photoInput.value = "";
       document.getElementById("photoPreview").innerHTML = "";
 
