@@ -494,7 +494,6 @@ async function loadPhotosForReport(report){
 function getPhotoUrl(photo){
   return photo.photoUrl || photo.url || photo.photoURL || photo["Photo URL"] || "";
 }
-
 async function renderPhotoGrid(report){
   const reportId = normalizeReportId(getReportId(report));
   const target = document.getElementById(photoContainerId(reportId));
@@ -503,7 +502,11 @@ async function renderPhotoGrid(report){
     return;
   }
 
-  const photos = await loadPhotosForReport(report);
+  let photos = report.photos || [];
+
+  if(!photos || photos.length === 0){
+    photos = await loadPhotosForReport(report);
+  }
 
   if(!photos || photos.length === 0){
     target.innerHTML = `<div class="photo-loading">No se encontraron fotos guardadas para este reporte.</div>`;
@@ -527,7 +530,7 @@ async function renderPhotoGrid(report){
 
 async function loadReports(){
   try{
-    const response = await fetch("/operations-reports");
+   const response = await fetch("/operations-reports?includePhotos=true");
     const data = await response.json();
 
     allReports = data.reports || data.events || data.items || [];
