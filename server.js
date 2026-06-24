@@ -2330,6 +2330,14 @@ app.get("/operations-reports", async (req, res) => {
 });
 
 app.get("/report-photos", async (req, res) => {
+  let reportId = req.query.reportId || "";
+
+if (
+  reportId &&
+  !String(reportId).startsWith("RPT-")
+) {
+  reportId = `RPT-${reportId}`;
+}
   try {
     const reportId = String(req.query.reportId || "").trim();
 
