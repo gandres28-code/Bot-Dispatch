@@ -614,25 +614,37 @@ function updateStats(units){
   document.getElementById("statPending").innerText = pending;
 }
 
-async function loadInspectorAssignments(){
+async function loadInspectorAssignments(silent = false){
+  if(loadInspectorAssignments._running){
+    return;
+  }
+
+  loadInspectorAssignments._running = true;
+  const previousScrollY = window.scrollY;
   const code = document.getElementById("code").value.trim();
   currentInspectorCode = code;
   localStorage.setItem("inspectorCode", code);
 
   if(!code){
     alert("Escribe tu código");
+    loadInspectorAssignments._running = false;
     return;
   }
 
-  document.getElementById("assignments").innerHTML = "⏳ Cargando inspecciones...";
+  if(!silent){
+    document.getElementById("assignments").innerHTML = "⏳ Cargando inspecciones...";
+  }
 
   try{
     const response = await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}`);
     const data = await response.json();
 
     if(!data.ok){
-      document.getElementById("assignments").innerHTML = "";
-      alert(data.message || "No se pudieron cargar las inspecciones");
+      if(!silent){
+        document.getElementById("assignments").innerHTML = "";
+        alert(data.message || "No se pudieron cargar las inspecciones");
+      }
+      loadInspectorAssignments._running = false;
       return;
     }
 
@@ -647,7 +659,10 @@ async function loadInspectorAssignments(){
       document.getElementById("assignments").innerHTML =
         "<div class='empty'>No tienes unidades asignadas hoy.</div>";
       startInspectorAutoRefresh();
-      loadMyHistory();
+      if(!silent){
+        loadMyHistory();
+      }
+      loadInspectorAssignments._running = false;
       return;
     }
 
@@ -687,11 +702,22 @@ async function loadInspectorAssignments(){
     }
 
     startInspectorAutoRefresh();
-    loadMyHistory();
+    if(!silent){
+      loadMyHistory();
+    }
+
+    if(silent){
+      requestAnimationFrame(() => window.scrollTo(0, previousScrollY));
+    }
+
+    loadInspectorAssignments._running = false;
 
   }catch(error){
-    document.getElementById("assignments").innerHTML = "";
-    alert("Error cargando inspecciones: " + error.message);
+    if(!silent){
+      document.getElementById("assignments").innerHTML = "";
+      alert("Error cargando inspecciones: " + error.message);
+    }
+    loadInspectorAssignments._running = false;
   }
 }
 
@@ -729,10 +755,10 @@ function startInspectorAutoRefresh(){
   }
 
   autoRefreshTimer = setInterval(() => {
-    if(currentInspectorCode && !isSending){
-      loadInspectorAssignments();
+    if(currentInspectorCode && !isSending && !selectedUnit){
+      loadInspectorAssignments(true);
     }
-  }, 15000);
+  }, 60000);
 }
 
 function addSelectedPhotos(){
@@ -832,8 +858,10 @@ async function sendInspectionAction(action){
       playBeep("success");
       vibratePhone("success");
 
-      await loadInspectorAssignments();
-      await loadMyHistory();
+      setTimeout(() => {
+        loadInspectorAssignments(true);
+        loadMyHistory(true);
+      }, 600);
     }else{
       document.getElementById("status").innerText = data.message || "❌ Error";
       showBigStatus(data.message || "❌ Error", "error");
@@ -929,7 +957,9 @@ async function sendSmartReport(action){
       photoInput.value = "";
       document.getElementById("photoPreview").innerHTML = "";
 
-      await loadMyHistory();
+      setTimeout(() => {
+        loadMyHistory(true);
+      }, 500);
     }else{
       document.getElementById("status").innerText = data.message || data.error || "❌ Error";
       showBigStatus(data.message || data.error || "❌ Error", "error");
@@ -948,7 +978,7 @@ async function sendSmartReport(action){
   }
 }
 
-async function loadMyHistory(){
+async function loadMyHistory(silent = false){
   const name = document.getElementById("name").value.trim() || currentInspectorName;
   const historyCard = document.getElementById("historyCard");
   const historyList = document.getElementById("historyList");
@@ -959,7 +989,9 @@ async function loadMyHistory(){
   }
 
   historyCard.style.display = "block";
-  historyList.innerHTML = "⏳ Cargando historial...";
+  if(!silent){
+    historyList.innerHTML = "⏳ Cargando historial...";
+  }
 
   try{
     const params = new URLSearchParams({
@@ -1012,12 +1044,12 @@ async function loadMyHistory(){
 const socket = io();
 
 socket.on("ops-update", () => {
-  if(currentInspectorCode && !isSending){
-    loadInspectorAssignments();
+  if(currentInspectorCode && !isSending && !selectedUnit){
+    loadInspectorAssignments(true);
   }
 
-  if(currentInspectorName){
-    loadMyHistory();
+  if(currentInspectorName && !isSending && !selectedUnit){
+    loadMyHistory(true);
   }
 });
 
