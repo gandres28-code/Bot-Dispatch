@@ -5,119 +5,438 @@
 <title>Centro de Operaciones</title>
 
 <style>
+:root{
+  --bg:#0f172a;
+  --panel:#111827;
+  --card:#1f2937;
+  --card2:#111827;
+  --text:#f9fafb;
+  --muted:#9ca3af;
+  --line:#374151;
+  --blue:#2563eb;
+  --green:#10b981;
+  --red:#ef4444;
+  --orange:#f59e0b;
+  --purple:#7c3aed;
+}
+
+*{
+  box-sizing:border-box;
+}
+
 body{
-  font-family:Arial;
-  background:#111827;
-  color:white;
-  padding:20px;
+  font-family:Arial, sans-serif;
+  background:linear-gradient(180deg,#020617,#111827);
+  color:var(--text);
+  padding:16px;
+  margin:0;
+}
+
+.page{
+  max-width:1200px;
+  margin:0 auto;
 }
 
 h1{
   text-align:center;
+  margin:10px 0 4px;
+  font-size:30px;
+}
+
+.subtitle{
+  text-align:center;
+  color:var(--muted);
+  margin-bottom:20px;
+  font-size:14px;
+}
+
+.top-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  margin-bottom:14px;
+}
+
+.panel{
+  background:rgba(31,41,55,.92);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;
+  padding:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
 }
 
 button{
   width:100%;
-  padding:15px;
-  font-size:18px;
+  padding:14px;
+  font-size:16px;
   border:none;
-  border-radius:10px;
-  margin-bottom:20px;
+  border-radius:12px;
+  margin:8px 0;
   cursor:pointer;
-  background:#2563eb;
+  background:var(--blue);
   color:white;
   font-weight:bold;
 }
 
-.finish-day{
-  background:#10b981;
+button:hover{
+  filter:brightness(1.08);
 }
 
-.finish-day:disabled{
+button:disabled{
   background:#6b7280;
   cursor:not-allowed;
+}
+
+.finish-day{
+  background:var(--green);
+}
+
+.copy-btn{
+  background:var(--purple);
+}
+
+.sent-btn{
+  background:var(--green);
+}
+
+.refresh-btn{
+  background:#0ea5e9;
+}
+
+.small-btn{
+  width:auto;
+  display:inline-block;
+  padding:10px 13px;
+  font-size:14px;
+  margin:5px 5px 5px 0;
+}
+
+input, select{
+  width:100%;
+  padding:13px;
+  font-size:16px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  margin:8px 0;
+  background:#020617;
+  color:white;
 }
 
 #notificationStatus,
 #reportStatus{
   text-align:center;
-  margin-bottom:15px;
+  margin:8px 0;
   color:#d1d5db;
   font-size:14px;
 }
 
-#events{
-  margin-top:20px;
+.tabs{
+  display:flex;
+  gap:10px;
+  margin:16px 0;
 }
 
-.event{
-  background:#1f2937;
-  border-left:6px solid #10b981;
+.tab{
+  flex:1;
+  background:#374151;
+}
+
+.tab.active{
+  background:var(--blue);
+}
+
+.section-title{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin:8px 0 12px;
+}
+
+.section-title h2{
+  margin:0;
+  font-size:20px;
+}
+
+.count-pill{
+  background:#020617;
+  border:1px solid var(--line);
+  color:#d1d5db;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:13px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1.1fr .9fr;
+  gap:14px;
+}
+
+.event,
+.report{
+  background:rgba(17,24,39,.96);
+  border:1px solid rgba(255,255,255,.08);
+  border-left:6px solid var(--green);
   padding:15px;
-  margin-bottom:10px;
-  border-radius:10px;
+  margin-bottom:12px;
+  border-radius:16px;
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+}
+
+.report{
+  border-left-color:var(--blue);
+}
+
+.report.urgent{
+  border-left-color:var(--orange);
+}
+
+.report.blocking{
+  border-left-color:var(--red);
+}
+
+.report.sent{
+  opacity:.72;
+  border-left-color:var(--green);
 }
 
 .time{
-  color:#9ca3af;
+  color:var(--muted);
   font-size:13px;
 }
 
 .unit{
-  font-size:20px;
+  font-size:22px;
   font-weight:bold;
+  margin:3px 0;
+}
+
+.meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:8px 0;
+}
+
+.badge{
+  padding:5px 9px;
+  border-radius:999px;
+  background:#374151;
+  font-size:12px;
+  color:#e5e7eb;
+}
+
+.badge.blue{ background:#1d4ed8; }
+.badge.green{ background:#047857; }
+.badge.orange{ background:#b45309; }
+.badge.red{ background:#b91c1c; }
+.badge.purple{ background:#6d28d9; }
+
+.label{
+  color:#cbd5e1;
+  font-size:13px;
+  margin-top:10px;
+  font-weight:bold;
+}
+
+.message-box,
+.hotsos-box{
+  background:#020617;
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+  margin-top:7px;
+  line-height:1.4;
+  white-space:pre-wrap;
+}
+
+.hotsos-box{
+  border-color:#334155;
+}
+
+.photos{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+  gap:8px;
+  margin-top:10px;
+}
+
+.photos img{
+  width:100%;
+  height:105px;
+  object-fit:cover;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+}
+
+.empty{
+  text-align:center;
+  color:var(--muted);
+  padding:25px;
+  background:rgba(17,24,39,.8);
+  border-radius:16px;
+  border:1px dashed var(--line);
+}
+
+.hidden{
+  display:none;
+}
+
+.filters{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.toast{
+  position:fixed;
+  top:15px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#111827;
+  color:white;
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px 18px;
+  z-index:9999;
+  display:none;
+  box-shadow:0 12px 35px rgba(0,0,0,.4);
+}
+
+.toast.success{ border-color:var(--green); }
+.toast.error{ border-color:var(--red); }
+
+@media(max-width:850px){
+  .top-grid,
+  .grid,
+  .filters{
+    grid-template-columns:1fr;
+  }
+
+  h1{
+    font-size:25px;
+  }
+
+  .tabs{
+    flex-direction:column;
+  }
 }
 </style>
 </head>
 
 <body>
+<div class="page">
+<div id="toast" class="toast"></div>
 
 <h1>🚨 Centro de Operaciones</h1>
+<div class="subtitle">Eventos en vivo, reportes IA, fotos y asistente para HotSOS</div>
 
 <audio id="alertSound" preload="auto">
   <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
 </audio>
 
-<button onclick="enableNotifications()">
-  🔔 Activar sonido y notificaciones
-</button>
+<div class="top-grid">
+  <div class="panel">
+    <button onclick="enableNotifications()">🔔 Activar sonido y notificaciones</button>
+    <div id="notificationStatus">Notificaciones: sin activar</div>
+    <button class="refresh-btn" onclick="refreshAll()">🔄 Actualizar ahora</button>
+  </div>
 
-<div id="notificationStatus">
-  Notificaciones: sin activar
+  <div class="panel">
+    <input type="date" id="reportDate">
+    <button id="finishDayBtn" class="finish-day" onclick="finalizarDia()">
+      📄 Finalizar Día y Descargar Reporte
+    </button>
+    <div id="reportStatus">Reporte diario: listo para generar</div>
+  </div>
 </div>
 
-  <input
-  type="date"
-  id="reportDate"
-  style="
-    width:100%;
-    padding:15px;
-    font-size:18px;
-    border-radius:10px;
-    margin-bottom:15px;
-  "
->
-<button id="finishDayBtn" class="finish-day" onclick="finalizarDia()">
-  📄 Finalizar Día y Descargar Reporte
-</button>
-
-<div id="reportStatus">
-  Reporte diario: listo para generar
+<div class="tabs">
+  <button id="tabReports" class="tab active" onclick="showTab('reports')">🤖 Reportes IA / HotSOS</button>
+  <button id="tabEvents" class="tab" onclick="showTab('events')">📋 Actividad Normal</button>
 </div>
 
-<div id="events"></div>
+<div id="reportsView">
+  <div class="panel">
+    <div class="section-title">
+      <h2>Reportes inteligentes</h2>
+      <span id="reportsCount" class="count-pill">0 reportes</span>
+    </div>
 
+    <div class="filters">
+      <input id="filterText" placeholder="Buscar unidad, empleado o mensaje" oninput="renderReports()">
+      <select id="filterStatus" onchange="renderReports()">
+        <option value="all">Todos</option>
+        <option value="needsHotsos">Necesitan HotSOS</option>
+        <option value="notSent">No enviados</option>
+        <option value="sent">Enviados</option>
+      </select>
+      <select id="filterPriority" onchange="renderReports()">
+        <option value="all">Todas las prioridades</option>
+        <option value="Urgent">Urgent</option>
+        <option value="Blocking Room">Blocking Room</option>
+        <option value="Normal">Normal</option>
+      </select>
+    </div>
+
+    <div id="reports"></div>
+  </div>
+</div>
+
+<div id="eventsView" class="hidden">
+  <div class="panel">
+    <div class="section-title">
+      <h2>Actividad normal</h2>
+      <span id="eventsCount" class="count-pill">0 eventos</span>
+    </div>
+    <div id="events"></div>
+  </div>
+</div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
 <script>
 let lastEventId = null;
-let firstLoad = true;
+let lastReportId = null;
+let firstLoadEvents = true;
+let firstLoadReports = true;
 let audioUnlocked = false;
+let reportsData = [];
+let eventsData = [];
+
+function showToast(message, type){
+  const toast = document.getElementById("toast");
+  toast.className = "toast " + (type || "");
+  toast.innerText = message;
+  toast.style.display = "block";
+
+  setTimeout(() => {
+    toast.style.display = "none";
+  }, 2800);
+}
+
+function escapeHtml(value){
+  return String(value || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+function showTab(tab){
+  document.getElementById("reportsView").classList.toggle("hidden", tab !== "reports");
+  document.getElementById("eventsView").classList.toggle("hidden", tab !== "events");
+  document.getElementById("tabReports").classList.toggle("active", tab === "reports");
+  document.getElementById("tabEvents").classList.toggle("active", tab === "events");
+}
 
 async function enableNotifications(){
-
   unlockAudio();
 
-  const sound =
-    document.getElementById("alertSound");
+  const sound = document.getElementById("alertSound");
 
   if(sound){
     sound.play().then(() => {
@@ -134,34 +453,25 @@ async function enableNotifications(){
     return;
   }
 
-  const permission =
-    await Notification.requestPermission();
+  const permission = await Notification.requestPermission();
 
   if(permission === "granted"){
     document.getElementById("notificationStatus").innerText =
       "✅ Notificaciones y sonido activados";
-    alert("✅ Notificaciones y sonido activados");
+    showToast("Notificaciones activadas", "success");
   }else{
     document.getElementById("notificationStatus").innerText =
       "❌ Notificaciones bloqueadas";
-    alert("❌ Notificaciones bloqueadas. Revisa permisos del navegador.");
+    showToast("Notificaciones bloqueadas", "error");
   }
 }
 
 function unlockAudio(){
   try{
-    const AudioContext =
-      window.AudioContext ||
-      window.webkitAudioContext;
-
-    const audioCtx =
-      new AudioContext();
-
-    const osc =
-      audioCtx.createOscillator();
-
-    const gain =
-      audioCtx.createGain();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
 
     osc.connect(gain);
     gain.connect(audioCtx.destination);
@@ -179,9 +489,7 @@ function unlockAudio(){
 }
 
 function playAlert(){
-
-  const sound =
-    document.getElementById("alertSound");
+  const sound = document.getElementById("alertSound");
 
   if(sound){
     sound.currentTime = 0;
@@ -189,27 +497,17 @@ function playAlert(){
       console.log("Sound blocked:", error);
     });
   }
-
 }
 
-function sendBrowserNotification(event){
-  if(
-    "Notification" in window &&
-    Notification.permission === "granted"
-  ){
-    new Notification(
-      event.action || "Nueva actualización",
-      {
-        body:
-          `${event.unit || "Unidad"} - ${event.person || "Operación"}`,
-      }
-    );
+function sendBrowserNotification(title, body){
+  if("Notification" in window && Notification.permission === "granted"){
+    new Notification(title || "Nueva actualización", {
+      body: body || "Centro de Operaciones",
+    });
   }
 }
 
 function todayLocalISO(){
-  const now = new Date();
-
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
     year: "numeric",
@@ -217,29 +515,20 @@ function todayLocalISO(){
     day: "2-digit",
   });
 
-  return formatter.format(now);
+  return formatter.format(new Date());
 }
 
 function finalizarDia(){
-
-  const selectedDate =
-    document.getElementById("reportDate").value;
-
-  const date =
-    selectedDate || todayLocalISO();
-
-  const btn =
-    document.getElementById("finishDayBtn");
-
-  const status =
-    document.getElementById("reportStatus");
+  const selectedDate = document.getElementById("reportDate").value;
+  const date = selectedDate || todayLocalISO();
+  const btn = document.getElementById("finishDayBtn");
+  const status = document.getElementById("reportStatus");
 
   btn.disabled = true;
   btn.innerText = "⏳ Generando reporte...";
   status.innerText = "Generando y descargando reporte...";
 
-  window.location.href =
-    `/finalizar-dia?date=${date}`;
+  window.location.href = `/finalizar-dia?date=${date}`;
 
   setTimeout(() => {
     btn.disabled = false;
@@ -248,56 +537,251 @@ function finalizarDia(){
   }, 3000);
 }
 
-async function loadEvents(){
+function normalizeReport(raw){
+  const id = raw.id || raw.reportId || raw.pageId || "";
+  return {
+    id,
+    reportId: raw.reportId || raw.reportID || raw["Report ID"] || id,
+    time: raw.time || raw.createdAt || raw.dateTime || "",
+    date: raw.date || "",
+    unit: raw.unit || "",
+    employee: raw.employee || raw.person || "",
+    role: raw.role || "",
+    message: raw.originalMessage || raw.message || raw.note || "",
+    category: raw.aiCategory || raw.category || "",
+    priority: raw.aiPriority || raw.priority || "Normal",
+    summary: raw.aiSummary || raw.summary || "",
+    hotsosText: raw.suggestedHotsosText || raw.suggestedHotSOS || raw.hotsosText || raw["Suggested HotSOS Text"] || "",
+    needsHotsos: raw.needsHotsos ?? raw.needsHotSOS ?? raw.needsHOTSOS ?? false,
+    hotsosSent: raw.hotsosSent ?? raw.hotSOSSent ?? raw.sentToHotsos ?? false,
+    photos: raw.photos || raw.photoUrls || raw.photoURLS || [],
+    photosCount: raw.photosCount || (raw.photos || raw.photoUrls || []).length || 0,
+    status: raw.status || "Received",
+  };
+}
+
+function reportPriorityClass(priority){
+  const p = String(priority || "").toLowerCase();
+  if(p.includes("blocking")) return "blocking";
+  if(p.includes("urgent")) return "urgent";
+  return "";
+}
+
+function priorityBadge(priority){
+  const p = String(priority || "Normal");
+  const lower = p.toLowerCase();
+  let cls = "blue";
+
+  if(lower.includes("urgent")) cls = "orange";
+  if(lower.includes("blocking")) cls = "red";
+
+  return `<span class="badge ${cls}">${escapeHtml(p)}</span>`;
+}
+
+async function loadReports(){
   try{
-    const response =
-      await fetch("/operations-events");
+    const response = await fetch("/operations-reports");
+    const data = await response.json();
 
-    const data =
-      await response.json();
+    const list = data.reports || data.events || data.results || [];
+    reportsData = list.map(normalizeReport);
 
-    const newest =
-      data.events && data.events.length > 0
-        ? data.events[0]
-        : null;
+    const newest = reportsData.length > 0 ? reportsData[0] : null;
 
     if(newest){
-      if(firstLoad){
-        lastEventId =
-          newest.id;
-
-        firstLoad =
-          false;
-
-      }else if(newest.id !== lastEventId){
-
-        lastEventId =
-          newest.id;
-
+      if(firstLoadReports){
+        lastReportId = newest.id;
+        firstLoadReports = false;
+      }else if(newest.id !== lastReportId){
+        lastReportId = newest.id;
         playAlert();
-        sendBrowserNotification(newest);
+        sendBrowserNotification("Nuevo reporte IA", `${newest.unit || "Unidad"} - ${newest.employee || "Empleado"}`);
       }
     }
 
-    const container =
-      document.getElementById("events");
+    renderReports();
+  }catch(error){
+    console.log("Error loading reports:", error);
+    document.getElementById("reports").innerHTML =
+      `<div class="empty">No se pudieron cargar los reportes IA.</div>`;
+  }
+}
 
-    container.innerHTML =
-      "";
+function renderReports(){
+  const container = document.getElementById("reports");
+  const textFilter = String(document.getElementById("filterText").value || "").toLowerCase();
+  const statusFilter = document.getElementById("filterStatus").value;
+  const priorityFilter = document.getElementById("filterPriority").value;
 
-  data.events.forEach(event => {
-  container.innerHTML += `
+  let filtered = reportsData.filter(report => {
+    const haystack = `${report.unit} ${report.employee} ${report.role} ${report.message} ${report.category} ${report.summary}`.toLowerCase();
+
+    if(textFilter && !haystack.includes(textFilter)) return false;
+
+    if(priorityFilter !== "all" && String(report.priority || "") !== priorityFilter) return false;
+
+    if(statusFilter === "needsHotsos" && !report.needsHotsos) return false;
+    if(statusFilter === "notSent" && report.hotsosSent) return false;
+    if(statusFilter === "sent" && !report.hotsosSent) return false;
+
+    return true;
+  });
+
+  document.getElementById("reportsCount").innerText = `${filtered.length} reportes`;
+
+  if(filtered.length === 0){
+    container.innerHTML = `<div class="empty">No hay reportes para mostrar.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(report => {
+    const priorityClass = reportPriorityClass(report.priority);
+    const sentClass = report.hotsosSent ? "sent" : "";
+    const photos = Array.isArray(report.photos) ? report.photos : [];
+    const safeHotSOS = escapeHtml(report.hotsosText || "");
+
+    return `
+      <div class="report ${priorityClass} ${sentClass}" id="report-${escapeHtml(report.id)}">
+        <div class="time">${escapeHtml(report.time || report.date || "")}</div>
+        <div class="unit">${escapeHtml(report.unit || "Sin unidad")}</div>
+
+        <div class="meta">
+          <span class="badge blue">${escapeHtml(report.employee || "Sin empleado")}</span>
+          <span class="badge purple">${escapeHtml(report.role || "")}</span>
+          <span class="badge">${escapeHtml(report.category || "Sin categoría")}</span>
+          ${priorityBadge(report.priority)}
+          ${report.needsHotsos ? `<span class="badge orange">Needs HotSOS</span>` : `<span class="badge">No HotSOS</span>`}
+          ${report.hotsosSent ? `<span class="badge green">Sent</span>` : `<span class="badge red">Not Sent</span>`}
+        </div>
+
+        <div class="label">Mensaje original</div>
+        <div class="message-box">${escapeHtml(report.message || "Sin mensaje")}</div>
+
+        ${report.summary ? `
+          <div class="label">Resumen IA</div>
+          <div class="message-box">${escapeHtml(report.summary)}</div>
+        ` : ""}
+
+        <div class="label">Texto sugerido para HotSOS</div>
+        <div class="hotsos-box" id="hotsos-${escapeHtml(report.id)}">${safeHotSOS || "Sin texto sugerido"}</div>
+
+        <button class="copy-btn small-btn" onclick="copyHotSOS('${escapeHtml(report.id)}')">📋 Copiar HotSOS</button>
+        <button class="sent-btn small-btn" onclick="markHotSosSent('${escapeHtml(report.id)}')">✅ Marcar enviado</button>
+
+        ${photos.length > 0 ? `
+          <div class="label">Fotos (${photos.length})</div>
+          <div class="photos">
+            ${photos.map(url => `
+              <a href="${escapeHtml(url)}" target="_blank">
+                <img src="${escapeHtml(url)}" loading="lazy">
+              </a>
+            `).join("")}
+          </div>
+        ` : report.photosCount ? `
+          <div class="label">Fotos</div>
+          <div class="message-box">${escapeHtml(report.photosCount)} foto(s) guardadas.</div>
+        ` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+async function copyHotSOS(reportId){
+  const box = document.getElementById(`hotsos-${reportId}`);
+  const text = box ? box.innerText.trim() : "";
+
+  if(!text || text === "Sin texto sugerido"){
+    showToast("No hay texto para copiar", "error");
+    return;
+  }
+
+  try{
+    await navigator.clipboard.writeText(text);
+    showToast("Texto copiado para HotSOS", "success");
+  }catch(error){
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+    showToast("Texto copiado", "success");
+  }
+}
+
+async function markHotSosSent(reportId){
+  try{
+    const response = await fetch("/mark-hotsos-sent", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+      },
+      body:JSON.stringify({
+        reportId,
+        id:reportId,
+      }),
+    });
+
+    const data = await response.json();
+
+    if(!data.ok && !data.success){
+      throw new Error(data.message || data.error || "No se pudo marcar enviado");
+    }
+
+    showToast("Marcado como enviado a HotSOS", "success");
+    await loadReports();
+  }catch(error){
+    showToast("Error: " + error.message, "error");
+  }
+}
+
+async function loadEvents(){
+  try{
+    const response = await fetch("/operations-events");
+    const data = await response.json();
+
+    eventsData = data.events || [];
+
+    const newest = eventsData.length > 0 ? eventsData[0] : null;
+
+    if(newest){
+      if(firstLoadEvents){
+        lastEventId = newest.id;
+        firstLoadEvents = false;
+      }else if(newest.id !== lastEventId){
+        lastEventId = newest.id;
+        playAlert();
+        sendBrowserNotification(newest.action || "Nueva actualización", `${newest.unit || "Unidad"} - ${newest.person || "Operación"}`);
+      }
+    }
+
+    renderEvents();
+  }catch(err){
+    console.log(err);
+  }
+}
+
+function renderEvents(){
+  const container = document.getElementById("events");
+  document.getElementById("eventsCount").innerText = `${eventsData.length} eventos`;
+
+  if(eventsData.length === 0){
+    container.innerHTML = `<div class="empty">No hay actividad todavía.</div>`;
+    return;
+  }
+
+  container.innerHTML = eventsData.map(event => `
     <div class="event">
-      <div class="time">${event.time || ""}</div>
-      <div class="unit">${event.unit || ""}</div>
-      <div>${event.action || ""}</div>
-      <div>${event.person || ""}</div>
-      <div>${event.note || ""}</div>
+      <div class="time">${escapeHtml(event.time || "")}</div>
+      <div class="unit">${escapeHtml(event.unit || "")}</div>
+      <div>${escapeHtml(event.action || "")}</div>
+      <div>${escapeHtml(event.person || "")}</div>
+      <div>${escapeHtml(event.note || "")}</div>
 
       ${event.photoUrl ? `
-        <a href="${event.photoUrl}" target="_blank">
+        <a href="${escapeHtml(event.photoUrl)}" target="_blank">
           <img
-            src="${event.photoUrl}"
+            src="${escapeHtml(event.photoUrl)}"
             style="
               width:100%;
               max-width:260px;
@@ -309,40 +793,29 @@ async function loadEvents(){
         </a>
       ` : ""}
     </div>
-  `;
-});
-
-  }catch(err){
-    console.log(err);
-  }
+  `).join("");
 }
 
+function refreshAll(){
+  loadReports();
+  loadEvents();
+  showToast("Actualizando...", "success");
+}
+
+document.getElementById("reportDate").value = todayLocalISO();
+
+loadReports();
 loadEvents();
 
-setInterval(
-  loadEvents,
-  5000
-);
-  const socket = io();
+setInterval(loadReports, 5000);
+setInterval(loadEvents, 5000);
+
+const socket = io();
 
 socket.on("ops-update", () => {
-  if(typeof loadMaster === "function"){
-    loadMaster();
-  }
-
-  if(typeof loadCleanerAssignments === "function" && typeof currentCleanerName !== "undefined" && currentCleanerName){
-    loadCleanerAssignments();
-  }
-
-  if(typeof loadInspectorAssignments === "function" && typeof currentInspectorCode !== "undefined" && currentInspectorCode){
-    loadInspectorAssignments();
-  }
-
-  if(typeof loadEvents === "function"){
-    loadEvents();
-  }
+  loadReports();
+  loadEvents();
 });
 </script>
-<script src="/socket.io/socket.io.js"></script>
 </body>
 </html>
