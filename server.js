@@ -3120,13 +3120,94 @@ if(cached){
     });
   }
 });
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function distanceFeet(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (value) => (value * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const meters = R * c;
+
+  return meters * 3.28084;
+}
+
+function validateHotelLocation(body) {
+  const hotelLat = toNumber(process.env.HOTEL_LAT || 36.638366);
+  const hotelLng = toNumber(process.env.HOTEL_LNG || -93.350305);
+  const radiusFeet = toNumber(process.env.HOTEL_RADIUS_FEET || 300);
+
+  const lat = toNumber(body.lat);
+  const lng = toNumber(body.lng);
+  const accuracy = toNumber(body.accuracy);
+
+  if (lat === null || lng === null) {
+    return {
+      ok: false,
+      status: "GPS Error",
+      message: "No se pudo obtener tu ubicación. Activa Location Services e intenta de nuevo.",
+      distanceFeet: null,
+      accuracy,
+      lat,
+      lng,
+    };
+  }
+
+  const distance = distanceFeet(hotelLat, hotelLng, lat, lng);
+
+  if (distance > radiusFeet) {
+    return {
+      ok: false,
+      status: "Outside Property",
+      message: `Debes estar dentro del hotel para registrar tu horario. Distancia aproximada: ${Math.round(distance)} ft.`,
+      distanceFeet: Number(distance.toFixed(2)),
+      accuracy,
+      lat,
+      lng,
+    };
+  }
+
+  return {
+    ok: true,
+    status: "Inside Property",
+    message: "Ubicación validada.",
+    distanceFeet: Number(distance.toFixed(2)),
+    accuracy,
+    lat,
+    lng,
+  };
+}
 app.post("/clock-in", async (req, res) => {
   try {
     const code = String(req.body.code || "").trim();
+    const location = validateHotelLocation(req.body);
 
     if (!code) {
       return res.status(400).json({
         error: "Employee code required",
+      });
+    }
+
+    if (!location.ok) {
+      return res.status(403).json({
+        ok: false,
+        error: location.message,
+        locationStatus: location.status,
+        distanceFeet: location.distanceFeet,
+        accuracy: location.accuracy,
       });
     }
 
@@ -3147,7 +3228,7 @@ app.post("/clock-in", async (req, res) => {
       props.Role?.select?.name || "";
 
     const hourlyRate =
-  props["Hourly Rate"]?.number || 0;
+      props["Hourly Rate"]?.number || 0;
 
     await notion.pages.create({
       parent: {
@@ -3193,10 +3274,32 @@ app.post("/clock-in", async (req, res) => {
         "Hourly Rate": {
           number: hourlyRate,
         },
-        
+
         "Clock In": {
           date: {
             start: new Date().toISOString(),
+          },
+        },
+
+        "Clock In Lat": {
+          number: location.lat,
+        },
+
+        "Clock In Lng": {
+          number: location.lng,
+        },
+
+        "Clock In Distance": {
+          number: location.distanceFeet,
+        },
+
+        "Clock In Accuracy": {
+          number: location.accuracy,
+        },
+
+        "Location Status": {
+          select: {
+            name: location.status,
           },
         },
 
@@ -3210,7 +3313,10 @@ app.post("/clock-in", async (req, res) => {
 
     res.json({
       ok: true,
-      message: `${employeeName} clocked in`,
+      message: `${employeeName} clocked in. Location OK (${Math.round(location.distanceFeet)} ft).`,
+      locationStatus: location.status,
+      distanceFeet: location.distanceFeet,
+      accuracy: location.accuracy,
     });
 
   } catch (error) {
@@ -3221,13 +3327,25 @@ app.post("/clock-in", async (req, res) => {
     });
   }
 });
+
 app.post("/clock-out", async (req, res) => {
   try {
     const code = String(req.body.code || "").trim();
+    const location = validateHotelLocation(req.body);
 
     if (!code) {
       return res.status(400).json({
         error: "Employee code required",
+      });
+    }
+
+    if (!location.ok) {
+      return res.status(403).json({
+        ok: false,
+        error: location.message,
+        locationStatus: location.status,
+        distanceFeet: location.distanceFeet,
+        accuracy: location.accuracy,
       });
     }
 
@@ -3283,6 +3401,28 @@ app.post("/clock-out", async (req, res) => {
           },
         },
 
+        "Clock Out Lat": {
+          number: location.lat,
+        },
+
+        "Clock Out Lng": {
+          number: location.lng,
+        },
+
+        "Clock Out Distance": {
+          number: location.distanceFeet,
+        },
+
+        "Clock Out Accuracy": {
+          number: location.accuracy,
+        },
+
+        "Location Status": {
+          select: {
+            name: location.status,
+          },
+        },
+
         Hours: {
           number: Number(hours.toFixed(2)),
         },
@@ -3301,8 +3441,12 @@ app.post("/clock-out", async (req, res) => {
 
     res.json({
       ok: true,
-      message: `Clock Out successful (${hours.toFixed(2)} hrs)`,
+      message: `Clock Out successful (${hours.toFixed(2)} hrs). Location OK (${Math.round(location.distanceFeet)} ft).`,
+      locationStatus: location.status,
+      distanceFeet: location.distanceFeet,
+      accuracy: location.accuracy,
     });
+
   } catch (error) {
     console.error(error);
 
