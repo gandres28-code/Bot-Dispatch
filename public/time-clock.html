@@ -1,82 +1,340 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Time Clock</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      padding: 20px;
-      max-width: 500px;
-      margin: auto;
-    }
-    h2 { text-align: center; }
-    input {
-      width: 100%;
-      padding: 18px;
-      font-size: 22px;
-      margin: 15px 0;
-      border-radius: 10px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-      text-align: center;
-    }
-    button {
-      width: 100%;
-      padding: 20px;
-      font-size: 22px;
-      margin: 10px 0;
-      border: none;
-      border-radius: 12px;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .in { background: #059669; }
-    .out { background: #dc2626; }
-    #msg {
-      margin-top: 20px;
-      font-size: 18px;
-      text-align: center;
-      font-weight: bold;
-    }
-  </style>
+<title>Employee Time Clock</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#111827;
+  color:white;
+  min-height:100vh;
+}
+
+.container{
+  max-width:500px;
+  margin:auto;
+  padding:25px;
+}
+
+.card{
+  background:#1f2937;
+  border-radius:20px;
+  padding:25px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+}
+
+h1{
+  text-align:center;
+  margin-top:5px;
+  margin-bottom:10px;
+  font-size:32px;
+}
+
+.subtitle{
+  text-align:center;
+  color:#9ca3af;
+  margin-bottom:25px;
+}
+
+.status{
+  text-align:center;
+  background:#0f172a;
+  border-radius:15px;
+  padding:15px;
+  margin-bottom:20px;
+}
+
+.status-title{
+  color:#9ca3af;
+  font-size:14px;
+}
+
+.status-value{
+  margin-top:5px;
+  font-size:22px;
+  font-weight:bold;
+}
+
+.location{
+  margin-top:10px;
+  color:#10b981;
+  font-size:14px;
+}
+
+input{
+  width:100%;
+  padding:18px;
+  font-size:24px;
+  border:none;
+  border-radius:15px;
+  background:#374151;
+  color:white;
+  text-align:center;
+  box-sizing:border-box;
+}
+
+input::placeholder{
+  color:#9ca3af;
+}
+
+button{
+  width:100%;
+  padding:18px;
+  border:none;
+  border-radius:15px;
+  color:white;
+  font-size:22px;
+  font-weight:bold;
+  margin-top:15px;
+  cursor:pointer;
+}
+
+.in{
+  background:#059669;
+}
+
+.out{
+  background:#dc2626;
+}
+
+button:disabled{
+  opacity:.6;
+}
+
+#msg{
+  margin-top:20px;
+  text-align:center;
+  font-size:17px;
+  line-height:1.4;
+}
+
+.loader{
+  display:none;
+  text-align:center;
+  margin-top:20px;
+}
+
+.spinner{
+  width:40px;
+  height:40px;
+  border:4px solid rgba(255,255,255,.2);
+  border-top:4px solid white;
+  border-radius:50%;
+  margin:auto;
+  animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+  from{
+    transform:rotate(0deg);
+  }
+  to{
+    transform:rotate(360deg);
+  }
+}
+</style>
 </head>
+
 <body>
-  <h2>Employee Time Clock</h2>
 
-  <input id="code" placeholder="Enter your code" inputmode="numeric">
+<div class="container">
 
-  <button class="in" onclick="sendClock('clock-in')">CLOCK IN</button>
-  <button class="out" onclick="sendClock('clock-out')">CLOCK OUT</button>
+<div class="card">
 
-  <div id="msg"></div>
+<h1>🕒 Time Clock</h1>
+<div class="subtitle">
+Employee Check In / Check Out
+</div>
 
-  <script>
-    async function sendClock(type) {
-      const code = document.getElementById("code").value.trim();
-      const msg = document.getElementById("msg");
+<div class="status">
+  <div class="status-title">
+    GPS Status
+  </div>
 
-      if (!code) {
-        msg.innerText = "Enter your code first";
-        return;
+  <div id="gpsStatus" class="status-value">
+    Waiting...
+  </div>
+
+  <div id="distance" class="location"></div>
+</div>
+
+<input
+  id="code"
+  placeholder="Enter Employee Code"
+  inputmode="numeric"
+>
+
+<button
+  class="in"
+  onclick="sendClock('clock-in')"
+>
+  CLOCK IN
+</button>
+
+<button
+  class="out"
+  onclick="sendClock('clock-out')"
+>
+  CLOCK OUT
+</button>
+
+<div class="loader" id="loader">
+  <div class="spinner"></div>
+</div>
+
+<div id="msg"></div>
+
+</div>
+
+</div>
+
+<script>
+function showLoading(show){
+  document.getElementById("loader").style.display =
+    show ? "block" : "none";
+}
+
+function getLocation(){
+  return new Promise((resolve,reject)=>{
+
+    if(!navigator.geolocation){
+      reject(
+        new Error(
+          "This device does not support GPS."
+        )
+      );
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position)=>{
+
+        resolve({
+          lat:position.coords.latitude,
+          lng:position.coords.longitude,
+          accuracy:position.coords.accuracy
+        });
+
+      },
+      ()=>{
+        reject(
+          new Error(
+            "Unable to obtain location. Please enable Location Services."
+          )
+        );
+      },
+      {
+        enableHighAccuracy:true,
+        timeout:15000,
+        maximumAge:0
       }
+    );
+  });
+}
 
-      msg.innerText = "Sending...";
+async function sendClock(type){
 
-      const res = await fetch("/" + type, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
+  const code =
+    document.getElementById("code").value.trim();
+
+  const msg =
+    document.getElementById("msg");
+
+  const gps =
+    document.getElementById("gpsStatus");
+
+  const distance =
+    document.getElementById("distance");
+
+  if(!code){
+    msg.innerText =
+      "Enter your employee code.";
+    return;
+  }
+
+  try{
+
+    msg.innerText =
+      "📍 Obtaining location...";
+
+    gps.innerText =
+      "Locating...";
+
+    distance.innerText =
+      "";
+
+    showLoading(true);
+
+    const location =
+      await getLocation();
+
+    gps.innerText =
+      "GPS Located";
+
+    msg.innerText =
+      "⏳ Sending...";
+
+    const res =
+      await fetch("/" + type,{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json"
         },
-        body: JSON.stringify({ code })
+        body:JSON.stringify({
+          code,
+          lat:location.lat,
+          lng:location.lng,
+          accuracy:location.accuracy
+        })
       });
 
-      const data = await res.json();
+    const data =
+      await res.json();
 
-      msg.innerText = data.message || data.error || "Done";
+    showLoading(false);
+
+    msg.innerText =
+      data.message ||
+      data.error ||
+      "Done";
+
+    if(data.distanceFeet){
+      distance.innerText =
+        `📍 Distance: ${Math.round(data.distanceFeet)} ft`;
     }
-  </script>
+
+    if(data.locationStatus ===
+      "Inside Property"){
+      gps.innerText =
+        "✅ Inside Property";
+      gps.style.color =
+        "#10b981";
+    }
+    else{
+      gps.innerText =
+        "❌ Outside Property";
+      gps.style.color =
+        "#ef4444";
+    }
+
+  }catch(error){
+
+    showLoading(false);
+
+    gps.innerText =
+      "GPS Error";
+
+    gps.style.color =
+      "#ef4444";
+
+    msg.innerText =
+      error.message;
+  }
+}
+</script>
+
 </body>
 </html>
