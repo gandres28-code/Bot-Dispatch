@@ -960,6 +960,25 @@ async function findEmployeeByCode(code) {
     database_id: NOTION_EMPLOYEES_DATABASE_ID,
     page_size: 100,
   });
+
+  return response.results.find((page) => {
+    const employeeCode =
+      page.properties.Code?.rich_text
+        ?.map((t) => t.plain_text)
+        .join("") || "";
+
+    return employeeCode.trim() === String(code).trim();
+  });
+}
+
+function getEmployeeNameFromPage(page) {
+  return page.properties.Employee?.title?.map((t) => t.plain_text).join("") || "";
+}
+
+function getEmployeeRoleFromPage(page) {
+  return page.properties.Role?.select?.name || "";
+}
+
 function mobileHomeFromRole(role) {
   const cleanRole = String(role || "").trim().toLowerCase();
 
@@ -1020,6 +1039,7 @@ app.post("/mobile-code-login", async (req, res) => {
       role,
       code,
       home,
+      employeeId: employee.id,
     });
 
   } catch (error) {
@@ -1031,9 +1051,17 @@ app.post("/mobile-code-login", async (req, res) => {
     });
   }
 });
-  app.get("/test-mobile-code-login", async (req, res) => {
+
+app.get("/test-mobile-code-login", async (req, res) => {
   try {
     const code = String(req.query.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
 
     const employee = await findEmployeeByCode(code);
 
@@ -1058,28 +1086,15 @@ app.post("/mobile-code-login", async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Error en /test-mobile-code-login:", error.message);
+
     res.status(500).json({
       ok: false,
       message: error.message,
     });
   }
 });
-  return response.results.find((page) => {
-    const employeeCode =
-      page.properties.Code?.rich_text
-        ?.map((t) => t.plain_text)
-        .join("") || "";
 
-    return employeeCode.trim() === String(code).trim();
-  });
-}
-function getEmployeeNameFromPage(page) {
-  return page.properties.Employee?.title?.map((t) => t.plain_text).join("") || "";
-}
-
-function getEmployeeRoleFromPage(page) {
-  return page.properties.Role?.select?.name || "";
-}
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   const records = await getPayrollRecords(weekStart, weekEnd);
   const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
