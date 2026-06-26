@@ -960,7 +960,77 @@ async function findEmployeeByCode(code) {
     database_id: NOTION_EMPLOYEES_DATABASE_ID,
     page_size: 100,
   });
+function mobileHomeFromRole(role) {
+  const cleanRole = String(role || "").trim().toLowerCase();
 
+  if (cleanRole === "inspector") {
+    return "inspector";
+  }
+
+  if (cleanRole === "dispatch / inspector") {
+    return "inspector_operations";
+  }
+
+  if (cleanRole === "operations") {
+    return "operations";
+  }
+
+  if (cleanRole === "admin") {
+    return "admin";
+  }
+
+  if (cleanRole === "runner") {
+    return "runner";
+  }
+
+  if (cleanRole === "laundry") {
+    return "laundry";
+  }
+
+  return "staff";
+}
+
+app.post("/mobile-code-login", async (req, res) => {
+  try {
+    const code = String(req.body.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
+
+    const employee = await findEmployeeByCode(code);
+
+    if (!employee) {
+      return res.status(404).json({
+        ok: false,
+        message: "Código no encontrado",
+      });
+    }
+
+    const employeeName = getEmployeeNameFromPage(employee);
+    const role = getEmployeeRoleFromPage(employee);
+    const home = mobileHomeFromRole(role);
+
+    res.json({
+      ok: true,
+      employee: employeeName,
+      role,
+      code,
+      home,
+    });
+
+  } catch (error) {
+    console.error("Error en /mobile-code-login:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
   return response.results.find((page) => {
     const employeeCode =
       page.properties.Code?.rich_text
@@ -3190,6 +3260,127 @@ function validateHotelLocation(body) {
     lng,
   };
 }
+
+app.post("/mobile-cleaner-login", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+
+    if (!name) {
+      return res.status(400).json({
+        ok: false,
+        message: "Nombre requerido",
+      });
+    }
+
+    const cleanText = (value) => {
+      return String(value || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+    };
+
+    const typedName = cleanText(name);
+    const pages = await queryTodayRooms();
+
+    const units = pages
+      .map((page) => {
+        const props = page.properties;
+
+        const assignedCleaner =
+          props["Assigned Cleaner"]?.select?.name ||
+          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+          "";
+
+        return {
+          id: page.id,
+          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+          status: props["Cleaning Status"]?.status?.name || "",
+          assignedCleaner,
+          arrival: !!props.Arrival?.checkbox,
+        };
+      })
+      .filter((item) => {
+        const assignedCleaner = cleanText(item.assignedCleaner);
+
+        return typedName && assignedCleaner && assignedCleaner.includes(typedName);
+      });
+
+    if (units.length === 0) {
+      return res.status(404).json({
+        ok: false,
+        message: "No encontré unidades asignadas para ese nombre hoy.",
+      });
+    }
+
+    res.json({
+      ok: true,
+      employee: name,
+      role: "Cleaner",
+      home: "cleaner",
+      count: units.length,
+      units,
+    });
+
+  } catch (error) {
+    console.error("Error en /mobile-cleaner-login:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+app.post("/mobile-code-login", async (req, res) => {
+  try {
+    const code = String(req.body.code || "").trim();
+
+    if (!code) {
+      return res.status(400).json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
+
+    const employee = await findEmployeeByCode(code);
+
+    if (!employee) {
+      return res.status(404).json({
+        ok: false,
+        message: "Código no encontrado",
+      });
+    }
+
+    const employeeName =
+      getEmployeeNameFromPage(employee);
+
+    const role =
+      getEmployeeRoleFromPage(employee);
+
+    const home =
+      mobileHomeFromRole(role);
+
+    res.json({
+      ok: true,
+      employee: employeeName,
+      role,
+      code,
+      home,
+      employeeId: employee.id,
+    });
+
+  } catch (error) {
+    console.error(
+      "Error en /mobile-code-login:",
+      error
+    );
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.post("/clock-in", async (req, res) => {
   try {
     const code = String(req.body.code || "").trim();
