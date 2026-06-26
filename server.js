@@ -1031,6 +1031,39 @@ app.post("/mobile-code-login", async (req, res) => {
     });
   }
 });
+  app.get("/test-mobile-code-login", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim();
+
+    const employee = await findEmployeeByCode(code);
+
+    if (!employee) {
+      return res.status(404).json({
+        ok: false,
+        message: "Código no encontrado",
+      });
+    }
+
+    const employeeName = getEmployeeNameFromPage(employee);
+    const role = getEmployeeRoleFromPage(employee);
+    const home = mobileHomeFromRole(role);
+
+    res.json({
+      ok: true,
+      employee: employeeName,
+      role,
+      code,
+      home,
+      employeeId: employee.id,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
   return response.results.find((page) => {
     const employeeCode =
       page.properties.Code?.rich_text
