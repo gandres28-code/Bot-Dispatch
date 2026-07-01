@@ -1,91 +1,217 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <title>Panel de Limpieza</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111827">
+  <title>417 Maid | Limpieza</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
 
   <style>
     :root{
-      --bg:#f3f4f6;
+      --bg:#eef2f7;
+      --ink:#101827;
+      --muted:#667085;
+      --line:#e6eaf0;
       --card:#ffffff;
-      --text:#111827;
-      --muted:#6b7280;
-      --line:#e5e7eb;
+      --soft:#f8fafc;
       --green:#16a34a;
+      --green-soft:#dcfce7;
       --red:#dc2626;
+      --red-soft:#fee2e2;
       --blue:#2563eb;
+      --blue-soft:#dbeafe;
       --amber:#f59e0b;
+      --amber-soft:#ffedd5;
       --purple:#7c3aed;
-      --black:#111827;
-      --shadow:0 12px 30px rgba(15,23,42,.10);
-      --radius:22px;
+      --purple-soft:#ede9fe;
+      --shadow:0 16px 38px rgba(15,23,42,.10);
+      --shadow-soft:0 8px 22px rgba(15,23,42,.07);
+      --radius:24px;
+      --nav-height:84px;
     }
 
-    *{
-      box-sizing:border-box;
-    }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+    html,body{ min-height:100%; }
 
     body{
       margin:0;
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(37,99,235,.10), transparent 32%),
-        linear-gradient(180deg,#f9fafb 0%,#eef2f7 100%);
-      color:var(--text);
-      max-width:760px;
-      margin:auto;
-      padding:18px;
-      padding-bottom:40px;
+        radial-gradient(circle at 0% 0%, rgba(37,99,235,.18), transparent 34%),
+        radial-gradient(circle at 100% 8%, rgba(124,58,237,.13), transparent 30%),
+        linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%);
+      color:var(--ink);
     }
 
-    .shell{
+    .app-shell{
+      width:100%;
+      max-width:560px;
+      min-height:100vh;
+      margin:0 auto;
+      padding:14px 14px calc(var(--nav-height) + 18px);
+    }
+
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:50;
+      margin:-14px -14px 14px;
+      padding:calc(env(safe-area-inset-top) + 14px) 14px 12px;
+      background:rgba(248,250,252,.88);
+      backdrop-filter:blur(18px);
+      border-bottom:1px solid rgba(226,232,240,.8);
+    }
+
+    .topbar-inner{
       display:flex;
-      flex-direction:column;
-      gap:16px;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      max-width:560px;
+      margin:auto;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:11px;
+      min-width:0;
+    }
+
+    .brand-mark{
+      width:44px;
+      height:44px;
+      border-radius:16px;
+      display:grid;
+      place-items:center;
+      color:#fff;
+      font-size:22px;
+      background:linear-gradient(135deg,#111827,#2563eb);
+      box-shadow:0 10px 24px rgba(37,99,235,.25);
+    }
+
+    .brand-title{
+      min-width:0;
+    }
+
+    .brand-title strong{
+      display:block;
+      font-size:17px;
+      letter-spacing:-.03em;
+      line-height:1.1;
+    }
+
+    .brand-title span{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+      margin-top:2px;
+    }
+
+    .home-btn{
+      text-decoration:none;
+      color:#111827;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:10px 12px;
+      font-size:13px;
+      font-weight:900;
+      box-shadow:var(--shadow-soft);
+      white-space:nowrap;
     }
 
     .hero{
-      background:linear-gradient(135deg,#111827,#1f2937);
       color:white;
-      border-radius:28px;
+      border-radius:30px;
       padding:22px;
-      box-shadow:var(--shadow);
       position:relative;
       overflow:hidden;
+      background:
+        linear-gradient(135deg,rgba(17,24,39,.98),rgba(31,41,55,.96)),
+        radial-gradient(circle at 90% 10%, rgba(59,130,246,.55), transparent 30%);
+      box-shadow:var(--shadow);
     }
 
-    .hero:after{
+    .hero:before{
       content:"";
       position:absolute;
-      width:180px;
-      height:180px;
+      width:190px;
+      height:190px;
       border-radius:999px;
       background:rgba(255,255,255,.08);
-      right:-60px;
-      top:-60px;
+      right:-70px;
+      top:-70px;
+    }
+
+    .hero-kicker{
+      display:inline-flex;
+      gap:7px;
+      align-items:center;
+      font-size:12px;
+      font-weight:950;
+      color:#bfdbfe;
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:999px;
+      padding:7px 10px;
     }
 
     .hero h1{
-      margin:0;
-      font-size:26px;
-      letter-spacing:-.03em;
+      margin:14px 0 7px;
+      font-size:30px;
+      line-height:1.02;
+      letter-spacing:-.055em;
     }
 
     .hero p{
-      margin:8px 0 0;
-      color:#d1d5db;
+      margin:0;
+      color:#d8dee9;
       font-size:14px;
-      line-height:1.35;
+      line-height:1.45;
+      max-width:420px;
+    }
+
+    .stats-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:9px;
+      margin:12px 0 14px;
+    }
+
+    .stat-card{
+      background:rgba(255,255,255,.92);
+      border:1px solid rgba(255,255,255,.75);
+      border-radius:20px;
+      padding:12px 8px;
+      text-align:center;
+      box-shadow:var(--shadow-soft);
+    }
+
+    .stat-card strong{
+      display:block;
+      font-size:20px;
+      letter-spacing:-.04em;
+    }
+
+    .stat-card span{
+      display:block;
+      margin-top:2px;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
     }
 
     .card{
       background:rgba(255,255,255,.94);
-      backdrop-filter:blur(14px);
-      border:1px solid rgba(255,255,255,.70);
+      border:1px solid rgba(255,255,255,.78);
       border-radius:var(--radius);
-      padding:18px;
-      box-shadow:var(--shadow);
+      padding:17px;
+      box-shadow:var(--shadow-soft);
+      margin-bottom:14px;
+      backdrop-filter:blur(16px);
     }
 
     .section-title{
@@ -97,70 +223,95 @@
     }
 
     .section-title h2{
-      font-size:17px;
       margin:0;
-      letter-spacing:-.02em;
+      font-size:17px;
+      letter-spacing:-.03em;
     }
 
-    .section-title span{
-      font-size:12px;
+    .section-title span,
+    .section-title small{
       color:var(--muted);
+      font-size:12px;
+      font-weight:800;
     }
 
     label{
       display:block;
-      font-size:13px;
-      font-weight:800;
-      color:#374151;
       margin:10px 0 7px;
+      font-size:13px;
+      font-weight:950;
+      color:#344054;
+    }
+
+    .input-wrap{
+      position:relative;
+    }
+
+    .input-icon{
+      position:absolute;
+      left:14px;
+      top:50%;
+      transform:translateY(-50%);
+      font-size:18px;
+      opacity:.82;
+      pointer-events:none;
     }
 
     input, textarea{
       width:100%;
-      padding:15px 16px;
-      font-size:16px;
-      border-radius:16px;
       border:1px solid var(--line);
-      background:#f9fafb;
+      background:#f8fafc;
+      color:#101827;
+      border-radius:18px;
       outline:none;
-      transition:.18s ease;
+      font-size:16px;
+      transition:.16s ease;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.75);
     }
 
-    input:focus, textarea:focus{
-      border-color:#93c5fd;
-      background:white;
-      box-shadow:0 0 0 4px rgba(59,130,246,.12);
+    input{
+      padding:16px 16px;
+    }
+
+    .input-wrap input{
+      padding-left:45px;
     }
 
     textarea{
-      min-height:112px;
+      min-height:108px;
+      padding:15px;
       resize:vertical;
-      line-height:1.35;
+      line-height:1.38;
+    }
+
+    input:focus, textarea:focus{
+      background:white;
+      border-color:#93c5fd;
+      box-shadow:0 0 0 4px rgba(59,130,246,.12);
     }
 
     button{
       width:100%;
-      padding:16px 18px;
+      border:none;
+      border-radius:18px;
+      padding:16px 17px;
       margin:8px 0;
       font-size:16px;
-      border:none;
-      border-radius:16px;
+      font-weight:950;
       color:white;
       cursor:pointer;
-      font-weight:900;
       transition:transform .12s ease, opacity .12s ease, box-shadow .12s ease;
-      box-shadow:0 8px 18px rgba(15,23,42,.12);
+      box-shadow:0 11px 22px rgba(15,23,42,.13);
     }
 
-    button:active{
-      transform:scale(.985);
-    }
+    button:active{ transform:scale(.986); }
+    button:disabled{ opacity:.58; cursor:not-allowed; transform:none; }
 
-    button:disabled{
-      opacity:.55;
-      cursor:not-allowed;
-      transform:none;
-    }
+    .btn-primary{ background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+    .start{ background:linear-gradient(135deg,#22c55e,#16a34a); }
+    .done{ background:linear-gradient(135deg,#111827,#374151); }
+    .report{ background:linear-gradient(135deg,#7c3aed,#5b21b6); }
+    .neutral{ background:#475467; }
 
     .btn-row{
       display:grid;
@@ -168,44 +319,60 @@
       gap:10px;
     }
 
-    .start{ background:var(--green); }
-    .done{ background:var(--red); }
-    .issue{ background:var(--amber); }
-    .supplies{ background:var(--blue); }
-    .lost{ background:var(--black); }
-    .neutral{ background:#4b5563; }
-    .report{ background:var(--purple); }
+    .small-link{
+      width:auto;
+      margin:0;
+      padding:9px 12px;
+      border-radius:999px;
+      background:#eef2ff;
+      color:#3730a3;
+      box-shadow:none;
+      font-size:12px;
+      border:1px solid #e0e7ff;
+    }
+
+    .cleaner-name{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:#1f2937;
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:8px 11px;
+      font-size:13px;
+      font-weight:950;
+      margin-bottom:11px;
+    }
 
     .assignment-grid{
       display:grid;
       grid-template-columns:1fr 1fr;
       gap:12px;
-      margin-top:12px;
+      margin-top:8px;
     }
 
     .assignment-card{
-      padding:16px;
-      border-radius:18px;
+      position:relative;
+      overflow:hidden;
+      min-height:126px;
+      padding:16px 15px 14px;
+      border-radius:22px;
       background:#fff;
       border:1px solid var(--line);
+      box-shadow:var(--shadow-soft);
       cursor:pointer;
-      box-shadow:0 7px 18px rgba(15,23,42,.07);
-      min-height:112px;
       display:flex;
       flex-direction:column;
       justify-content:space-between;
-      position:relative;
-      overflow:hidden;
     }
 
     .assignment-card:before{
       content:"";
       position:absolute;
-      left:0;
-      top:0;
-      bottom:0;
-      width:6px;
-      background:#9ca3af;
+      inset:0 auto 0 0;
+      width:7px;
+      background:#98a2b3;
     }
 
     .assignment-card.arrival:before{ background:var(--red); }
@@ -215,13 +382,15 @@
 
     .assignment-card.selected{
       border:2px solid #111827;
+      box-shadow:0 14px 30px rgba(17,24,39,.15);
       transform:translateY(-1px);
     }
 
     .unit-name{
-      font-size:20px;
-      font-weight:950;
-      letter-spacing:-.03em;
+      font-size:24px;
+      font-weight:1000;
+      letter-spacing:-.055em;
+      line-height:1;
     }
 
     .pill{
@@ -229,61 +398,65 @@
       align-items:center;
       width:max-content;
       max-width:100%;
-      padding:6px 9px;
+      margin-top:10px;
+      padding:7px 10px;
       border-radius:999px;
+      font-size:11px;
+      font-weight:950;
+      background:#f2f4f7;
+      color:#344054;
+      text-transform:uppercase;
+      letter-spacing:.02em;
+    }
+
+    .pill.arrival{ background:var(--red-soft); color:#991b1b; }
+    .pill.started{ background:var(--purple-soft); color:#5b21b6; }
+    .pill.done{ background:var(--green-soft); color:#166534; }
+
+    .tap-hint{
       font-size:12px;
-      font-weight:900;
-      background:#f3f4f6;
-      color:#374151;
-      margin-top:8px;
-    }
-
-    .pill.arrival{
-      background:#fee2e2;
-      color:#991b1b;
-    }
-
-    .pill.started{
-      background:#ede9fe;
-      color:#5b21b6;
-    }
-
-    .pill.done{
-      background:#dcfce7;
-      color:#166534;
+      color:#667085;
+      font-weight:850;
     }
 
     .selected-unit{
       display:none;
-      border-radius:18px;
-      padding:14px;
-      background:#f9fafb;
+      border-radius:20px;
+      padding:15px;
+      background:linear-gradient(135deg,#f8fafc,#ffffff);
       border:1px solid var(--line);
       margin-bottom:12px;
     }
 
     .selected-unit strong{
       display:block;
-      font-size:22px;
+      font-size:28px;
+      letter-spacing:-.055em;
+      line-height:1;
     }
 
     .selected-unit span{
       color:var(--muted);
       font-size:13px;
+      display:block;
+      margin-top:6px;
+      font-weight:700;
     }
 
     .photo-box{
       border:1.5px dashed #cbd5e1;
       background:#f8fafc;
       padding:14px;
-      border-radius:18px;
+      border-radius:20px;
       margin-top:8px;
     }
 
     .photo-meta{
+      margin-top:7px;
       font-size:13px;
       color:var(--muted);
-      margin-top:6px;
+      line-height:1.35;
+      font-weight:700;
     }
 
     .history-list{
@@ -294,54 +467,62 @@
     }
 
     .history-item{
-      border:1px solid var(--line);
-      border-radius:16px;
-      padding:12px;
       background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:13px;
+      box-shadow:0 6px 14px rgba(15,23,42,.04);
     }
 
     .history-top{
       display:flex;
       justify-content:space-between;
+      align-items:flex-start;
       gap:10px;
-      font-size:13px;
       color:var(--muted);
-      margin-bottom:6px;
+      font-size:12px;
+      font-weight:850;
+      margin-bottom:7px;
     }
 
     .history-action{
-      font-weight:950;
       color:#111827;
       font-size:14px;
+      font-weight:1000;
     }
 
     .history-note{
+      margin-top:6px;
+      color:#344054;
       font-size:14px;
-      color:#374151;
-      margin-top:5px;
+      line-height:1.38;
       white-space:pre-wrap;
     }
 
-    .history-photos{
-      margin-top:7px;
-      font-size:12px;
-      color:#2563eb;
-      font-weight:800;
+    .photo-preview img{
+      width:82px !important;
+      height:82px !important;
+      border-radius:15px !important;
+      border:1px solid var(--line);
+      box-shadow:0 6px 12px rgba(15,23,42,.08);
     }
 
     .empty{
       text-align:center;
       color:var(--muted);
-      padding:18px 8px;
+      padding:24px 10px;
       font-size:14px;
+      font-weight:700;
+      line-height:1.35;
     }
 
     #status{
+      min-height:20px;
       text-align:center;
-      font-weight:900;
+      color:#344054;
+      font-weight:950;
       margin:10px 0 0;
-      font-size:15px;
-      color:#374151;
+      font-size:14px;
     }
 
     #bigStatus{
@@ -350,51 +531,69 @@
       top:0;
       left:0;
       width:100%;
-      padding:19px;
-      box-sizing:border-box;
+      padding:calc(env(safe-area-inset-top) + 15px) 16px 15px;
       color:white;
-      font-size:18px;
-      font-weight:950;
+      font-size:16px;
+      font-weight:1000;
       text-align:center;
       z-index:9999;
-      box-shadow:0 4px 20px rgba(0,0,0,.25);
+      box-shadow:0 8px 25px rgba(0,0,0,.25);
     }
 
     #bigStatus.success{ background:var(--green); }
     #bigStatus.error{ background:var(--red); }
     #bigStatus.loading{ background:var(--blue); }
 
-    .small-link{
-      width:auto;
-      margin:0;
-      padding:9px 11px;
-      border-radius:999px;
-      background:#eef2ff;
-      color:#3730a3;
-      box-shadow:none;
-      font-size:12px;
+    .bottom-nav{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      z-index:60;
+      width:100%;
+      max-width:560px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:3px;
+      padding:9px 8px calc(env(safe-area-inset-bottom) + 10px);
+      background:rgba(255,255,255,.94);
+      backdrop-filter:blur(20px);
+      border-top:1px solid rgba(226,232,240,.95);
+      box-shadow:0 -12px 30px rgba(15,23,42,.10);
     }
 
-    .hidden{
-      display:none;
+    .bottom-nav a{
+      text-decoration:none;
+      color:#667085;
+      font-size:11px;
+      font-weight:900;
+      text-align:center;
+      border-radius:16px;
+      padding:8px 4px;
     }
+
+    .bottom-nav a b{
+      display:block;
+      font-size:20px;
+      margin-bottom:2px;
+    }
+
+    .bottom-nav .active{
+      color:#1d4ed8;
+      background:#eff6ff;
+    }
+
+    .hidden{ display:none; }
 
     @media(max-width:520px){
-      body{
-        padding:12px;
-      }
-
-      .assignment-grid{
-        grid-template-columns:1fr;
-      }
-
-      .btn-row{
-        grid-template-columns:1fr;
-      }
-
-      .hero h1{
-        font-size:24px;
-      }
+      .app-shell{ padding-left:12px; padding-right:12px; }
+      .assignment-grid{ grid-template-columns:1fr; }
+      .btn-row{ grid-template-columns:1fr; }
+      .hero h1{ font-size:28px; }
+      .stats-grid{ grid-template-columns:repeat(4,1fr); }
+      .stat-card{ padding:11px 5px; }
+      .stat-card strong{ font-size:18px; }
+      .stat-card span{ font-size:10px; }
     }
   </style>
 </head>
@@ -402,42 +601,78 @@
 <body>
 <div id="bigStatus"></div>
 
-<div class="shell">
+<div class="app-shell">
 
-  <div class="hero">
-    <h1>Panel de Limpieza</h1>
-    <p>Ve tus unidades, marca inicio/terminado y envía un solo reporte inteligente. La IA clasifica el mensaje automáticamente para operaciones.</p>
-  </div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">🧹</div>
+        <div class="brand-title">
+          <strong>Limpieza</strong>
+          <span>417 Maid Housekeeping</span>
+        </div>
+      </div>
+      <a class="home-btn" href="/app">🏠 Home</a>
+    </div>
+  </header>
 
-  <div class="card">
+  <section class="hero">
+    <div class="hero-kicker">● En vivo · Cleaner Workspace</div>
+    <h1>Mis unidades de hoy</h1>
+    <p>Inicia, termina, reporta problemas, sube fotos y deja todo listo para operaciones desde una sola pantalla.</p>
+  </section>
+
+  <section class="stats-grid">
+    <div class="stat-card">
+      <strong id="statTotal">0</strong>
+      <span>Total</span>
+    </div>
+    <div class="stat-card">
+      <strong id="statProgress">0</strong>
+      <span>Started</span>
+    </div>
+    <div class="stat-card">
+      <strong id="statDone">0</strong>
+      <span>Done</span>
+    </div>
+    <div class="stat-card">
+      <strong id="statArrivals">0</strong>
+      <span>Arrival</span>
+    </div>
+  </section>
+
+  <section class="card">
     <div class="section-title">
       <h2>Acceso del limpiador</h2>
-      <span>Hoy</span>
+      <small>Nombre exacto</small>
     </div>
 
     <label for="name">Nombre del limpiador</label>
-    <input id="name" placeholder="Ejemplo: Maria" autocomplete="name">
+    <div class="input-wrap">
+      <span class="input-icon">👤</span>
+      <input id="name" placeholder="Ejemplo: Maria" autocomplete="name">
+    </div>
 
-    <button class="start action-btn" onclick="loadCleanerAssignments(true)">
+    <button class="btn-primary action-btn" onclick="loadCleanerAssignments(true)">
       🔎 Ver mis unidades
     </button>
 
     <p id="status"></p>
-  </div>
+  </section>
 
-  <div class="card">
+  <section class="card">
     <div class="section-title">
       <h2>Mis unidades</h2>
       <button class="small-link" onclick="loadCleanerAssignments(false)">Actualizar</button>
     </div>
 
-    <div id="cleanerName" style="font-weight:900; margin-bottom:8px;"></div>
+    <div id="cleanerName" class="cleaner-name">👤 Sin limpiador cargado</div>
     <div id="assignments" class="empty">Escribe tu nombre y presiona “Ver mis unidades”.</div>
-  </div>
+  </section>
 
-  <div id="cleaningPanel" class="card hidden">
+  <section id="cleaningPanel" class="card hidden">
     <div class="section-title">
-      <h2>Unidad seleccionada</h2>
+      <h2>Acciones de unidad</h2>
       <span id="unitStatusText"></span>
     </div>
 
@@ -450,41 +685,48 @@
 
     <div class="btn-row">
       <button class="start action-btn" onclick="sendAction('START')">
-        🟢 Iniciar
+        🟢 Iniciar limpieza
       </button>
 
       <button class="done action-btn" onclick="sendAction('DONE')">
-        ✅ Terminar
+        ✅ Terminar unidad
       </button>
     </div>
 
-    <label for="note">Mensaje libre para operaciones</label>
-    <textarea id="note" placeholder="Ejemplo: Faltan 3 towels y el toilet está tapado."></textarea>
+    <label for="note">Reporte para operaciones</label>
+    <textarea id="note" placeholder="Ejemplo: Faltan 3 towels, toilet tapado, puerta dañada, basura extra, etc."></textarea>
 
     <div class="photo-box">
-      <label for="photoInput" style="margin-top:0;">Fotos opcionales</label>
+      <label for="photoInput" style="margin-top:0;">Fotos del reporte</label>
       <input type="file" id="photoInput" accept="image/*" capture="environment" multiple onchange="addSelectedPhotos()">
-      <div id="photoCount" class="photo-meta">Toca para abrir la cámara. Toma una foto, luego vuelve a tocar para tomar otra. Todas se quedan guardadas hasta enviar.</div>
+      <div id="photoCount" class="photo-meta">Toca para abrir la cámara. Puedes tomar varias fotos antes de enviar.</div>
     </div>
 
     <button class="report action-btn" onclick="sendSmartReport()">
-      📨 Enviar reporte con IA
+      📨 Enviar reporte inteligente
     </button>
+  </section>
 
-  </div>
-
-  <div class="card">
+  <section class="card">
     <div class="section-title">
       <h2>Historial de hoy</h2>
       <button class="small-link" onclick="loadMyReports()">Actualizar</button>
     </div>
 
     <div id="history" class="empty">Tu historial aparecerá aquí después de cargar tus unidades.</div>
-  </div>
+  </section>
 
 </div>
 
+<nav class="bottom-nav">
+  <a href="/app"><b>🏠</b>Home</a>
+  <a class="active" href="/"><b>🧹</b>Limpieza</a>
+  <a href="/inspector"><b>🔍</b>Inspección</a>
+  <a href="/operations"><b>📡</b>Ops</a>
+</nav>
+
 <script src="/socket.io/socket.io.js"></script>
+
 
 <script>
 let currentCleanerName = "";
@@ -612,9 +854,41 @@ function getPillClass(status, arrival){
   return "";
 }
 
+
+function updateCleanerDashboard(units){
+  const total = Array.isArray(units) ? units.length : 0;
+  const started = (units || []).filter(item => String(item.status || "").toLowerCase().includes("progress")).length;
+  const done = (units || []).filter(item => {
+    const s = String(item.status || "").toLowerCase();
+    return s.includes("cleaned") || s.includes("awaiting") || s.includes("ready");
+  }).length;
+  const arrivals = (units || []).filter(item => item.arrival).length;
+
+  const totalBox = document.getElementById("statTotal");
+  const progressBox = document.getElementById("statProgress");
+  const doneBox = document.getElementById("statDone");
+  const arrivalBox = document.getElementById("statArrivals");
+
+  if(totalBox) totalBox.innerText = total;
+  if(progressBox) progressBox.innerText = started;
+  if(doneBox) doneBox.innerText = done;
+  if(arrivalBox) arrivalBox.innerText = arrivals;
+}
+
+function restoreCleanerName(){
+  const savedName = localStorage.getItem("cleanerName") || "";
+  const input = document.getElementById("name");
+  if(savedName && input){
+    input.value = savedName;
+    currentCleanerName = savedName;
+  }
+}
+
+
 async function loadCleanerAssignments(showLoading){
   const name = document.getElementById("name").value.trim();
   currentCleanerName = name;
+  if(name){ localStorage.setItem("cleanerName", name); }
 
   if(!name){
     alert("Escribe tu nombre");
@@ -636,6 +910,7 @@ async function loadCleanerAssignments(showLoading){
     }
 
     document.getElementById("cleanerName").innerText = `Limpiador: ${data.cleaner}`;
+    updateCleanerDashboard(data.units || []);
 
     if(!data.units || data.units.length === 0){
       document.getElementById("assignments").innerHTML =
@@ -1049,6 +1324,8 @@ const photosCount =
       "<div class='empty'>No se pudo cargar el historial.</div>";
   }
 }
+
+document.addEventListener("DOMContentLoaded", restoreCleanerName);
 
 let socket = null;
 
