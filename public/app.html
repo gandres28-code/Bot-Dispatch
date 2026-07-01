@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Housekeeping App</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .header {
+      background: #111827;
+      color: white;
+      padding: 24px 20px;
+      text-align: center;
+      border-bottom-left-radius: 24px;
+      border-bottom-right-radius: 24px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .header p {
+      margin: 8px 0 0;
+      color: #d1d5db;
+      font-size: 14px;
+    }
+
+    .container {
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+      text-decoration: none;
+      color: #111827;
+      display: block;
+    }
+
+    .card h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .card p {
+      margin: 8px 0 0;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .cleaner { border-left: 7px solid #2563eb; }
+    .inspector { border-left: 7px solid #f59e0b; }
+    .operations { border-left: 7px solid #10b981; }
+    .clock { border-left: 7px solid #7c3aed; }
+    .payroll { border-left: 7px solid #ef4444; }
+    .reports { border-left: 7px solid #111827; }
+
+    .footer {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 12px;
+      padding: 25px 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>Housekeeping App</h1>
+    <p>Panel central de limpieza, inspecciones y operaciones</p>
+  </div>
+
+  <div class="container">
+    <div class="grid">
+
+      <a class="card cleaner" href="/cleaner-assignments">
+        <h2>🧹 Limpieza</h2>
+        <p>Ver asignaciones, iniciar limpieza, terminar unidad y reportar problemas.</p>
+      </a>
+
+      <a class="card inspector" href="/inspector">
+        <h2>🔍 Inspecciones</h2>
+        <p>Ver unidades asignadas, iniciar inspección y marcar Ready for Guest.</p>
+      </a>
+
+      <a class="card operations" href="/operations">
+        <h2>📡 Operaciones</h2>
+        <p>Centro en vivo con actividad, fotos, problemas y reportes.</p>
+      </a>
+
+      <a class="card clock" href="/time-clock">
+        <h2>⏱ Clock In / Out</h2>
+        <p>Registrar entrada y salida por código de empleado.</p>
+      </a>
+
+      <a class="card payroll" href="/payroll-excel">
+        <h2>💵 Nómina</h2>
+        <p>Descargar Excel semanal de pagos por unidad y horas.</p>
+      </a>
+
+      <a class="card reports" href="/operations">
+        <h2>📄 Reportes</h2>
+        <p>Finalizar día y generar reporte diario.</p>
+      </a>
+
+    </div>
+  </div>
+
+  <div class="footer">
+    417 Maid Housekeeping System
+  </div>
+</body>
+</html>
