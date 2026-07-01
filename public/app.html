@@ -2,131 +2,265 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <title>Housekeeping App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>417 Maid</title>
 
   <style>
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: #f5f7fb;
       color: #111827;
     }
 
-    .header {
-      background: #111827;
+    .app {
+      max-width: 520px;
+      margin: auto;
+      min-height: 100vh;
+      padding-bottom: 85px;
+    }
+
+    .top {
+      background: linear-gradient(135deg, #111827, #1f2937);
       color: white;
-      padding: 24px 20px;
-      text-align: center;
-      border-bottom-left-radius: 24px;
-      border-bottom-right-radius: 24px;
+      padding: 28px 20px 30px;
+      border-bottom-left-radius: 28px;
+      border-bottom-right-radius: 28px;
     }
 
-    .header h1 {
+    .top small {
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .top h1 {
+      margin: 8px 0 4px;
+      font-size: 28px;
+    }
+
+    .top p {
       margin: 0;
-      font-size: 24px;
-    }
-
-    .header p {
-      margin: 8px 0 0;
-      color: #d1d5db;
+      color: #e5e7eb;
       font-size: 14px;
     }
 
-    .container {
-      padding: 20px;
-      max-width: 500px;
-      margin: auto;
+    .status-card {
+      margin: -18px 18px 18px;
+      background: white;
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.12);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      text-align: center;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 20px;
+    }
+
+    .stat span {
+      color: #6b7280;
+      font-size: 12px;
+    }
+
+    .section {
+      padding: 0 18px;
+    }
+
+    .section h2 {
+      font-size: 17px;
+      margin: 20px 2px 12px;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 14px;
     }
 
-    .card {
+    .tile {
       background: white;
-      border-radius: 18px;
-      padding: 20px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+      border-radius: 22px;
+      padding: 18px;
+      min-height: 135px;
       text-decoration: none;
       color: #111827;
-      display: block;
+      box-shadow: 0 8px 22px rgba(15,23,42,.08);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 1px solid #eef2f7;
     }
 
-    .card h2 {
+    .icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 24px;
+      margin-bottom: 12px;
+    }
+
+    .blue { background: #dbeafe; }
+    .green { background: #dcfce7; }
+    .orange { background: #ffedd5; }
+    .purple { background: #ede9fe; }
+    .red { background: #fee2e2; }
+    .dark { background: #e5e7eb; }
+
+    .tile h3 {
       margin: 0;
-      font-size: 20px;
+      font-size: 16px;
     }
 
-    .card p {
-      margin: 8px 0 0;
+    .tile p {
+      margin: 6px 0 0;
       color: #6b7280;
-      font-size: 14px;
+      font-size: 12px;
+      line-height: 1.3;
     }
 
-    .cleaner { border-left: 7px solid #2563eb; }
-    .inspector { border-left: 7px solid #f59e0b; }
-    .operations { border-left: 7px solid #10b981; }
-    .clock { border-left: 7px solid #7c3aed; }
-    .payroll { border-left: 7px solid #ef4444; }
-    .reports { border-left: 7px solid #111827; }
+    .wide {
+      grid-column: span 2;
+      min-height: 105px;
+    }
 
-    .footer {
+    .bottom-nav {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 0;
+      width: 100%;
+      max-width: 520px;
+      background: white;
+      border-top: 1px solid #e5e7eb;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 10px 6px 18px;
+      box-shadow: 0 -8px 25px rgba(0,0,0,.08);
+    }
+
+    .bottom-nav a {
       text-align: center;
-      color: #9ca3af;
+      text-decoration: none;
+      color: #6b7280;
       font-size: 12px;
-      padding: 25px 10px;
+    }
+
+    .bottom-nav b {
+      display: block;
+      font-size: 21px;
+      margin-bottom: 2px;
+    }
+
+    .active {
+      color: #111827 !important;
+      font-weight: 700;
     }
   </style>
 </head>
 
 <body>
-  <div class="header">
-    <h1>Housekeeping App</h1>
-    <p>Panel central de limpieza, inspecciones y operaciones</p>
-  </div>
+  <main class="app">
 
-  <div class="container">
-    <div class="grid">
+    <header class="top">
+      <small>417 Maid System</small>
+      <h1>Housekeeping Hub</h1>
+      <p>Limpieza, inspecciones, operaciones y reportes en un solo lugar.</p>
+    </header>
 
-      <a class="card cleaner" href="/cleaner-assignments">
-        <h2>🧹 Limpieza</h2>
-        <p>Ver asignaciones, iniciar limpieza, terminar unidad y reportar problemas.</p>
-      </a>
+    <section class="status-card">
+      <div class="stat">
+        <strong>Hoy</strong>
+        <span>Operación</span>
+      </div>
+      <div class="stat">
+        <strong>Live</strong>
+        <span>Paneles</span>
+      </div>
+      <div class="stat">
+        <strong>App</strong>
+        <span>Mobile</span>
+      </div>
+    </section>
 
-      <a class="card inspector" href="/inspector">
-        <h2>🔍 Inspecciones</h2>
-        <p>Ver unidades asignadas, iniciar inspección y marcar Ready for Guest.</p>
-      </a>
+    <section class="section">
+      <h2>Herramientas principales</h2>
 
-      <a class="card operations" href="/operations">
-        <h2>📡 Operaciones</h2>
-        <p>Centro en vivo con actividad, fotos, problemas y reportes.</p>
-      </a>
+      <div class="grid">
 
-      <a class="card clock" href="/time-clock">
-        <h2>⏱ Clock In / Out</h2>
-        <p>Registrar entrada y salida por código de empleado.</p>
-      </a>
+        <a class="tile" href="/cleaner-assignments">
+          <div>
+            <div class="icon blue">🧹</div>
+            <h3>Limpieza</h3>
+            <p>Asignaciones, start, done, problemas y supplies.</p>
+          </div>
+        </a>
 
-      <a class="card payroll" href="/payroll-excel">
-        <h2>💵 Nómina</h2>
-        <p>Descargar Excel semanal de pagos por unidad y horas.</p>
-      </a>
+        <a class="tile" href="/inspector">
+          <div>
+            <div class="icon orange">🔍</div>
+            <h3>Inspecciones</h3>
+            <p>Unidades asignadas, revisión y Ready for Guest.</p>
+          </div>
+        </a>
 
-      <a class="card reports" href="/operations">
-        <h2>📄 Reportes</h2>
-        <p>Finalizar día y generar reporte diario.</p>
-      </a>
+        <a class="tile" href="/operations">
+          <div>
+            <div class="icon green">📡</div>
+            <h3>Operaciones</h3>
+            <p>Feed en vivo, fotos, alertas y actividad diaria.</p>
+          </div>
+        </a>
 
-    </div>
-  </div>
+        <a class="tile" href="/master-units">
+          <div>
+            <div class="icon dark">🏨</div>
+            <h3>Master</h3>
+            <p>Lista principal de unidades y asignaciones del día.</p>
+          </div>
+        </a>
 
-  <div class="footer">
-    417 Maid Housekeeping System
-  </div>
+        <a class="tile" href="/time-clock">
+          <div>
+            <div class="icon purple">⏱</div>
+            <h3>Clock In/Out</h3>
+            <p>Entrada y salida por código de empleado.</p>
+          </div>
+        </a>
+
+        <a class="tile" href="/payroll-excel">
+          <div>
+            <div class="icon red">💵</div>
+            <h3>Nómina</h3>
+            <p>Descargar Excel semanal para pagos.</p>
+          </div>
+        </a>
+
+        <a class="tile wide" href="/operations">
+          <div>
+            <div class="icon dark">📄</div>
+            <h3>Daily Report</h3>
+            <p>Finalizar día y generar reporte diario de housekeeping.</p>
+          </div>
+        </a>
+
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="bottom-nav">
+    <a class="active" href="/app"><b>🏠</b>Home</a>
+    <a href="/cleaner-assignments"><b>🧹</b>Limpieza</a>
+    <a href="/inspector"><b>🔍</b>Inspección</a>
+    <a href="/operations"><b>📡</b>Ops</a>
+  </nav>
 </body>
 </html>
