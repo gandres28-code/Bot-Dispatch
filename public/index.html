@@ -27,7 +27,7 @@
       --shadow:0 16px 38px rgba(15,23,42,.10);
       --shadow-soft:0 8px 22px rgba(15,23,42,.07);
       --radius:24px;
-      --nav-height:84px;
+      --nav-height:0px;
     }
 
     *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -110,18 +110,6 @@
       margin-top:2px;
     }
 
-    .home-btn{
-      text-decoration:none;
-      color:#111827;
-      background:#fff;
-      border:1px solid var(--line);
-      border-radius:999px;
-      padding:10px 12px;
-      font-size:13px;
-      font-weight:900;
-      box-shadow:var(--shadow-soft);
-      white-space:nowrap;
-    }
 
     .hero{
       color:white;
@@ -544,44 +532,6 @@
     #bigStatus.error{ background:var(--red); }
     #bigStatus.loading{ background:var(--blue); }
 
-    .bottom-nav{
-      position:fixed;
-      left:50%;
-      transform:translateX(-50%);
-      bottom:0;
-      z-index:60;
-      width:100%;
-      max-width:560px;
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:3px;
-      padding:9px 8px calc(env(safe-area-inset-bottom) + 10px);
-      background:rgba(255,255,255,.94);
-      backdrop-filter:blur(20px);
-      border-top:1px solid rgba(226,232,240,.95);
-      box-shadow:0 -12px 30px rgba(15,23,42,.10);
-    }
-
-    .bottom-nav a{
-      text-decoration:none;
-      color:#667085;
-      font-size:11px;
-      font-weight:900;
-      text-align:center;
-      border-radius:16px;
-      padding:8px 4px;
-    }
-
-    .bottom-nav a b{
-      display:block;
-      font-size:20px;
-      margin-bottom:2px;
-    }
-
-    .bottom-nav .active{
-      color:#1d4ed8;
-      background:#eff6ff;
-    }
 
     .hidden{ display:none; }
 
@@ -612,7 +562,6 @@
           <span>417 Maid Housekeeping</span>
         </div>
       </div>
-      <a class="home-btn" href="/app">🏠 Home</a>
     </div>
   </header>
 
@@ -1269,7 +1218,7 @@ const photosCount =
       html += `
         <div class="history-item">
           <div class="history-top">
-            <span>${escapeHtml(time)} • ${escapeHtml(unit)}</span>
+            <span>${escapeHtml(time)} • ${escapeHtml(item.unit || selectedUnit || "")}</span>
             <span>${escapeHtml(sent)}</span>
           </div>
           <div class="history-action">${escapeHtml(action)}</div>
