@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>417 Maid Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+
+  <style>
+    *{box-sizing:border-box;}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(124,58,237,.18), transparent 30%),
+        linear-gradient(180deg,#0f172a,#111827);
+      color:white;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+
+    .card{
+      width:100%;
+      max-width:430px;
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.18);
+      backdrop-filter:blur(20px);
+      border-radius:30px;
+      padding:28px;
+      box-shadow:0 24px 60px rgba(0,0,0,.35);
+    }
+
+    .logo{
+      width:72px;
+      height:72px;
+      border-radius:24px;
+      background:white;
+      color:#111827;
+      display:grid;
+      place-items:center;
+      font-size:34px;
+      margin-bottom:18px;
+    }
+
+    h1{
+      margin:0;
+      font-size:32px;
+      letter-spacing:-.05em;
+    }
+
+    p{
+      color:#cbd5e1;
+      line-height:1.45;
+      margin:8px 0 22px;
+      font-size:15px;
+    }
+
+    label{
+      display:block;
+      font-size:13px;
+      font-weight:900;
+      color:#e5e7eb;
+      margin-bottom:8px;
+    }
+
+    input{
+      width:100%;
+      padding:18px;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.20);
+      background:rgba(255,255,255,.12);
+      color:white;
+      font-size:22px;
+      font-weight:900;
+      text-align:center;
+      letter-spacing:.12em;
+      outline:none;
+    }
+
+    input::placeholder{
+      color:#94a3b8;
+      letter-spacing:0;
+      font-weight:700;
+    }
+
+    button{
+      width:100%;
+      margin-top:14px;
+      padding:18px;
+      border:none;
+      border-radius:18px;
+      background:#2563eb;
+      color:white;
+      font-size:17px;
+      font-weight:950;
+      cursor:pointer;
+      box-shadow:0 14px 28px rgba(37,99,235,.35);
+    }
+
+    .status{
+      margin-top:14px;
+      color:#fca5a5;
+      font-weight:800;
+      text-align:center;
+      min-height:20px;
+    }
+
+    .small{
+      margin-top:18px;
+      color:#94a3b8;
+      font-size:12px;
+      text-align:center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="logo">🏨</div>
+    <h1>417 Maid</h1>
+    <p>Ingresa tu código para entrar a tu área de trabajo.</p>
+
+    <label for="code">Código de empleado</label>
+    <input id="code" placeholder="Ejemplo: 1234" autocomplete="off" inputmode="text">
+
+    <button onclick="login()">Entrar</button>
+
+    <div id="status" class="status"></div>
+
+    <div class="small">
+      Limpieza · Inspecciones · Operaciones
+    </div>
+  </div>
+
+<script>
+async function login(){
+  const code = document.getElementById("code").value.trim();
+  const status = document.getElementById("status");
+
+  if(!code){
+    status.innerText = "Escribe tu código.";
+    return;
+  }
+
+  status.innerText = "Verificando...";
+
+  try{
+    const response = await fetch(`/login-role?code=${encodeURIComponent(code)}&t=${Date.now()}`);
+    const data = await response.json();
+
+    if(!data.ok){
+      status.innerText = data.message || "Código no encontrado.";
+      return;
+    }
+
+    localStorage.setItem("employeeCode", code);
+    localStorage.setItem("employeeName", data.name || "");
+    localStorage.setItem("employeeRole", data.role || "");
+
+    if(data.role === "Cleaner"){
+      window.location.href = "/";
+      return;
+    }
+
+    if(data.role === "Inspector" || data.role === "Dispatch / Inspector"){
+      window.location.href = "/inspector";
+      return;
+    }
+
+    if(data.role === "Admin" || data.role === "Dispatch" || data.role === "Manager"){
+      window.location.href = "/app";
+      return;
+    }
+
+    status.innerText = "Tu rol no tiene acceso configurado.";
+  }catch(error){
+    status.innerText = "Error verificando código.";
+  }
+}
+
+document.getElementById("code").addEventListener("keydown", event => {
+  if(event.key === "Enter"){
+    login();
+  }
+});
+
+window.addEventListener("load", () => {
+  const savedCode = localStorage.getItem("employeeCode");
+  if(savedCode){
+    document.getElementById("code").value = savedCode;
+  }
+});
+</script>
+</body>
+</html>
