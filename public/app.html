@@ -3,165 +3,385 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>417 Maid</title>
+  <title>417 Maid | Admin Hub</title>
+  <meta name="theme-color" content="#0f172a">
 
   <style>
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-      background: #f5f7fb;
-      color: #111827;
+    :root{
+      --bg:#eef2f7;
+      --ink:#0f172a;
+      --muted:#667085;
+      --line:#e5e7eb;
+      --card:#ffffff;
+      --blue:#2563eb;
+      --green:#16a34a;
+      --orange:#f59e0b;
+      --purple:#7c3aed;
+      --red:#dc2626;
+      --dark:#111827;
+      --shadow:0 16px 38px rgba(15,23,42,.10);
+      --soft-shadow:0 8px 22px rgba(15,23,42,.07);
+      --nav-height:86px;
     }
 
-    .app {
-      max-width: 520px;
-      margin: auto;
-      min-height: 100vh;
-      padding-bottom: 85px;
+    *{
+      box-sizing:border-box;
+      -webkit-tap-highlight-color:transparent;
     }
 
-    .top {
-      background: linear-gradient(135deg, #111827, #1f2937);
-      color: white;
-      padding: 28px 20px 30px;
-      border-bottom-left-radius: 28px;
-      border-bottom-right-radius: 28px;
+    html,body{
+      min-height:100%;
     }
 
-    .top small {
-      color: #cbd5e1;
-      font-size: 13px;
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(37,99,235,.17), transparent 34%),
+        radial-gradient(circle at 100% 6%, rgba(124,58,237,.12), transparent 30%),
+        linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%);
+      color:var(--ink);
     }
 
-    .top h1 {
-      margin: 8px 0 4px;
-      font-size: 28px;
+    .app{
+      width:100%;
+      max-width:560px;
+      min-height:100vh;
+      margin:0 auto;
+      padding:14px 14px calc(var(--nav-height) + 18px);
     }
 
-    .top p {
-      margin: 0;
-      color: #e5e7eb;
-      font-size: 14px;
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:30;
+      margin:-14px -14px 14px;
+      padding:calc(env(safe-area-inset-top) + 14px) 14px 12px;
+      background:rgba(248,250,252,.88);
+      backdrop-filter:blur(18px);
+      border-bottom:1px solid rgba(226,232,240,.8);
     }
 
-    .status-card {
-      margin: -18px 18px 18px;
-      background: white;
-      border-radius: 22px;
-      padding: 18px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.12);
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-      text-align: center;
+    .topbar-inner{
+      max-width:560px;
+      margin:auto;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
     }
 
-    .stat strong {
-      display: block;
-      font-size: 20px;
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:11px;
+      min-width:0;
     }
 
-    .stat span {
-      color: #6b7280;
-      font-size: 12px;
+    .brand-mark{
+      width:44px;
+      height:44px;
+      border-radius:16px;
+      background:linear-gradient(135deg,#111827,#2563eb);
+      color:white;
+      display:grid;
+      place-items:center;
+      font-size:22px;
+      box-shadow:0 10px 24px rgba(37,99,235,.25);
     }
 
-    .section {
-      padding: 0 18px;
+    .brand strong{
+      display:block;
+      font-size:17px;
+      letter-spacing:-.03em;
+      line-height:1.1;
     }
 
-    .section h2 {
-      font-size: 17px;
-      margin: 20px 2px 12px;
+    .brand span{
+      display:block;
+      margin-top:2px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
     }
 
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
+    .logout{
+      text-decoration:none;
+      color:#111827;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:10px 12px;
+      font-size:13px;
+      font-weight:950;
+      box-shadow:var(--soft-shadow);
+      white-space:nowrap;
     }
 
-    .tile {
-      background: white;
-      border-radius: 22px;
-      padding: 18px;
-      min-height: 135px;
-      text-decoration: none;
-      color: #111827;
-      box-shadow: 0 8px 22px rgba(15,23,42,.08);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      border: 1px solid #eef2f7;
+    .hero{
+      color:white;
+      border-radius:30px;
+      padding:22px;
+      position:relative;
+      overflow:hidden;
+      background:
+        linear-gradient(135deg,rgba(15,23,42,.99),rgba(31,41,55,.96)),
+        radial-gradient(circle at 86% 12%, rgba(59,130,246,.55), transparent 32%);
+      box-shadow:var(--shadow);
     }
 
-    .icon {
-      width: 46px;
-      height: 46px;
-      border-radius: 16px;
-      display: grid;
-      place-items: center;
-      font-size: 24px;
-      margin-bottom: 12px;
+    .hero:before{
+      content:"";
+      position:absolute;
+      width:210px;
+      height:210px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      right:-82px;
+      top:-82px;
     }
 
-    .blue { background: #dbeafe; }
-    .green { background: #dcfce7; }
-    .orange { background: #ffedd5; }
-    .purple { background: #ede9fe; }
-    .red { background: #fee2e2; }
-    .dark { background: #e5e7eb; }
-
-    .tile h3 {
-      margin: 0;
-      font-size: 16px;
+    .kicker{
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      font-size:12px;
+      font-weight:950;
+      color:#bfdbfe;
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:999px;
+      padding:7px 10px;
     }
 
-    .tile p {
-      margin: 6px 0 0;
-      color: #6b7280;
-      font-size: 12px;
-      line-height: 1.3;
+    .hero h1{
+      margin:14px 0 7px;
+      font-size:31px;
+      line-height:1.02;
+      letter-spacing:-.055em;
     }
 
-    .wide {
-      grid-column: span 2;
-      min-height: 105px;
+    .hero p{
+      margin:0;
+      color:#d8dee9;
+      font-size:14px;
+      line-height:1.45;
+      max-width:430px;
     }
 
-    .bottom-nav {
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 0;
-      width: 100%;
-      max-width: 520px;
-      background: white;
-      border-top: 1px solid #e5e7eb;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      padding: 10px 6px 18px;
-      box-shadow: 0 -8px 25px rgba(0,0,0,.08);
+    .status-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:9px;
+      margin:12px 0 14px;
     }
 
-    .bottom-nav a {
-      text-align: center;
-      text-decoration: none;
-      color: #6b7280;
-      font-size: 12px;
+    .status-card{
+      background:rgba(255,255,255,.93);
+      border:1px solid rgba(255,255,255,.78);
+      border-radius:20px;
+      padding:12px 7px;
+      text-align:center;
+      box-shadow:var(--soft-shadow);
     }
 
-    .bottom-nav b {
-      display: block;
-      font-size: 21px;
-      margin-bottom: 2px;
+    .status-card strong{
+      display:block;
+      font-size:18px;
+      letter-spacing:-.04em;
     }
 
-    .active {
-      color: #111827 !important;
-      font-weight: 700;
+    .status-card span{
+      display:block;
+      margin-top:2px;
+      color:var(--muted);
+      font-size:10.5px;
+      font-weight:850;
+    }
+
+    .section{
+      margin-top:16px;
+    }
+
+    .section-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin:0 2px 11px;
+    }
+
+    .section-head h2{
+      margin:0;
+      font-size:17px;
+      letter-spacing:-.03em;
+    }
+
+    .section-head span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:850;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .tile{
+      min-height:136px;
+      text-decoration:none;
+      color:var(--ink);
+      background:rgba(255,255,255,.96);
+      border:1px solid rgba(255,255,255,.84);
+      border-radius:24px;
+      padding:16px;
+      box-shadow:var(--soft-shadow);
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .tile:active{
+      transform:scale(.985);
+    }
+
+    .tile:before{
+      content:"";
+      position:absolute;
+      inset:0 auto 0 0;
+      width:6px;
+      background:#94a3b8;
+    }
+
+    .tile.blue:before{ background:var(--blue); }
+    .tile.green:before{ background:var(--green); }
+    .tile.orange:before{ background:var(--orange); }
+    .tile.purple:before{ background:var(--purple); }
+    .tile.red:before{ background:var(--red); }
+    .tile.dark:before{ background:var(--dark); }
+
+    .icon{
+      width:48px;
+      height:48px;
+      border-radius:17px;
+      display:grid;
+      place-items:center;
+      font-size:24px;
+      margin-bottom:12px;
+    }
+
+    .icon.blue{ background:#dbeafe; }
+    .icon.green{ background:#dcfce7; }
+    .icon.orange{ background:#ffedd5; }
+    .icon.purple{ background:#ede9fe; }
+    .icon.red{ background:#fee2e2; }
+    .icon.dark{ background:#e5e7eb; }
+
+    .tile h3{
+      margin:0;
+      font-size:16px;
+      letter-spacing:-.03em;
+    }
+
+    .tile p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.35;
+      font-weight:650;
+    }
+
+    .wide{
+      grid-column:span 2;
+      min-height:112px;
+    }
+
+    .coming{
+      opacity:.72;
+    }
+
+    .badge{
+      position:absolute;
+      right:12px;
+      top:12px;
+      padding:6px 8px;
+      border-radius:999px;
+      background:#f1f5f9;
+      color:#475467;
+      font-size:10px;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+
+    .quick-panel{
+      background:rgba(255,255,255,.96);
+      border:1px solid rgba(255,255,255,.84);
+      border-radius:24px;
+      padding:16px;
+      box-shadow:var(--soft-shadow);
+    }
+
+    .quick-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .quick-btn{
+      display:block;
+      text-decoration:none;
+      text-align:center;
+      padding:14px 10px;
+      border-radius:18px;
+      background:#f8fafc;
+      border:1px solid var(--line);
+      color:#111827;
+      font-weight:950;
+      font-size:13px;
+    }
+
+    .bottom-nav{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      z-index:60;
+      width:100%;
+      max-width:560px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:3px;
+      padding:9px 8px calc(env(safe-area-inset-bottom) + 10px);
+      background:rgba(255,255,255,.94);
+      backdrop-filter:blur(20px);
+      border-top:1px solid rgba(226,232,240,.95);
+      box-shadow:0 -12px 30px rgba(15,23,42,.10);
+    }
+
+    .bottom-nav a{
+      text-decoration:none;
+      color:#667085;
+      font-size:11px;
+      font-weight:900;
+      text-align:center;
+      border-radius:16px;
+      padding:8px 4px;
+    }
+
+    .bottom-nav a b{
+      display:block;
+      font-size:20px;
+      margin-bottom:2px;
+    }
+
+    .bottom-nav .active{
+      color:#1d4ed8;
+      background:#eff6ff;
     }
   </style>
 </head>
@@ -169,88 +389,166 @@
 <body>
   <main class="app">
 
-    <header class="top">
-      <small>417 Maid System</small>
-      <h1>Housekeeping Hub</h1>
-      <p>Limpieza, inspecciones, operaciones y reportes en un solo lugar.</p>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-mark">🏨</div>
+          <div>
+            <strong>417 Maid</strong>
+            <span>Admin Command Center</span>
+          </div>
+        </div>
+        <a class="logout" href="/launch">Cambiar usuario</a>
+      </div>
     </header>
 
-    <section class="status-card">
-      <div class="stat">
-        <strong>Hoy</strong>
-        <span>Operación</span>
+    <section class="hero">
+      <div class="kicker">● En vivo · Operations Hub</div>
+      <h1>Housekeeping Command</h1>
+      <p>Control central para limpieza, inspecciones, operaciones, reportes, nómina y próximas funciones de app profesional.</p>
+    </section>
+
+    <section class="status-grid">
+      <div class="status-card"><strong>Hoy</strong><span>Operación</span></div>
+      <div class="status-card"><strong>Live</strong><span>Feed</span></div>
+      <div class="status-card"><strong>Roles</strong><span>Permisos</span></div>
+      <div class="status-card"><strong>App</strong><span>Mobile</span></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Operación principal</h2>
+        <span>Accesos rápidos</span>
       </div>
-      <div class="stat">
-        <strong>Live</strong>
-        <span>Paneles</span>
-      </div>
-      <div class="stat">
-        <strong>App</strong>
-        <span>Mobile</span>
+
+      <div class="grid">
+        <a class="tile blue" href="/">
+          <span class="badge">Cleaner</span>
+          <div>
+            <div class="icon blue">🧹</div>
+            <h3>Limpieza</h3>
+            <p>Panel de limpiadores, start, done, reportes y fotos.</p>
+          </div>
+        </a>
+
+        <a class="tile orange" href="/inspector">
+          <span class="badge">Inspector</span>
+          <div>
+            <div class="icon orange">🔍</div>
+            <h3>Inspecciones</h3>
+            <p>Iniciar inspección, Ready for Guest e historial.</p>
+          </div>
+        </a>
+
+        <a class="tile green" href="/operations">
+          <span class="badge">Live</span>
+          <div>
+            <div class="icon green">📡</div>
+            <h3>Operaciones</h3>
+            <p>Feed en vivo, problemas, supplies, fotos y alertas.</p>
+          </div>
+        </a>
+
+        <a class="tile dark" href="/master">
+          <span class="badge">Master</span>
+          <div>
+            <div class="icon dark">🏨</div>
+            <h3>Master List</h3>
+            <p>Unidades, arrivals, asignaciones, estados y prioridad.</p>
+          </div>
+        </a>
       </div>
     </section>
 
     <section class="section">
-      <h2>Herramientas principales</h2>
+      <div class="section-head">
+        <h2>Administración</h2>
+        <span>Control interno</span>
+      </div>
 
       <div class="grid">
-
-        <a class="tile" href="/">
-          <div>
-            <div class="icon blue">🧹</div>
-            <h3>Limpieza</h3>
-            <p>Asignaciones, start, done, problemas y supplies.</p>
-          </div>
-        </a>
-
-        <a class="tile" href="/inspector">
-          <div>
-            <div class="icon orange">🔍</div>
-            <h3>Inspecciones</h3>
-            <p>Unidades asignadas, revisión y Ready for Guest.</p>
-          </div>
-        </a>
-
-        <a class="tile" href="/operations">
-          <div>
-            <div class="icon green">📡</div>
-            <h3>Operaciones</h3>
-            <p>Feed en vivo, fotos, alertas y actividad diaria.</p>
-          </div>
-        </a>
-
-        <a class="tile" href="/master">
-          <div>
-            <div class="icon dark">🏨</div>
-            <h3>Master</h3>
-            <p>Lista principal de unidades y asignaciones del día.</p>
-          </div>
-        </a>
-
-        <a class="tile" href="/time-clock">
+        <a class="tile purple" href="/time-clock">
           <div>
             <div class="icon purple">⏱</div>
             <h3>Clock In/Out</h3>
-            <p>Entrada y salida por código de empleado.</p>
+            <p>Entrada, salida, horas, ubicación y registros.</p>
           </div>
         </a>
 
-        <a class="tile" href="/payroll-excel">
+        <a class="tile red" href="/payroll-excel">
           <div>
             <div class="icon red">💵</div>
             <h3>Nómina</h3>
-            <p>Descargar Excel semanal para pagos.</p>
+            <p>Excel semanal para pagos por unidad y por hora.</p>
           </div>
         </a>
 
-        <a class="tile wide" href="/operations.html">
+        <a class="tile wide dark" href="/operations">
           <div>
             <div class="icon dark">📄</div>
             <h3>Daily Report</h3>
-            <p>Finalizar día y generar reporte diario de housekeeping.</p>
+            <p>Finalizar día, generar reporte y revisar actividad diaria.</p>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Próximos módulos</h2>
+        <span>Producto SaaS</span>
+      </div>
+
+      <div class="grid">
+        <a class="tile coming green" href="#">
+          <span class="badge">Soon</span>
+          <div>
+            <div class="icon green">💬</div>
+            <h3>Chat interno</h3>
+            <p>Mensajes por operaciones, unidad, inspector o empleado.</p>
           </div>
         </a>
 
+        <a class="tile coming blue" href="#">
+          <span class="badge">Soon</span>
+          <div>
+            <div class="icon blue">🔔</div>
+            <h3>Notificaciones</h3>
+            <p>Push alerts para nuevas unidades, problemas y updates.</p>
+          </div>
+        </a>
+
+        <a class="tile coming purple" href="#">
+          <span class="badge">Soon</span>
+          <div>
+            <div class="icon purple">📍</div>
+            <h3>GPS</h3>
+            <p>Clock In con ubicación y control por zona de trabajo.</p>
+          </div>
+        </a>
+
+        <a class="tile coming orange" href="#">
+          <span class="badge">Soon</span>
+          <div>
+            <div class="icon orange">📴</div>
+            <h3>Offline Mode</h3>
+            <p>Guardar acciones sin internet y sincronizar después.</p>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="section quick-panel">
+      <div class="section-head">
+        <h2>Acciones rápidas</h2>
+        <span>Admin</span>
+      </div>
+
+      <div class="quick-row">
+        <a class="quick-btn" href="/operations">Ver actividad</a>
+        <a class="quick-btn" href="/master">Ver master</a>
+        <a class="quick-btn" href="/time-clock">Ver reloj</a>
+        <a class="quick-btn" href="/launch">Cambiar usuario</a>
       </div>
     </section>
 
@@ -258,9 +556,9 @@
 
   <nav class="bottom-nav">
     <a class="active" href="/app"><b>🏠</b>Home</a>
-    <a href="/"><b>🧹</b>Limpieza</a>
-    <a href="/inspector"><b>🔍</b>Inspección</a>
-    <a href="/operations.html"><b>📡</b>Ops</a>
+    <a href="/operations"><b>📡</b>Ops</a>
+    <a href="/master"><b>🏨</b>Master</a>
+    <a href="/time-clock"><b>⏱</b>Clock</a>
   </nav>
 </body>
 </html>
