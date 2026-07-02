@@ -155,12 +155,6 @@ app.get("/login-role", async (req, res) => {
     const response = await notion.databases.query({
       database_id: employeesDbId,
       page_size: 100,
-      filter: {
-        property: "Active",
-        checkbox: {
-          equals: true,
-        },
-      },
     });
 
     const employees = response.results || [];
