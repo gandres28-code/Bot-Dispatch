@@ -163,10 +163,10 @@ async function login(){
     localStorage.setItem("employeeRole", data.role || "");
 
     if(data.role === "Cleaner"){
+      localStorage.setItem("cleanerName", data.name || code);
       window.location.href = "/";
       return;
     }
-
     if(data.role === "Inspector" || data.role === "Dispatch / Inspector"){
       window.location.href = "/inspector";
       return;
