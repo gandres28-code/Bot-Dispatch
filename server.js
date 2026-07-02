@@ -191,17 +191,9 @@ app.get("/login-role", async (req, res) => {
 const mainDbId = process.env.database_id;
 
 if (mainDbId) {
-  const today = new Date().toISOString().slice(0, 10);
-
   const assignmentsResponse = await notion.databases.query({
     database_id: mainDbId,
     page_size: 100,
-    filter: {
-      property: "Date",
-      date: {
-        equals: today,
-      },
-    },
   });
 
   for (const page of assignmentsResponse.results || []) {
@@ -210,21 +202,22 @@ if (mainDbId) {
     const assignedCleaner =
       props["Assigned Cleaner"]?.rich_text?.map(t => t.plain_text).join("").trim() ||
       props["Assigned Cleaner"]?.select?.name ||
+      props["Assigned Cleaner"]?.multi_select?.map(s => s.name).join(", ") ||
+      props["Assigned Cleaner"]?.people?.map(p => p.name).join(", ") ||
+      props["assigned cleaner"]?.rich_text?.map(t => t.plain_text).join("").trim() ||
+      props["assigned cleaner"]?.select?.name ||
+      props["assigned cleaner"]?.multi_select?.map(s => s.name).join(", ") ||
       "";
 
     const cleaners = assignedCleaner
       .split(",")
-      .map(name => name.trim())
+      .map(name => name.trim().toLowerCase())
       .filter(Boolean);
 
-    const matchedCleaner = cleaners.find(
-      cleaner => cleaner.toLowerCase() === normalizedLogin
-    );
-
-    if (matchedCleaner) {
+    if (cleaners.includes(normalizedLogin)) {
       return res.json({
         ok: true,
-        name: matchedCleaner,
+        name: login,
         role: "Cleaner",
         code: "",
       });
