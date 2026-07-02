@@ -188,7 +188,49 @@ app.get("/login-role", async (req, res) => {
         });
       }
     }
+const mainDbId = process.env.database_id;
 
+if (mainDbId) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const assignmentsResponse = await notion.databases.query({
+    database_id: mainDbId,
+    page_size: 100,
+    filter: {
+      property: "Date",
+      date: {
+        equals: today,
+      },
+    },
+  });
+
+  for (const page of assignmentsResponse.results || []) {
+    const props = page.properties || {};
+
+    const assignedCleaner =
+      props["Assigned Cleaner"]?.rich_text?.map(t => t.plain_text).join("").trim() ||
+      props["Assigned Cleaner"]?.select?.name ||
+      "";
+
+    const cleaners = assignedCleaner
+      .split(",")
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    const matchedCleaner = cleaners.find(
+      cleaner => cleaner.toLowerCase() === normalizedLogin
+    );
+
+    if (matchedCleaner) {
+      return res.json({
+        ok: true,
+        name: matchedCleaner,
+        role: "Cleaner",
+        code: "",
+      });
+    }
+  }
+}
     return res.json({
       ok: false,
       message: "Nombre o código no encontrado o empleado inactivo",
