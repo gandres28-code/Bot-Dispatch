@@ -132,20 +132,16 @@ apiKey: OPENAI_API_KEY || "no-key",
 // ■ Página principal limpiadores
 app.get("/login-role", async (req, res) => {
   try {
-    const code = String(req.query.code || "").trim();
+    const login = String(req.query.code || "").trim();
 
-    if (!code) {
+    if (!login) {
       return res.json({
         ok: false,
-        message: "Código requerido",
+        message: "Nombre o código requerido",
       });
     }
 
-    const employees = {
-      "1111": {
-        name: "Cleaner Test",
-        role: "Cleaner",
-      },
+    const employeesByCode = {
       "2222": {
         name: "Inspector Test",
         role: "Inspector",
@@ -156,12 +152,33 @@ app.get("/login-role", async (req, res) => {
       },
     };
 
-    const employee = employees[code];
+    const cleanersByName = {
+      "maria": {
+        name: "Maria",
+        role: "Cleaner",
+      },
+      "alex": {
+        name: "Alex",
+        role: "Cleaner",
+      },
+      "andres": {
+        name: "Andres",
+        role: "Cleaner",
+      },
+    };
+
+    const normalizedLogin = login.toLowerCase();
+
+    let employee = employeesByCode[login];
+
+    if (!employee) {
+      employee = cleanersByName[normalizedLogin];
+    }
 
     if (!employee) {
       return res.json({
         ok: false,
-        message: "Código no encontrado",
+        message: "Nombre o código no encontrado",
       });
     }
 
