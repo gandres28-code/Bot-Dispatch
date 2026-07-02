@@ -141,54 +141,69 @@ app.get("/login-role", async (req, res) => {
       });
     }
 
-    const employeesByCode = {
-      "2222": {
-        name: "Inspector Test",
-        role: "Inspector",
-      },
-      "9999": {
-        name: "Admin",
-        role: "Admin",
-      },
-    };
+    const employeesDbId = process.env.NOTION_EMPLOYEES_DATABASE_ID;
 
-    const cleanersByName = {
-      "maria": {
-        name: "Maria",
-        role: "Cleaner",
-      },
-      "alex": {
-        name: "Alex",
-        role: "Cleaner",
-      },
-      "andres": {
-        name: "Andres",
-        role: "Cleaner",
-      },
-    };
-
-    const normalizedLogin = login.toLowerCase();
-
-    let employee = employeesByCode[login];
-
-    if (!employee) {
-      employee = cleanersByName[normalizedLogin];
-    }
-
-    if (!employee) {
+    if (!employeesDbId) {
       return res.json({
         ok: false,
-        message: "Nombre o código no encontrado",
+        message: "Falta NOTION_EMPLOYEES_DATABASE_ID en Render",
       });
     }
 
+    const normalizedLogin = login.toLowerCase();
+
+    const response = await notion.databases.query({
+      database_id: employeesDbId,
+      page_size: 100,
+      filter: {
+        property: "Active",
+        checkbox: {
+          equals: true,
+        },
+      },
+    });
+
+    const employees = response.results || [];
+
+    for (const employee of employees) {
+      const props = employee.properties || {};
+
+      const nombre =
+        props.Nombre?.title?.map(t => t.plain_text).join("").trim() ||
+        props.Nombre?.rich_text?.map(t => t.plain_text).join("").trim() ||
+        "";
+
+      const codigo =
+        props.Codigo?.rich_text?.map(t => t.plain_text).join("").trim() ||
+        props.Codigo?.number?.toString() ||
+        "";
+
+      const role =
+        props.Role?.select?.name ||
+        props.Role?.status?.name ||
+        props.Role?.rich_text?.map(t => t.plain_text).join("").trim() ||
+        "";
+
+      const nameMatch = nombre.toLowerCase() === normalizedLogin;
+      const codeMatch = codigo && codigo === login;
+
+      if (nameMatch || codeMatch) {
+        return res.json({
+          ok: true,
+          name: nombre,
+          role,
+          code: codigo,
+        });
+      }
+    }
+
     return res.json({
-      ok: true,
-      name: employee.name,
-      role: employee.role,
+      ok: false,
+      message: "Nombre o código no encontrado o empleado inactivo",
     });
 
   } catch (error) {
+    console.error("LOGIN ROLE ERROR:", error);
     return res.status(500).json({
       ok: false,
       message: error.message,
