@@ -135,10 +135,7 @@ app.get("/login-role", async (req, res) => {
     const login = String(req.query.code || "").trim();
 
     if (!login) {
-      return res.json({
-        ok: false,
-        message: "Nombre o código requerido",
-      });
+      return res.json({ ok: false, message: "Nombre o código requerido" });
     }
 
     const employeesDbId = process.env.NOTION_EMPLOYEES_DATABASE_ID;
@@ -157,19 +154,17 @@ app.get("/login-role", async (req, res) => {
       page_size: 100,
     });
 
-    const employees = response.results || [];
-
-    for (const employee of employees) {
+    for (const employee of response.results || []) {
       const props = employee.properties || {};
 
-      const nombre =
-        props.Nombre?.title?.map(t => t.plain_text).join("").trim() ||
-        props.Nombre?.rich_text?.map(t => t.plain_text).join("").trim() ||
+      const name =
+        props.Employee?.title?.map(t => t.plain_text).join("").trim() ||
+        props.Employee?.rich_text?.map(t => t.plain_text).join("").trim() ||
         "";
 
-      const codigo =
-        props.Codigo?.rich_text?.map(t => t.plain_text).join("").trim() ||
-        props.Codigo?.number?.toString() ||
+      const code =
+        props.Code?.rich_text?.map(t => t.plain_text).join("").trim() ||
+        props.Code?.number?.toString().padStart(4, "0") ||
         "";
 
       const role =
@@ -178,15 +173,18 @@ app.get("/login-role", async (req, res) => {
         props.Role?.rich_text?.map(t => t.plain_text).join("").trim() ||
         "";
 
-      const nameMatch = nombre.toLowerCase() === normalizedLogin;
-      const codeMatch = codigo && codigo === login;
+      const active =
+        props.Active?.checkbox === true;
 
-      if (nameMatch || codeMatch) {
+      const nameMatch = name.toLowerCase() === normalizedLogin;
+      const codeMatch = code && code === login;
+
+      if ((nameMatch || codeMatch) && active) {
         return res.json({
           ok: true,
-          name: nombre,
+          name,
           role,
-          code: codigo,
+          code,
         });
       }
     }
