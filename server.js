@@ -130,6 +130,54 @@ const openai = new OpenAI({
 apiKey: OPENAI_API_KEY || "no-key",
 });
 // ■ Página principal limpiadores
+app.get("/login-role", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim();
+
+    if (!code) {
+      return res.json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
+
+    const employees = {
+      "1111": {
+        name: "Cleaner Test",
+        role: "Cleaner",
+      },
+      "2222": {
+        name: "Inspector Test",
+        role: "Inspector",
+      },
+      "9999": {
+        name: "Admin",
+        role: "Admin",
+      },
+    };
+
+    const employee = employees[code];
+
+    if (!employee) {
+      return res.json({
+        ok: false,
+        message: "Código no encontrado",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      name: employee.name,
+      role: employee.role,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.get("/launch", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "launch.html"));
 });
