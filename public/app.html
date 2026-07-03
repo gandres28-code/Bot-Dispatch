@@ -560,5 +560,34 @@
     <a href="/master"><b>🏨</b>Master</a>
     <a href="/time-clock"><b>⏱</b>Clock</a>
   </nav>
+  <script src="/socket.io/socket.io.js"></script>
+
+<script>
+async function loadAdminDashboard(){
+  try{
+    const response = await fetch(`/admin-dashboard-data?t=${Date.now()}`);
+    const data = await response.json();
+
+    if(!data.ok) return;
+
+    const s = data.stats || {};
+
+    document.getElementById("dashTotal").innerText = s.totalUnits || 0;
+    document.getElementById("dashProgress").innerText = s.inProgress || 0;
+    document.getElementById("dashInspect").innerText = s.awaitingInspection || 0;
+    document.getElementById("dashReady").innerText = s.ready || 0;
+  }catch(error){
+    console.log("Dashboard error:", error.message);
+  }
+}
+
+loadAdminDashboard();
+setInterval(loadAdminDashboard, 30000);
+
+try{
+  const socket = io();
+  socket.on("ops-update", loadAdminDashboard);
+}catch(error){}
+</script>
 </body>
 </html>
