@@ -409,11 +409,26 @@
     </section>
 
     <section class="status-grid">
-      <div class="status-card"><strong>Hoy</strong><span>Operación</span></div>
-      <div class="status-card"><strong>Live</strong><span>Feed</span></div>
-      <div class="status-card"><strong>Roles</strong><span>Permisos</span></div>
-      <div class="status-card"><strong>App</strong><span>Mobile</span></div>
-    </section>
+  <div class="status-card">
+    <strong id="dashTotal">0</strong>
+    <span>Unidades</span>
+  </div>
+
+  <div class="status-card">
+    <strong id="dashProgress">0</strong>
+    <span>En progreso</span>
+  </div>
+
+  <div class="status-card">
+    <strong id="dashInspect">0</strong>
+    <span>Inspección</span>
+  </div>
+
+  <div class="status-card">
+    <strong id="dashReady">0</strong>
+    <span>Ready</span>
+  </div>
+</section>
 
     <section class="section">
       <div class="section-head">
@@ -588,6 +603,48 @@ try{
   const socket = io();
   socket.on("ops-update", loadAdminDashboard);
 }catch(error){}
+</script>
+  <script src="/socket.io/socket.io.js"></script>
+
+<script>
+async function loadAdminDashboard() {
+  try {
+    const response = await fetch(
+      `/admin-dashboard-data?t=${Date.now()}`
+    );
+
+    const data = await response.json();
+
+    if (!data.ok) return;
+
+    const s = data.stats || {};
+
+    document.getElementById("dashTotal").innerText =
+      s.totalUnits || 0;
+
+    document.getElementById("dashProgress").innerText =
+      s.inProgress || 0;
+
+    document.getElementById("dashInspect").innerText =
+      s.awaitingInspection || 0;
+
+    document.getElementById("dashReady").innerText =
+      s.ready || 0;
+
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+loadAdminDashboard();
+
+setInterval(loadAdminDashboard, 30000);
+
+const socket = io();
+
+socket.on("ops-update", () => {
+  loadAdminDashboard();
+});
 </script>
 </body>
 </html>
