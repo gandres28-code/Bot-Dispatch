@@ -130,6 +130,9 @@ const openai = new OpenAI({
 apiKey: OPENAI_API_KEY || "no-key",
 });
 // ■ Página principal limpiadores
+app.get("/notifications", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "notifications.html"));
+});
 app.get("/login-role", async (req, res) => {
   try {
     const login = String(req.query.code || "").trim();
