@@ -3853,6 +3853,65 @@ app.post("/upload-photo", upload.single("photo"), async (req, res) => {
     });
   }
 });
+app.get("/admin-dashboard-data", async (req, res) => {
+  try {
+    const [masterResponse, reportsResponse] = await Promise.all([
+      fetch(`http://localhost:${PORT}/master-units`).then(r => r.json()),
+      fetch(`http://localhost:${PORT}/operations-reports`).then(r => r.json()),
+    ]);
+
+    const units = masterResponse.units || [];
+    const reports = reportsResponse.reports || [];
+
+    const inProgress = units.filter(u =>
+      String(u.status || "").toLowerCase().includes("progress")
+    ).length;
+
+    const awaitingInspection = units.filter(u =>
+      String(u.status || "").toLowerCase().includes("awaiting")
+    ).length;
+
+    const ready = units.filter(u =>
+      String(u.status || "").toLowerCase().includes("ready")
+    ).length;
+
+    const arrivals = units.filter(u => !!u.arrival).length;
+
+    const urgent = units.filter(u =>
+      String(u.priority || "").toLowerCase() === "urgent"
+    ).length;
+
+    const problems = reports.filter(r =>
+      String(r.aiPriority || r.priority || "").toLowerCase().includes("urgent") ||
+      String(r.aiCategory || r.category || "").toLowerCase().includes("maintenance") ||
+      String(r.aiCategory || r.category || "").toLowerCase().includes("damage") ||
+      String(r.aiCategory || r.category || "").toLowerCase().includes("lost")
+    ).length;
+
+    res.json({
+      ok: true,
+      date: todayISO(),
+      stats: {
+        totalUnits: units.length,
+        inProgress,
+        awaitingInspection,
+        ready,
+        arrivals,
+        urgent,
+        reports: reports.length,
+        problems,
+      },
+      recentReports: reports.slice(0, 5),
+    });
+
+  } catch (error) {
+    console.error("Error en /admin-dashboard-data:", error.message);
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 app.get("/master-units", async (req, res) => {
   try {
     const pages = await queryTodayRooms();
