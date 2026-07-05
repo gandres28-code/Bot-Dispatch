@@ -35,6 +35,12 @@ function addNotification(title, message) {
 
   io.emit("system-notification", notification);
 }
+app.get("/notifications-data", (req, res) => {
+  res.json({
+    ok: true,
+    notifications: systemNotifications,
+  });
+});
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const upload = multer({ storage: multer.memoryStorage() });
