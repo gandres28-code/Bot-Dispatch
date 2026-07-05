@@ -89,6 +89,21 @@ body{
 
 <script>
 let notifications = [];
+  async function loadNotifications(){
+  try{
+    const response = await fetch(`/notifications-data?t=${Date.now()}`);
+    const data = await response.json();
+
+    if(data.ok){
+      notifications = data.notifications || [];
+      renderNotifications();
+    }
+  }catch(error){
+    console.log(error);
+  }
+}
+
+loadNotifications();
 
 function renderNotifications(){
 
