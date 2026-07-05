@@ -1,0 +1,78 @@
+window.OS = {
+  user: {
+    name: localStorage.getItem("employeeName") || "",
+    code: localStorage.getItem("employeeCode") || "",
+    role: localStorage.getItem("employeeRole") || "",
+    hotel: localStorage.getItem("hotelName") || "Default Hotel",
+  },
+
+  can(permission) {
+    const role = String(this.user.role || "").toLowerCase();
+
+    const permissions = {
+      cleaner: ["cleaning"],
+      inspector: ["inspection"],
+      "dispatch / inspector": ["inspection", "operations"],
+      dispatch: ["operations", "rooms", "reports"],
+      operations: ["operations", "rooms", "reports"],
+      admin: ["all"],
+      manager: ["all"],
+    };
+
+    const allowed = permissions[role] || [];
+
+    return allowed.includes("all") || allowed.includes(permission);
+  },
+
+  notify({ type = "info", title = "", message = "" }) {
+    console.log(`[${type}] ${title}: ${message}`);
+
+    const event = new CustomEvent("os-notification", {
+      detail: { type, title, message },
+    });
+
+    window.dispatchEvent(event);
+  },
+
+  api: {
+    async get(url) {
+      const response = await fetch(url);
+      return response.json();
+    },
+
+    async post(url, body) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body || {}),
+      });
+
+      return response.json();
+    },
+  },
+
+  socket: null,
+
+  initSocket() {
+    try {
+      if (typeof io !== "undefined") {
+        this.socket = io();
+        console.log("417 Maid OS Socket connected");
+      }
+    } catch (error) {
+      console.log("Socket error:", error.message);
+    }
+  },
+
+  init() {
+    this.initSocket();
+
+    console.log("417 Maid OS Core loaded", {
+      user: this.user,
+    });
+  },
+};
+
+window.OS.init();
