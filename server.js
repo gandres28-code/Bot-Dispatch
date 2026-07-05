@@ -97,6 +97,37 @@ function broadcastOpsUpdate(payload = {}) {
     time: new Date().toLocaleTimeString(),
   });
 }
+function getNotificationTitle(event) {
+
+  switch(event.type){
+
+    case "action":
+      return "📋 Nueva acción";
+
+    case "report":
+      return "📨 Nuevo reporte";
+
+    case "hotsos-sent":
+      return "✅ HotSOS";
+
+    default:
+      return "🔔 Sistema";
+  }
+
+}
+
+function getNotificationMessage(event){
+
+  if(event.unit && event.employee){
+    return `${event.employee} • ${event.unit}`;
+  }
+
+  if(event.unit){
+    return `Unidad ${event.unit}`;
+  }
+
+  return "Nueva actividad registrada";
+}
 const cors = require("cors");
 
 app.use(cors());
