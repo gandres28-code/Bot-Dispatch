@@ -18,6 +18,23 @@ const io = new Server(server, {
     origin: "*",
   },
 });
+let systemNotifications = [];
+function addNotification(title, message) {
+  const notification = {
+    id: Date.now(),
+    title,
+    message,
+    time: new Date().toLocaleTimeString(),
+  };
+
+  systemNotifications.unshift(notification);
+
+  if (systemNotifications.length > 100) {
+    systemNotifications.pop();
+  }
+
+  io.emit("system-notification", notification);
+}
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const upload = multer({ storage: multer.memoryStorage() });
