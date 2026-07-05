@@ -79,12 +79,22 @@ function setCache(key, data, ttlMs = 5000){
 function clearOpsCache(){
   cacheStore.clear();
 }
-function broadcastOpsUpdate(payload = {}){
+function broadcastOpsUpdate(payload = {}) {
   clearOpsCache();
 
-  io.emit("ops-update", {
+  const event = {
     time: new Date().toISOString(),
     ...payload,
+  };
+
+  io.emit("ops-update", event);
+
+  // También enviar al centro de notificaciones
+  io.emit("system-notification", {
+    id: Date.now(),
+    title: getNotificationTitle(event),
+    message: getNotificationMessage(event),
+    time: new Date().toLocaleTimeString(),
   });
 }
 const cors = require("cors");
