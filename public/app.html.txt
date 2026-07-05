@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>417 Maid OS</title>
+  <meta name="theme-color" content="#0f172a">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <main class="os-shell">
+    <header class="os-topbar">
+      <div class="brand"><div class="brand-icon">🏨</div><div><strong>417 Maid OS</strong><span id="pageSubtitle">Dashboard</span></div></div>
+      <a class="switch-user" href="/launch">Cambiar</a>
+    </header>
+
+    <section id="dashboardPage" class="os-page active">
+      <section class="hero"><div class="kicker">● En vivo · Command Center</div><h1>Dashboard</h1><p>Resumen en vivo de limpieza, inspecciones, operaciones y alertas del día.</p></section>
+      <section class="status-grid">
+        <div class="status-card"><strong id="dashTotal">0</strong><span>Unidades</span></div>
+        <div class="status-card"><strong id="dashProgress">0</strong><span>En progreso</span></div>
+        <div class="status-card"><strong id="dashInspect">0</strong><span>Inspección</span></div>
+        <div class="status-card"><strong id="dashReady">0</strong><span>Ready</span></div>
+      </section>
+      <section class="section"><div class="section-head"><h2>Accesos principales</h2><span>Operación</span></div>
+        <div class="module-grid">
+          <button class="module-card blue" onclick="openModule('Limpieza','/')"><span>🧹</span><strong>Limpieza</strong><small>Panel de cleaners</small></button>
+          <button class="module-card orange" onclick="openModule('Inspecciones','/inspector')"><span>🔍</span><strong>Inspecciones</strong><small>Panel de inspectores</small></button>
+          <button class="module-card green" onclick="openModule('Operaciones','/operations')"><span>📡</span><strong>Operaciones</strong><small>Feed en vivo</small></button>
+          <button class="module-card dark" onclick="openModule('Master','/master')"><span>🏨</span><strong>Master</strong><small>Asignaciones del día</small></button>
+          <button class="module-card purple" onclick="openModule('Clock In/Out','/time-clock')"><span>⏱</span><strong>Clock</strong><small>Entrada y salida</small></button>
+          <button class="module-card red" onclick="openModule('Nómina','/payroll-excel')"><span>💵</span><strong>Nómina</strong><small>Excel semanal</small></button>
+        </div>
+      </section>
+    </section>
+
+    <section id="operationsPage" class="os-page"><section class="mini-hero"><h1>Operaciones</h1><p>Cleaning, inspections, master list, activity feed y clock.</p></section><div class="list-menu"><button onclick="openModule('Limpieza','/')">🧹 Limpieza</button><button onclick="openModule('Inspecciones','/inspector')">🔍 Inspecciones</button><button onclick="openModule('Operaciones','/operations')">📡 Operations Feed</button><button onclick="openModule('Master','/master')">🏨 Master List</button><button onclick="openModule('Clock In/Out','/time-clock')">⏱ Clock In/Out</button></div></section>
+    <section id="communicationsPage" class="os-page"><section class="mini-hero"><h1>Comunicación</h1><p>Notificaciones, chat interno y anuncios del equipo.</p></section><div class="list-menu"><button onclick="openModule('Notificaciones','/notifications')">🔔 Notificaciones</button><button onclick="showComingSoon('Chat interno')">💬 Chat interno</button><button onclick="showComingSoon('Anuncios')">📣 Anuncios</button></div></section>
+    <section id="reportsPage" class="os-page"><section class="mini-hero"><h1>Reportes</h1><p>Daily report, payroll, reportes inteligentes y calidad.</p></section><div class="list-menu"><button onclick="openModule('Daily Report','/operations')">📄 Daily Report</button><button onclick="openModule('Nómina','/payroll-excel')">💵 Payroll Excel</button><button onclick="openModule('Reportes IA','/operations')">🤖 Reportes IA</button></div></section>
+    <section id="morePage" class="os-page"><section class="mini-hero"><h1>Más</h1><p>Configuración, empleados, integraciones y herramientas del sistema.</p></section><div class="list-menu"><button onclick="showComingSoon('Empleados')">👥 Empleados</button><button onclick="showComingSoon('HotSOS')">🛠 HotSOS</button><button onclick="showComingSoon('Configuración')">⚙️ Configuración</button><button onclick="location.href='/launch'">🚪 Cambiar usuario</button></div></section>
+
+    <section id="modulePage" class="os-page module-page"><div class="module-header"><button onclick="backToDashboard()">←</button><div><strong id="moduleTitle">Módulo</strong><span id="moduleUrl"></span></div></div><iframe id="moduleFrame" src="about:blank"></iframe></section>
+  </main>
+
+  <nav class="os-nav"><button class="active" onclick="showPage('dashboardPage','Dashboard',this)">🏠<span>Dashboard</span></button><button onclick="showPage('operationsPage','Operaciones',this)">🧹<span>Ops</span></button><button onclick="showPage('communicationsPage','Comunicación',this)">💬<span>Comms</span></button><button onclick="showPage('reportsPage','Reportes',this)">📊<span>Reportes</span></button><button onclick="showPage('morePage','Más',this)">⚙️<span>Más</span></button></nav>
+  <script src="/socket.io/socket.io.js"></script><script src="/js/app.js"></script>
+</body>
+</html>
