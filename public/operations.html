@@ -1,112 +1,188 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Centro de Operaciones</title>
+<meta name="theme-color" content="#f8fafc">
 
 <style>
 :root{
-  --bg:#0f172a;
-  --panel:#111827;
-  --card:#1f2937;
-  --soft:#374151;
-  --text:#f9fafb;
-  --muted:#9ca3af;
-  --green:#10b981;
+  --bg:#f8fafc;
+  --ink:#0f172a;
+  --muted:#667085;
+  --line:#e5e7eb;
+  --card:#ffffff;
+  --soft:#f1f5f9;
+  --green:#16a34a;
   --blue:#2563eb;
   --yellow:#f59e0b;
-  --red:#ef4444;
+  --red:#dc2626;
   --purple:#7c3aed;
+  --dark:#111827;
+  --shadow:0 12px 28px rgba(15,23,42,.08);
+  --soft-shadow:0 7px 18px rgba(15,23,42,.06);
 }
 
-*{ box-sizing:border-box; }
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 
 body{
-  font-family:Arial, sans-serif;
-  background:linear-gradient(180deg,#0f172a,#111827);
-  color:var(--text);
-  padding:16px;
   margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(37,99,235,.12), transparent 32%),
+    linear-gradient(180deg,#ffffff 0%,#f1f5f9 100%);
+  color:var(--ink);
+  padding:12px;
 }
 
-h1{
-  text-align:center;
-  margin:10px 0 18px;
-  font-size:28px;
+.ops-shell{
+  width:100%;
+  max-width:760px;
+  margin:0 auto;
+  padding-bottom:24px;
 }
 
-.top-grid{
+.ops-mini-header{
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  color:white;
+  border-radius:26px;
+  padding:18px;
+  box-shadow:var(--shadow);
+  margin-bottom:12px;
+  position:relative;
+  overflow:hidden;
+}
+
+.ops-mini-header:after{
+  content:"";
+  position:absolute;
+  width:160px;
+  height:160px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  right:-60px;
+  top:-60px;
+}
+
+.kicker{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  font-size:11px;
+  font-weight:950;
+  color:#bfdbfe;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:999px;
+  padding:6px 9px;
+}
+
+.ops-mini-header h1{
+  margin:12px 0 5px;
+  font-size:26px;
+  letter-spacing:-.05em;
+  line-height:1.02;
+}
+
+.ops-mini-header p{
+  margin:0;
+  color:#d8dee9;
+  font-size:13px;
+  line-height:1.4;
+}
+
+.control-grid{
   display:grid;
   grid-template-columns:1fr;
-  gap:12px;
-  max-width:1150px;
-  margin:0 auto 18px;
-}
-
-@media(min-width:900px){
-  .top-grid{
-    grid-template-columns:1fr 1fr;
-  }
+  gap:10px;
+  margin-bottom:14px;
 }
 
 .panel{
-  background:rgba(31,41,55,.9);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:18px;
-  padding:16px;
-  box-shadow:0 10px 30px rgba(0,0,0,.25);
+  background:rgba(255,255,255,.95);
+  border:1px solid rgba(255,255,255,.82);
+  border-radius:22px;
+  padding:14px;
+  box-shadow:var(--soft-shadow);
+}
+
+.panel-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:9px;
+}
+
+.panel-title strong{
+  font-size:15px;
+  letter-spacing:-.02em;
+}
+
+.panel-title span{
+  font-size:11px;
+  color:var(--muted);
+  font-weight:850;
 }
 
 button{
   width:100%;
   padding:14px;
-  font-size:16px;
+  font-size:15px;
   border:none;
-  border-radius:12px;
-  margin:8px 0;
+  border-radius:16px;
+  margin:7px 0;
   cursor:pointer;
-  background:var(--blue);
+  background:linear-gradient(135deg,#2563eb,#1d4ed8);
   color:white;
-  font-weight:bold;
+  font-weight:950;
+  box-shadow:0 9px 18px rgba(37,99,235,.16);
 }
 
-button:disabled{
-  background:#6b7280;
-  cursor:not-allowed;
-}
+button:active{ transform:scale(.988); }
+button:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
 
-.finish-day{ background:var(--green); }
-.copy-btn{ background:var(--purple); }
-.sent-btn{ background:var(--green); }
+.finish-day{ background:linear-gradient(135deg,#16a34a,#15803d); }
+.copy-btn{ background:linear-gradient(135deg,#7c3aed,#5b21b6); }
+.sent-btn{ background:linear-gradient(135deg,#16a34a,#15803d); }
 .small-btn{
   width:auto;
   padding:10px 12px;
-  font-size:14px;
+  font-size:13px;
   margin:6px 6px 0 0;
+  border-radius:14px;
 }
 
 input, select{
   width:100%;
-  padding:13px;
-  font-size:16px;
-  border-radius:12px;
-  border:1px solid #4b5563;
-  background:#111827;
-  color:white;
+  padding:14px;
+  font-size:15px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:#f8fafc;
+  color:var(--ink);
   margin:6px 0;
+  outline:none;
+}
+
+input:focus, select:focus{
+  background:white;
+  border-color:#93c5fd;
+  box-shadow:0 0 0 4px rgba(59,130,246,.12);
 }
 
 #notificationStatus,
 #reportStatus{
   text-align:center;
-  margin:8px 0;
-  color:#d1d5db;
-  font-size:14px;
+  margin:8px 0 0;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:750;
 }
 
 .section-title{
-  max-width:1150px;
-  margin:22px auto 10px;
+  margin:18px 2px 10px;
   display:flex;
   justify-content:space-between;
   align-items:center;
@@ -115,100 +191,101 @@ input, select{
 
 .section-title h2{
   margin:0;
-  font-size:21px;
+  font-size:18px;
+  letter-spacing:-.03em;
 }
 
 .badge{
-  display:inline-block;
-  background:#374151;
-  color:#e5e7eb;
-  padding:5px 9px;
+  display:inline-flex;
+  align-items:center;
+  background:#f1f5f9;
+  color:#475467;
+  padding:6px 9px;
   border-radius:999px;
-  font-size:12px;
-  font-weight:bold;
+  font-size:11px;
+  font-weight:950;
+  margin:2px 3px 2px 0;
 }
 
-.badge.urgent{ background:#7f1d1d; color:#fecaca; }
-.badge.normal{ background:#064e3b; color:#bbf7d0; }
-.badge.category{ background:#1e3a8a; color:#bfdbfe; }
-.badge.sent{ background:#065f46; color:#bbf7d0; }
-.badge.pending{ background:#78350f; color:#fde68a; }
+.badge.urgent{ background:#fee2e2; color:#991b1b; }
+.badge.normal{ background:#dcfce7; color:#166534; }
+.badge.category{ background:#dbeafe; color:#1e40af; }
+.badge.sent{ background:#dcfce7; color:#166534; }
+.badge.pending{ background:#fef3c7; color:#92400e; }
 
 .grid{
-  max-width:1150px;
-  margin:0 auto;
   display:grid;
   grid-template-columns:1fr;
-  gap:14px;
-}
-
-@media(min-width:900px){
-  .grid.reports{
-    grid-template-columns:1fr 1fr;
-  }
+  gap:12px;
 }
 
 .card{
-  background:var(--card);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:18px;
-  padding:16px;
-  box-shadow:0 8px 24px rgba(0,0,0,.22);
+  background:rgba(255,255,255,.96);
+  border:1px solid rgba(255,255,255,.85);
+  border-radius:24px;
+  padding:15px;
+  box-shadow:var(--soft-shadow);
+  position:relative;
+  overflow:hidden;
 }
 
-.card.report-card{
-  border-left:6px solid var(--blue);
+.card:before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:6px;
+  background:#94a3b8;
 }
 
-.card.report-card.urgent{
-  border-left-color:var(--red);
-}
-
-.card.report-card.sent{
-  opacity:.78;
-  border-left-color:var(--green);
-}
-
-.event{
-  border-left:6px solid var(--green);
-}
+.card.report-card:before{ background:var(--blue); }
+.card.report-card.urgent:before{ background:var(--red); }
+.card.report-card.sent{ opacity:.82; }
+.card.report-card.sent:before{ background:var(--green); }
+.card.event:before{ background:var(--green); }
 
 .time{
   color:var(--muted);
-  font-size:13px;
+  font-size:12px;
+  font-weight:850;
   margin-bottom:5px;
 }
 
 .unit{
-  font-size:22px;
-  font-weight:bold;
-  margin-bottom:5px;
+  font-size:24px;
+  font-weight:1000;
+  letter-spacing:-.055em;
+  margin-bottom:6px;
 }
 
 .meta{
-  color:#d1d5db;
-  font-size:14px;
+  color:#344054;
+  font-size:13px;
+  font-weight:750;
   margin:4px 0;
 }
 
 .message-box{
-  background:#111827;
-  border:1px solid #374151;
+  background:#f8fafc;
+  border:1px solid var(--line);
   padding:12px;
-  border-radius:12px;
+  border-radius:16px;
   margin-top:10px;
   white-space:pre-wrap;
-  line-height:1.35;
+  line-height:1.38;
+  color:#344054;
+  font-size:13px;
 }
 
 .hotsos-box{
-  background:#172554;
-  border:1px solid #1d4ed8;
+  background:#eff6ff;
+  border:1px solid #bfdbfe;
   padding:12px;
-  border-radius:12px;
+  border-radius:16px;
   margin-top:10px;
   white-space:pre-wrap;
-  line-height:1.35;
+  line-height:1.38;
+  color:#1e3a8a;
+  font-size:13px;
 }
 
 .photo-grid{
@@ -218,93 +295,127 @@ input, select{
   margin-top:12px;
 }
 
-@media(min-width:650px){
-  .photo-grid{
-    grid-template-columns:repeat(3,1fr);
-  }
-}
-
 .photo-grid a{
   display:block;
-  border-radius:12px;
+  border-radius:16px;
   overflow:hidden;
-  background:#111827;
-  border:1px solid #374151;
+  background:#f1f5f9;
+  border:1px solid var(--line);
 }
 
 .photo-grid img{
   width:100%;
-  height:130px;
+  height:128px;
   object-fit:cover;
   display:block;
 }
 
 .photo-loading{
-  color:#9ca3af;
+  color:var(--muted);
   font-size:13px;
   margin-top:10px;
+  font-weight:750;
 }
 
 .empty{
-  max-width:1150px;
-  margin:0 auto;
   text-align:center;
-  color:#9ca3af;
-  background:#1f2937;
-  border-radius:14px;
-  padding:18px;
+  color:var(--muted);
+  background:rgba(255,255,255,.96);
+  border-radius:20px;
+  padding:22px 12px;
+  border:1px solid var(--line);
+  box-shadow:var(--soft-shadow);
+}
+
+.report-tools{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.event-line{
+  color:#344054;
+  font-size:14px;
+  line-height:1.35;
+  margin-top:4px;
+}
+
+.event-person{
+  font-weight:950;
+  color:#111827;
+}
+
+@media(min-width:760px){
+  .control-grid,.report-tools{
+    grid-template-columns:1fr 1fr;
+  }
 }
 </style>
 </head>
 
 <body>
+<div class="ops-shell">
 
-<h1>🚨 Centro de Operaciones</h1>
+  <audio id="alertSound" preload="auto">
+    <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
+  </audio>
 
-<audio id="alertSound" preload="auto">
-  <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
-</audio>
+  <section class="ops-mini-header">
+    <div class="kicker">● Live · Operations Feed</div>
+    <h1>Centro de Operaciones</h1>
+    <p>Reportes inteligentes, HotSOS Assistant, eventos recientes, fotos y alertas del día.</p>
+  </section>
 
-<div class="top-grid">
-  <div class="panel">
-    <button onclick="enableNotifications()">
-      🔔 Activar sonido y notificaciones
-    </button>
-    <div id="notificationStatus">Notificaciones: sin activar</div>
+  <section class="control-grid">
+    <div class="panel">
+      <div class="panel-title">
+        <strong>Alertas</strong>
+        <span>Sonido y navegador</span>
+      </div>
+      <button onclick="enableNotifications()">
+        🔔 Activar alertas
+      </button>
+      <div id="notificationStatus">Notificaciones: sin activar</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <strong>Daily Report</strong>
+        <span>PDF del día</span>
+      </div>
+      <input type="date" id="reportDate">
+      <button id="finishDayBtn" class="finish-day" onclick="finalizarDia()">
+        📄 Finalizar día
+      </button>
+      <div id="reportStatus">Reporte diario: listo para generar</div>
+    </div>
+  </section>
+
+  <div class="section-title">
+    <h2>🤖 IA / HotSOS Assistant</h2>
+    <span id="reportsCount" class="badge">0</span>
   </div>
 
-  <div class="panel">
-    <input type="date" id="reportDate">
-    <button id="finishDayBtn" class="finish-day" onclick="finalizarDia()">
-      📄 Finalizar Día y Descargar Reporte
-    </button>
-    <div id="reportStatus">Reporte diario: listo para generar</div>
+  <section class="report-tools">
+    <input id="searchBox" placeholder="Buscar unidad, empleado, categoría o mensaje" oninput="renderReports()">
+    <select id="statusFilter" onchange="renderReports()">
+      <option value="all">Todos los reportes</option>
+      <option value="pending">Pendientes HotSOS</option>
+      <option value="sent">Enviados a HotSOS</option>
+    </select>
+  </section>
+
+  <div id="reports" class="grid reports"></div>
+
+  <div class="section-title">
+    <h2>📋 Timeline reciente</h2>
+    <span id="eventsCount" class="badge">0</span>
   </div>
+
+  <div id="events" class="grid"></div>
+
 </div>
-
-<div class="section-title">
-  <h2>🤖 Reportes con IA / HotSOS Assistant</h2>
-  <span id="reportsCount" class="badge">0</span>
-</div>
-
-<div class="top-grid">
-  <input id="searchBox" placeholder="Filtrar por unidad, empleado, categoría o mensaje" oninput="renderReports()">
-  <select id="statusFilter" onchange="renderReports()">
-    <option value="all">Todos</option>
-    <option value="pending">Pendientes HotSOS</option>
-    <option value="sent">Enviados a HotSOS</option>
-  </select>
-</div>
-
-<div id="reports" class="grid reports"></div>
-
-<div class="section-title">
-  <h2>📋 Eventos recientes</h2>
-  <span id="eventsCount" class="badge">0</span>
-</div>
-
-<div id="events" class="grid"></div>
-
 <script src="/socket.io/socket.io.js"></script>
 <script>
 let lastEventId = null;
