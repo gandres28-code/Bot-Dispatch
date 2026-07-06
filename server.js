@@ -348,6 +348,53 @@ notionReportPhotosDatabaseIdPreview: NOTION_REPORT_PHOTOS_DATABASE_ID
 : null,
 });
 });
+app.get("/api/me", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim();
+
+    if (!code) {
+      return res.status(401).json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
+
+    const employeePage = await EmployeeService.findEmployeeByCode(
+      notion,
+      NOTION_EMPLOYEES_DATABASE_ID,
+      code
+    );
+
+    if (!employeePage) {
+      return res.status(404).json({
+        ok: false,
+        message: "Empleado no encontrado",
+      });
+    }
+
+    const user = EmployeeService.pageToEmployee(employeePage);
+
+    if (!user.active) {
+      return res.status(403).json({
+        ok: false,
+        message: "Empleado inactivo",
+      });
+    }
+
+    res.json({
+      ok: true,
+      user,
+    });
+
+  } catch (error) {
+    console.error("Error en /api/me:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 // ■ Fecha de hoy
 function todayISO() {
 return new Intl.DateTimeFormat("en-CA", {
