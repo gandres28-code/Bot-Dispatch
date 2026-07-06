@@ -78,7 +78,18 @@ function setCache(key, data, ttlMs = 5000){
 }
 
 function clearOpsCache(){
-  cacheStore.clear();
+  // NO borrar todo el cache aquí. Antes esto borraba habitaciones, empleados y schemas
+  // cada vez que llegaba una acción, causando una tormenta de llamadas a Notion.
+  for (const key of Array.from(cacheStore.keys())) {
+    if (String(key).startsWith("ops:") || String(key).startsWith("notifications:")) {
+      cacheStore.delete(key);
+    }
+  }
+}
+
+function clearRoomCache(date = todayISO()){
+  cacheStore.delete(`todayRooms:${date}`);
+  cacheStore.delete(`roomsByDate:${date}`);
 }
 function broadcastOpsUpdate(payload = {}) {
   clearOpsCache();
@@ -191,6 +202,96 @@ console.log("NOTION_REPORT_PHOTOS_DATABASE_ID existe:", !!NOTION_REPORT_PHOTOS_D
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
 console.log("PAYROLL RAW:", process.env.NOTION_PAYROLL_DATABASE_ID);
 const notion = new Client({ auth: NOTION_API_KEY });
+
+// =========================================================
+// PROTECCIÓN URGENTE CONTRA NOTION RATE_LIMITED (429)
+// =========================================================
+// Notion aguanta pocas llamadas por segundo. Este bloque pone una fila única,
+// reintentos automáticos y pausa inteligente cuando Notion dice "rate_limited".
+const NOTION_MIN_DELAY_MS = Number(process.env.NOTION_MIN_DELAY_MS || 450);
+const NOTION_MAX_RETRIES = Number(process.env.NOTION_MAX_RETRIES || 6);
+let notionQueue = Promise.resolve();
+let lastNotionRequestAt = 0;
+
+function isNotionRateLimitError(error) {
+  return (
+    error?.code === "rate_limited" ||
+    error?.status === 429 ||
+    error?.body?.code === "rate_limited" ||
+    String(error?.message || "").toLowerCase().includes("rate limited")
+  );
+}
+
+function getRetryAfterMs(error, attempt) {
+  const retryAfter =
+    Number(error?.headers?.["retry-after"]) ||
+    Number(error?.response?.headers?.["retry-after"]);
+
+  if (retryAfter && retryAfter > 0) {
+    return retryAfter * 1000;
+  }
+
+  return Math.min(30000, 1500 * Math.pow(2, attempt));
+}
+
+async function runNotionTask(taskName, fn) {
+  const run = async () => {
+    const waitMs = Math.max(0, NOTION_MIN_DELAY_MS - (Date.now() - lastNotionRequestAt));
+    if (waitMs > 0) await sleep(waitMs);
+    lastNotionRequestAt = Date.now();
+
+    for (let attempt = 0; attempt <= NOTION_MAX_RETRIES; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (!isNotionRateLimitError(error) || attempt >= NOTION_MAX_RETRIES) {
+          throw error;
+        }
+
+        const delay = getRetryAfterMs(error, attempt);
+        console.log(`⏳ Notion rate limited en ${taskName}. Reintentando en ${Math.round(delay / 1000)}s...`);
+        await sleep(delay);
+      }
+    }
+  };
+
+  const resultPromise = notionQueue.then(run, run);
+  notionQueue = resultPromise.catch(() => {});
+  return resultPromise;
+}
+
+function patchNotionClientForRateLimits(client) {
+  const wrap = (group, method) => {
+    const original = client[group][method].bind(client[group]);
+    client[group][method] = (args) => runNotionTask(`${group}.${method}`, () => original(args));
+  };
+
+  wrap("databases", "query");
+  wrap("databases", "retrieve");
+  wrap("pages", "create");
+  wrap("pages", "update");
+  wrap("pages", "retrieve");
+}
+
+patchNotionClientForRateLimits(notion);
+
+async function notionFetch(url, options = {}, taskName = "fetch") {
+  return runNotionTask(taskName, async () => {
+    const response = await fetch(url, options);
+
+    if (response.status === 429) {
+      const error = new Error("Notion rate_limited");
+      error.status = 429;
+      error.headers = {
+        "retry-after": response.headers.get("retry-after"),
+      };
+      throw error;
+    }
+
+    return response;
+  });
+}
+
 const openai = new OpenAI({
 apiKey: OPENAI_API_KEY || "no-key",
 });
@@ -217,12 +318,9 @@ app.get("/login-role", async (req, res) => {
 
     const normalizedLogin = login.toLowerCase();
 
-    const response = await notion.databases.query({
-      database_id: employeesDbId,
-      page_size: 100,
-    });
+    const employees = await getEmployeesCached();
 
-    for (const employee of response.results || []) {
+    for (const employee of employees || []) {
       const props = employee.properties || {};
 
       const name =
@@ -555,57 +653,13 @@ recentActions.delete(key);
 return false;
 }
 // ■ Buscar unidades de hoy en Notion usando search
-async function queryTodayRooms() {
-let pages = [];
-let cursor = undefined;
-const today = todayISO();
-const cacheKey = `todayRooms:${today}`;
-const cached = getCache(cacheKey);
-
-if (cached) {
-  return cached;
-}
-
-do {
-const body = {
-page_size: 100,
-query: "",
-filter: {
-property: "object",
-value: "page",
-},
-};
-if (cursor) body.start_cursor = cursor;
-const response = await fetch("https://api.notion.com/v1/search", {
-method: "POST",
-headers: {
-Authorization: `Bearer ${NOTION_API_KEY}`,
-"Content-Type": "application/json",
-"Notion-Version": "2022-06-28",
-},
-body: JSON.stringify(body),
-});
-const data = await response.json();
-if (!response.ok) {
-console.log("■ NOTION SEARCH ERROR:", data);
-throw new Error(data.message || "Error buscando páginas en Notion");
-}
-const todayPages = (data.results || []).filter((page) => {
-const pageDate = page.properties?.Date?.date?.start;
-const roomTitle =
-page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
-return pageDate === today && roomTitle;
-});
-pages = pages.concat(todayPages);
-cursor = data.has_more ? data.next_cursor : undefined;
-} while (cursor);
-setCache(cacheKey, pages, 30000);
-return pages;
+async function queryTodayRooms(forceRefresh = false) {
+  return queryRoomsByDate(todayISO(), forceRefresh);
 }
 // ■ Buscar unidades de cualquier fecha en la página central de Notion
-async function queryRoomsByDate(date) {
-  const cacheKey = `roomsByDate:${date}`;
-  const cached = getCache(cacheKey);
+async function queryRoomsByDate(date, forceRefresh = false) {
+  const cacheKey = date === todayISO() ? `todayRooms:${date}` : `roomsByDate:${date}`;
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
 
   if (cached) {
     return cached;
@@ -616,46 +670,25 @@ async function queryRoomsByDate(date) {
 
   do {
     const body = {
+      database_id: NOTION_DATABASE_ID,
       page_size: 100,
-      query: "",
       filter: {
-        property: "object",
-        value: "page",
+        property: "Date",
+        date: {
+          equals: date,
+        },
       },
     };
 
     if (cursor) body.start_cursor = cursor;
 
-    const response = await fetch("https://api.notion.com/v1/search", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${NOTION_API_KEY}`,
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.log("■ NOTION SEARCH ERROR:", data);
-      throw new Error(data.message || "Error buscando páginas en Notion");
-    }
-
-    const datePages = (data.results || []).filter((page) => {
-      const pageDate = page.properties?.Date?.date?.start;
-      const roomTitle =
-        page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
-
-      return pageDate === date && roomTitle;
-    });
-
-    pages = pages.concat(datePages);
-    cursor = data.has_more ? data.next_cursor : undefined;
+    const response = await notion.databases.query(body);
+    pages = pages.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
   } while (cursor);
 
-  setCache(cacheKey, pages, 60000);
+  // Cache corto para el día activo, más largo para reportes de días pasados.
+  setCache(cacheKey, pages, date === todayISO() ? 10000 : 120000);
   return pages;
 }
 // ■ Status de Notion
@@ -758,9 +791,13 @@ function getAssignedCleaner(page) {
   );
 }
 async function getDatabaseSchema(databaseId) {
+const cacheKey = `schema:${databaseId}`;
+const cached = getCache(cacheKey);
+if (cached) return cached;
 const db = await notion.databases.retrieve({
 database_id: databaseId,
 });
+setCache(cacheKey, db.properties, 10 * 60 * 1000);
 return db.properties;
 }
 function findPropName(schema, possibleNames) {
@@ -1186,13 +1223,37 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
       return day >= weekStart && day <= weekEnd && r.status === "Completed";
     });
 }
-async function findEmployeeByCode(code) {
-  const response = await notion.databases.query({
-    database_id: NOTION_EMPLOYEES_DATABASE_ID,
-    page_size: 100,
-  });
+async function getEmployeesCached(forceRefresh = false) {
+  const cacheKey = "employees:active";
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
+  if (cached) return cached;
 
-  return response.results.find((page) => {
+  if (!NOTION_EMPLOYEES_DATABASE_ID) return [];
+
+  let results = [];
+  let cursor = undefined;
+
+  do {
+    const body = {
+      database_id: NOTION_EMPLOYEES_DATABASE_ID,
+      page_size: 100,
+    };
+
+    if (cursor) body.start_cursor = cursor;
+
+    const response = await notion.databases.query(body);
+    results = results.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  setCache(cacheKey, results, 5 * 60 * 1000);
+  return results;
+}
+
+async function findEmployeeByCode(code) {
+  const employees = await getEmployeesCached();
+
+  return employees.find((page) => {
     const employeeCode =
       page.properties.Code?.rich_text
         ?.map((t) => t.plain_text)
@@ -1681,6 +1742,8 @@ for (const page of matches) {
     page_id: page.id,
     properties: props,
   });
+
+  clearRoomCache(todayISO());
 
   await saveDailyLog({
     action,
@@ -3145,7 +3208,7 @@ app.get("/backfill-payroll", async (req, res) => {
 
       if (cursor) body.start_cursor = cursor;
 
-      const response = await fetch("https://api.notion.com/v1/search", {
+      const response = await notionFetch("https://api.notion.com/v1/search", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${NOTION_API_KEY}`,
