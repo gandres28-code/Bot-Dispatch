@@ -1,10 +1,5 @@
 window.OS = {
-  user: {
-    name: localStorage.getItem("employeeName") || "",
-    code: localStorage.getItem("employeeCode") || "",
-    role: localStorage.getItem("employeeRole") || "",
-    hotel: localStorage.getItem("hotelName") || "Default Hotel",
-  },
+  user: null,
 
   can(permission) {
     const role = String(this.user.role || "").toLowerCase();
