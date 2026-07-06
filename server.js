@@ -292,6 +292,141 @@ async function notionFetch(url, options = {}, taskName = "fetch") {
   });
 }
 
+
+// =========================================================
+// FIX NOTION 2025: DATABASES CON MULTIPLE DATA SOURCES
+// =========================================================
+// Notion cambió su API: una Database ahora puede tener varias Data Sources.
+// Si una base tiene multiple data sources, notion.databases.query falla.
+// Estos helpers resuelven automáticamente el data_source_id correcto y usan
+// /v1/data_sources/{id}/query con Notion-Version 2025-09-03.
+const NOTION_API_VERSION = process.env.NOTION_API_VERSION || "2025-09-03";
+const notionDataSourceCache = new Map();
+
+function notionHeaders() {
+  return {
+    Authorization: `Bearer ${NOTION_API_KEY}`,
+    "Content-Type": "application/json",
+    "Notion-Version": NOTION_API_VERSION,
+  };
+}
+
+async function notionRest(pathValue, options = {}, taskName = "notion.rest") {
+  const response = await notionFetch(
+    `https://api.notion.com/v1${pathValue}`,
+    {
+      ...options,
+      headers: {
+        ...notionHeaders(),
+        ...(options.headers || {}),
+      },
+    },
+    taskName
+  );
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+
+  if (!response.ok) {
+    const error = new Error(data.message || `Notion error ${response.status}`);
+    error.status = response.status;
+    error.code = data.code;
+    error.body = data;
+    throw error;
+  }
+
+  return data;
+}
+
+function idWithoutDashes(id) {
+  return String(id || "").replace(/-/g, "");
+}
+
+async function resolveDataSourceId(databaseOrDataSourceId) {
+  const rawId = String(databaseOrDataSourceId || "").trim();
+  if (!rawId) return rawId;
+
+  const cacheKey = `dataSource:${idWithoutDashes(rawId)}`;
+  const cached = getCache(cacheKey) || notionDataSourceCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const db = await notionRest(
+      `/databases/${rawId}`,
+      { method: "GET" },
+      "databases.retrieve.2025"
+    );
+
+    const firstDataSourceId =
+      db.data_sources?.[0]?.id ||
+      db.data_sources?.[0]?.data_source_id ||
+      db.data_sources?.[0];
+
+    const resolved = firstDataSourceId || rawId;
+    notionDataSourceCache.set(cacheKey, resolved);
+    setCache(cacheKey, resolved, 10 * 60 * 1000);
+    return resolved;
+  } catch (error) {
+    // Si el ID ya era un data_source_id, /databases/{id} puede fallar.
+    // En ese caso lo usamos directamente.
+    console.log("⚠️ No pude resolver database->data_source, usando ID directo:", rawId, error.message);
+    notionDataSourceCache.set(cacheKey, rawId);
+    setCache(cacheKey, rawId, 10 * 60 * 1000);
+    return rawId;
+  }
+}
+
+async function queryNotionDatabaseCompat(args) {
+  const dataSourceId = await resolveDataSourceId(args.database_id || args.data_source_id);
+  const { database_id, data_source_id, ...body } = args;
+
+  return notionRest(
+    `/data_sources/${dataSourceId}/query`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+    "data_sources.query"
+  );
+}
+
+async function retrieveNotionDatabaseSchemaCompat(args) {
+  const dataSourceId = await resolveDataSourceId(args.database_id || args.data_source_id);
+
+  return notionRest(
+    `/data_sources/${dataSourceId}`,
+    { method: "GET" },
+    "data_sources.retrieve"
+  );
+}
+
+async function createNotionPageCompat(args) {
+  const payload = { ...args };
+
+  if (payload.parent?.database_id) {
+    const dataSourceId = await resolveDataSourceId(payload.parent.database_id);
+    payload.parent = {
+      type: "data_source_id",
+      data_source_id: dataSourceId,
+    };
+  }
+
+  return notionRest(
+    "/pages",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    "pages.create.2025"
+  );
+}
+
+// Sobrescribir sólo estas llamadas para que el resto de tu código no cambie.
+// Mantiene el mismo formato viejo: notion.databases.query({ database_id, ... })
+notion.databases.query = queryNotionDatabaseCompat;
+notion.databases.retrieve = retrieveNotionDatabaseSchemaCompat;
+notion.pages.create = createNotionPageCompat;
+
 const openai = new OpenAI({
 apiKey: OPENAI_API_KEY || "no-key",
 });
@@ -3213,7 +3348,7 @@ app.get("/backfill-payroll", async (req, res) => {
         headers: {
           Authorization: `Bearer ${NOTION_API_KEY}`,
           "Content-Type": "application/json",
-          "Notion-Version": "2022-06-28",
+          "Notion-Version": NOTION_API_VERSION,
         },
         body: JSON.stringify(body),
       });
