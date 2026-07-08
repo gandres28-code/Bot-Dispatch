@@ -36,6 +36,41 @@ window.OS = {
     window.location.href = "/launch";
 
 },
+    open(module){
+
+    const routes={
+
+        dashboard:"/app",
+
+        cleaning:"/",
+
+        inspection:"/inspector",
+
+        operations:"/operations.html",
+
+        master:"/master",
+
+        clock:"/time-clock",
+
+        payroll:"/payroll-excel",
+
+        launch:"/launch"
+
+    };
+
+    const url=routes[module];
+
+    if(!url){
+
+        console.warn("Ruta no encontrada:",module);
+
+        return;
+
+    }
+
+    window.location.href=url;
+
+},
 
     const allowed = permissions[role] || [];
 
