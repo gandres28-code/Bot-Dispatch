@@ -439,97 +439,92 @@ app.get("/login-role", async (req, res) => {
     const login = String(req.query.code || "").trim();
 
     if (!login) {
-      return res.json({ ok: false, message: "Nombre o código requerido" });
+      return res.json({
+        ok: false,
+        message: "Nombre o código requerido",
+      });
     }
 
-    const employeesDbId = process.env.NOTION_EMPLOYEES_DATABASE_ID;
-
-    if (!employeesDbId) {
+    if (!NOTION_EMPLOYEES_DATABASE_ID) {
       return res.json({
         ok: false,
         message: "Falta NOTION_EMPLOYEES_DATABASE_ID en Render",
       });
     }
 
-    const normalizedLogin = login.toLowerCase();
+    const employee = await findEmployeeByLogin(login);
 
-    const employees = await getEmployeesCached();
+    if (employee) {
+      const user = pageToUser(employee);
 
-    for (const employee of employees || []) {
-      const props = employee.properties || {};
-
-      const name =
-        props.Employee?.title?.map(t => t.plain_text).join("").trim() ||
-        props.Employee?.rich_text?.map(t => t.plain_text).join("").trim() ||
-        "";
-
-      const code =
-        props.Code?.rich_text?.map(t => t.plain_text).join("").trim() ||
-        props.Code?.number?.toString().padStart(4, "0") ||
-        "";
-
-      const role =
-        props.Role?.select?.name ||
-        props.Role?.status?.name ||
-        props.Role?.rich_text?.map(t => t.plain_text).join("").trim() ||
-        "";
-
-      const active =
-        props.Active?.checkbox === true;
-
-      const nameMatch = name.toLowerCase() === normalizedLogin;
-      const codeMatch = code && code === login;
-
-      if ((nameMatch || codeMatch) && active) {
+      if (!user.active) {
         return res.json({
-          ok: true,
-          name,
-          role,
-          code,
+          ok: false,
+          message: "Empleado inactivo",
         });
       }
-    }
-const mainDbId = process.env.database_id;
 
-if (mainDbId) {
-  const assignmentsResponse = await notion.databases.query({
-    database_id: mainDbId,
-    page_size: 100,
-  });
-
-  for (const page of assignmentsResponse.results || []) {
-    const props = page.properties || {};
-
-    const assignedCleaner =
-      props["Assigned Cleaner"]?.rich_text?.map(t => t.plain_text).join("").trim() ||
-      props["Assigned Cleaner"]?.select?.name ||
-      props["Assigned Cleaner"]?.multi_select?.map(s => s.name).join(", ") ||
-      props["Assigned Cleaner"]?.people?.map(p => p.name).join(", ") ||
-      props["assigned cleaner"]?.rich_text?.map(t => t.plain_text).join("").trim() ||
-      props["assigned cleaner"]?.select?.name ||
-      props["assigned cleaner"]?.multi_select?.map(s => s.name).join(", ") ||
-      "";
-
-    const cleaners = assignedCleaner
-      .split(",")
-      .map(name => name.trim().toLowerCase())
-      .filter(Boolean);
-
-    if (cleaners.includes(normalizedLogin)) {
       return res.json({
         ok: true,
-        name: login,
-        role: "Cleaner",
-        code: "",
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        code: user.code,
+        active: user.active,
+        permissions: user.permissions,
+        home: user.home,
       });
     }
-  }
-}
+
+    // Fallback temporal: permite que un cleaner que todavía no esté en Employees
+    // entre por nombre si aparece asignado en la página principal del día.
+    // Recomendación: mover todos los cleaners a Employees con código.
+    const normalizedLogin = cleanEmployeeText(login);
+    const mainDbId = NOTION_DATABASE_ID;
+
+    if (mainDbId) {
+      const assignmentsResponse = await notion.databases.query({
+        database_id: mainDbId,
+        page_size: 100,
+      });
+
+      for (const page of assignmentsResponse.results || []) {
+        const props = page.properties || {};
+
+        const assignedCleaner =
+          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+          props["Assigned Cleaner"]?.select?.name ||
+          props["Assigned Cleaner"]?.multi_select?.map((s) => s.name).join(", ") ||
+          props["Assigned Cleaner"]?.people?.map((p) => p.name).join(", ") ||
+          props["assigned cleaner"]?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+          props["assigned cleaner"]?.select?.name ||
+          props["assigned cleaner"]?.multi_select?.map((s) => s.name).join(", ") ||
+          "";
+
+        const cleaners = assignedCleaner
+          .split(",")
+          .map((name) => cleanEmployeeText(name))
+          .filter(Boolean);
+
+        if (cleaners.includes(normalizedLogin)) {
+          return res.json({
+            ok: true,
+            id: "",
+            name: login,
+            role: "Cleaner",
+            code: "",
+            active: true,
+            permissions: ["cleaning"],
+            home: "cleaner",
+          });
+        }
+      }
+    }
+
     return res.json({
       ok: false,
       message: "Nombre o código no encontrado o empleado inactivo",
     });
-
   } catch (error) {
     console.error("LOGIN ROLE ERROR:", error);
     return res.status(500).json({
@@ -592,11 +587,7 @@ app.get("/api/me", async (req, res) => {
       });
     }
 
-    const employeePage = await EmployeeService.findEmployeeByCode(
-      notion,
-      NOTION_EMPLOYEES_DATABASE_ID,
-      code
-    );
+    const employeePage = await findEmployeeByCode(code);
 
     if (!employeePage) {
       return res.status(404).json({
@@ -605,7 +596,7 @@ app.get("/api/me", async (req, res) => {
       });
     }
 
-    const user = EmployeeService.pageToEmployee(employeePage);
+    const user = pageToUser(employeePage);
 
     if (!user.active) {
       return res.status(403).json({
@@ -618,7 +609,6 @@ app.get("/api/me", async (req, res) => {
       ok: true,
       user,
     });
-
   } catch (error) {
     console.error("Error en /api/me:", error.message);
 
@@ -1385,52 +1375,201 @@ async function getEmployeesCached(forceRefresh = false) {
   return results;
 }
 
-async function findEmployeeByCode(code) {
-  const employees = await getEmployeesCached();
 
-  return employees.find((page) => {
-    const employeeCode =
-      page.properties.Code?.rich_text
-        ?.map((t) => t.plain_text)
-        .join("") || "";
-
-    return employeeCode.trim() === String(code).trim();
-  });
+function cleanEmployeeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[|,]+/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getEmployeeNameFromPage(page) {
-  return page.properties.Employee?.title?.map((t) => t.plain_text).join("") || "";
+  const props = page?.properties || {};
+
+  return (
+    props.Employee?.title?.map((t) => t.plain_text).join("").trim() ||
+    props.Employee?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+    props.Nombre?.title?.map((t) => t.plain_text).join("").trim() ||
+    props.Name?.title?.map((t) => t.plain_text).join("").trim() ||
+    ""
+  );
+}
+
+function getEmployeeCodeFromPage(page) {
+  const props = page?.properties || {};
+  const raw =
+    props.Code?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+    props.Code?.number?.toString() ||
+    props.Codigo?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+    props["Employee Code"]?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+    "";
+
+  return String(raw || "").trim();
 }
 
 function getEmployeeRoleFromPage(page) {
-  return page.properties.Role?.select?.name || "";
+  const props = page?.properties || {};
+
+  return (
+    props.Role?.select?.name ||
+    props.Role?.status?.name ||
+    props.Role?.multi_select?.map((r) => r.name).join(" / ") ||
+    props.Role?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+    props.role?.select?.name ||
+    props.role?.rich_text?.map((t) => t.plain_text).join("").trim() ||
+    ""
+  );
+}
+
+function isEmployeeActiveFromPage(page) {
+  const props = page?.properties || {};
+
+  if (props.Active?.checkbox !== undefined) return props.Active.checkbox === true;
+  if (props.active?.checkbox !== undefined) return props.active.checkbox === true;
+
+  // Si todavía no existe Active en algún registro, no lo bloqueamos por accidente.
+  return true;
+}
+
+function roleIncludes(role, words) {
+  const r = cleanEmployeeText(role);
+
+  return words.some((word) => r.includes(cleanEmployeeText(word)));
+}
+
+function isAdminRole(role) {
+  return roleIncludes(role, [
+    "admin",
+    "manager",
+    "owner",
+    "company owner",
+    "general manager",
+    "corporate",
+  ]);
+}
+
+function canCleanRole(role) {
+  return isAdminRole(role) || roleIncludes(role, ["cleaner", "cleaning", "housekeeper"]);
+}
+
+function canInspectRole(role) {
+  return (
+    isAdminRole(role) ||
+    roleIncludes(role, ["inspector", "inspection", "dispatch", "operations", "supervisor"])
+  );
+}
+
+function canOperationsRole(role) {
+  return isAdminRole(role) || roleIncludes(role, ["dispatch", "operations", "supervisor"]);
+}
+
+function canReportsRole(role) {
+  return isAdminRole(role) || roleIncludes(role, ["dispatch", "operations", "reports", "payroll"]);
+}
+
+function canClockRole(role) {
+  return (
+    isAdminRole(role) ||
+    roleIncludes(role, [
+      "clock",
+      "laundry",
+      "activities",
+      "runner",
+      "houseman",
+      "support",
+      "hourly",
+      "dispatch",
+      "operations",
+      "inspector",
+    ])
+  );
+}
+
+function getPermissionsFromRole(role) {
+  if (isAdminRole(role)) return ["all"];
+
+  const permissions = [];
+
+  if (canCleanRole(role)) permissions.push("cleaning");
+  if (canInspectRole(role)) permissions.push("inspection");
+  if (canOperationsRole(role)) permissions.push("operations", "rooms");
+  if (canReportsRole(role)) permissions.push("reports");
+  if (canClockRole(role)) permissions.push("clock");
+
+  return [...new Set(permissions)];
+}
+
+function pageToUser(page) {
+  const name = getEmployeeNameFromPage(page);
+  const code = getEmployeeCodeFromPage(page);
+  const role = getEmployeeRoleFromPage(page);
+  const active = isEmployeeActiveFromPage(page);
+
+  return {
+    id: page?.id || "",
+    name,
+    code,
+    role,
+    active,
+    hotel: "Default Hotel",
+    permissions: getPermissionsFromRole(role),
+    home: mobileHomeFromRole(role),
+  };
+}
+
+function userCan(user, permission) {
+  const permissions = user?.permissions || getPermissionsFromRole(user?.role || "");
+  return permissions.includes("all") || permissions.includes(permission);
+}
+
+async function findEmployeeByCode(code) {
+  const cleanCode = String(code || "").trim();
+  const employees = await getEmployeesCached();
+
+  return employees.find((page) => {
+    const employeeCode = getEmployeeCodeFromPage(page);
+    return employeeCode === cleanCode;
+  });
+}
+
+async function findEmployeeByLogin(login) {
+  const cleanLogin = String(login || "").trim();
+  const cleanLoginText = cleanEmployeeText(cleanLogin);
+  const employees = await getEmployeesCached();
+
+  return employees.find((page) => {
+    const name = getEmployeeNameFromPage(page);
+    const code = getEmployeeCodeFromPage(page);
+
+    const nameMatch = cleanEmployeeText(name) === cleanLoginText;
+    const codeMatch = code && code === cleanLogin;
+
+    return nameMatch || codeMatch;
+  });
 }
 
 function mobileHomeFromRole(role) {
-  const cleanRole = String(role || "").trim().toLowerCase();
-
-  if (cleanRole === "inspector") {
-    return "inspector";
-  }
-
-  if (cleanRole === "dispatch / inspector") {
-    return "inspector_operations";
-  }
-
-  if (cleanRole === "operations") {
-    return "operations";
-  }
-
-  if (cleanRole === "admin") {
+  if (isAdminRole(role) || canOperationsRole(role)) {
     return "admin";
   }
 
-  if (cleanRole === "runner") {
-    return "runner";
+  if (canCleanRole(role) && canInspectRole(role)) {
+    return "choose-role";
   }
 
-  if (cleanRole === "laundry") {
-    return "laundry";
+  if (canInspectRole(role)) {
+    return "inspector";
+  }
+
+  if (canCleanRole(role)) {
+    return "cleaner";
+  }
+
+  if (canClockRole(role)) {
+    return "clock";
   }
 
   return "staff";
@@ -3506,11 +3645,11 @@ app.get("/inspector-assignments", async (req, res) => {
   try {
     const code = String(req.query.code || "").trim();
     const cacheKey = `inspector-assignments:${code}`;
-const cached = getCache(cacheKey);
+    const cached = getCache(cacheKey);
 
-if(cached){
-  return res.json(cached);
-}
+    if (cached) {
+      return res.json(cached);
+    }
 
     if (!code) {
       return res.status(400).json({
@@ -3528,61 +3667,69 @@ if(cached){
       });
     }
 
-  const inspectorName = getEmployeeNameFromPage(employee);
-const role = getEmployeeRoleFromPage(employee);
+    const user = pageToUser(employee);
 
-const allowedRoles = ["Inspector", "Dispatch / Inspector"];
+    if (!user.active) {
+      return res.status(403).json({
+        ok: false,
+        message: "Empleado inactivo",
+      });
+    }
 
-if (!allowedRoles.includes(role)) {
-  return res.status(403).json({
-    ok: false,
-    message: "Este código no tiene acceso a inspecciones",
-  });
-}
+    if (!userCan(user, "inspection")) {
+      return res.status(403).json({
+        ok: false,
+        message: "Este código no tiene acceso a inspecciones",
+      });
+    }
 
-const pages = await queryTodayRooms();
+    const inspectorName = user.name;
+    const role = user.role;
+    const canSeeAll = userCan(user, "all") || userCan(user, "operations");
+    const pages = await queryTodayRooms();
 
-const units = pages
-  .map((page) => {
-    const props = page.properties;
+    const units = pages
+      .map((page) => {
+        const props = page.properties;
 
-    const assignedInspector =
-      props["Assigned Inspector"]?.multi_select
-        ?.map((i) => i.name)
-        .join(", ") || "";
+        const assignedInspector =
+          props["Assigned Inspector"]?.multi_select?.map((i) => i.name).join(", ") ||
+          props["Assigned Inspector"]?.select?.name ||
+          props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
+          "";
 
-    return {
-      id: page.id,
-      unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
-      status: props["Cleaning Status"]?.status?.name || "",
-      priority: props.Priority?.select?.name || "Normal",
-      assignedInspector,
-    };
-  })
-  .filter((item) => {
-    const inspectorList = String(item.assignedInspector || "")
-      .toLowerCase()
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
+        return {
+          id: page.id,
+          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+          status: props["Cleaning Status"]?.status?.name || "",
+          priority: props.Priority?.select?.name || "Normal",
+          assignedInspector,
+        };
+      })
+      .filter((item) => {
+        if (canSeeAll) return true;
 
-    return inspectorList.includes(
-      inspectorName.toLowerCase().trim()
-    );
-  });
+        const inspectorList = String(item.assignedInspector || "")
+          .toLowerCase()
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+
+        return inspectorList.includes(inspectorName.toLowerCase().trim());
+      });
 
     const payload = {
-  ok: true,
-  inspector: inspectorName,
-  role,
-  count: units.length,
-  units,
-};
+      ok: true,
+      inspector: inspectorName,
+      role,
+      permissions: user.permissions,
+      count: units.length,
+      units,
+    };
 
-setCache(cacheKey, payload, 5000);
+    setCache(cacheKey, payload, 5000);
 
-res.json(payload);
-
+    res.json(payload);
   } catch (error) {
     console.error("Error en /inspector-assignments:", error.message);
 
