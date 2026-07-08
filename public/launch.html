@@ -337,10 +337,39 @@ document.getElementById("code").addEventListener("keydown", event => {
   }
 });
 
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
   const savedCode = localStorage.getItem("employeeCode");
-  if(savedCode){
-    document.getElementById("code").value = savedCode;
+
+  if (!savedCode) return;
+
+  document.getElementById("code").value = savedCode;
+
+  const status = document.getElementById("status");
+  status.className = "status ok";
+  status.innerText = "Sesión encontrada. Entrando...";
+
+  try {
+    const response = await fetch(`/api/me?code=${encodeURIComponent(savedCode)}&t=${Date.now()}`);
+    const data = await response.json();
+
+    if (!data.ok || !data.user || !data.user.active) {
+      localStorage.clear();
+      status.className = "status";
+      status.innerText = "Sesión expirada. Ingresa tu código otra vez.";
+      return;
+    }
+
+    saveUser({
+      name: data.user.name,
+      code: data.user.code,
+      role: data.user.role,
+    }, savedCode);
+
+    routeUser();
+
+  } catch (error) {
+    status.className = "status";
+    status.innerText = "No se pudo validar la sesión.";
   }
 });
 </script>
