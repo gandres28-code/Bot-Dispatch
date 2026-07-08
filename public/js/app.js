@@ -12,7 +12,7 @@ async function loadAdminDashboard() {
 
     const s = data.stats || {};
 
-    // Compatibilidad con app.html anterior
+    // Compatibilidad con versiones anteriores del dashboard
     setText("dashTotal", s.totalUnits || 0);
     setText("dashProgress", s.inProgress || 0);
     setText("dashInspect", s.awaitingInspection || 0);
@@ -24,7 +24,6 @@ async function loadAdminDashboard() {
 }
 
 function showPage(pageId, subtitle, navButton) {
-
   document.querySelectorAll(".os-page").forEach(page => {
     page.classList.remove("active");
   });
@@ -45,21 +44,50 @@ function showPage(pageId, subtitle, navButton) {
 
   setText("pageSubtitle", subtitle);
 
-  // Recargar dashboard cuando se vuelva a Home
   if (pageId === "dashboardPage") {
     const frame = document.getElementById("dashboardFrame");
+
     if (frame) {
       frame.src = "/dashboard.html";
     }
   }
 }
 
-function openModule(title, url) {
+function getOSModule(moduleName) {
+  if (!window.OS || !OS.modules) {
+    return null;
+  }
 
+  return OS.modules[moduleName] || null;
+}
+
+function openOSModule(moduleName) {
+  const module = getOSModule(moduleName);
+
+  if (!module) {
+    console.warn("Módulo no encontrado:", moduleName);
+    showComingSoon(moduleName);
+    return;
+  }
+
+  if (module.permission !== "public" && !OS.can(module.permission) && !OS.can("all")) {
+    alert("No tienes permiso para abrir este módulo.");
+    return;
+  }
+
+  openModule(module.title, module.url);
+}
+
+function openDirectModule(title, url) {
+  openModule(title, url);
+}
+
+function openModule(title, url) {
   setText("moduleTitle", title);
   setText("moduleUrl", url);
 
   const frame = document.getElementById("moduleFrame");
+
   if (frame) {
     frame.src = url;
   }
@@ -68,13 +96,16 @@ function openModule(title, url) {
     page.classList.remove("active");
   });
 
-  document.getElementById("modulePage").classList.add("active");
+  const modulePage = document.getElementById("modulePage");
+
+  if (modulePage) {
+    modulePage.classList.add("active");
+  }
 
   setText("pageSubtitle", title);
 }
 
 function backToDashboard() {
-
   const frame = document.getElementById("moduleFrame");
 
   if (frame) {
@@ -102,6 +133,7 @@ function backToDashboard() {
   });
 
   const homeButton = document.querySelector(".os-nav button");
+
   if (homeButton) {
     homeButton.classList.add("active");
   }
@@ -111,6 +143,28 @@ function backToDashboard() {
 
 function showComingSoon(name) {
   alert(`${name} estará disponible próximamente en 417 Maid OS.`);
+}
+
+function protectAppShell() {
+  if (!window.OS) return;
+
+  // Esperar a que maid-core.js cargue usuario
+  setTimeout(() => {
+    if (!OS.user) {
+      window.location.href = "/launch";
+      return;
+    }
+
+    const allowed =
+      OS.can("operations") ||
+      OS.can("rooms") ||
+      OS.can("reports") ||
+      OS.can("all");
+
+    if (!allowed) {
+      window.location.href = "/launch";
+    }
+  }, 600);
 }
 
 // Compatibilidad
@@ -125,10 +179,11 @@ try {
 
     const dashboardFrame = document.getElementById("dashboardFrame");
 
-    if (dashboardFrame &&
-        dashboardFrame.contentWindow &&
-        dashboardFrame.contentWindow.refreshAll) {
-
+    if (
+      dashboardFrame &&
+      dashboardFrame.contentWindow &&
+      dashboardFrame.contentWindow.refreshAll
+    ) {
       dashboardFrame.contentWindow.refreshAll();
     }
   });
@@ -136,3 +191,6 @@ try {
 } catch (error) {
   console.log(error);
 }
+
+window.addEventListener("os-user-loaded", protectAppShell);
+protectAppShell();
