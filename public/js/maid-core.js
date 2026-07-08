@@ -15,6 +15,27 @@ window.OS = {
       admin: ["all"],
       manager: ["all"],
     };
+    require(permission) {
+
+    if (!this.user) {
+
+        console.log("Esperando usuario...");
+
+        return;
+
+    }
+
+    if (this.can("all")) return;
+
+    if (this.can(permission)) return;
+
+    console.warn("Acceso denegado:", permission);
+
+    localStorage.clear();
+
+    window.location.href = "/launch";
+
+},
 
     const allowed = permissions[role] || [];
 
