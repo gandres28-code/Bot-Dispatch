@@ -65,6 +65,7 @@ function getPermissionsFromRole(role) {
     cleaner: ["cleaning"],
     "cleaner / inspector": ["cleaning", "inspection"],
     inspector: ["inspection"],
+    "laundry / activities / runner": ["clock"],
     "dispatch / inspector": ["inspection", "operations", "rooms"],
     dispatch: ["operations", "rooms", "reports"],
     operations: ["operations", "rooms", "reports"],
