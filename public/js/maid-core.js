@@ -7,6 +7,8 @@ window.OS = {
     const permissions = {
       cleaner: ["cleaning"],
       inspector: ["inspection"],
+      "cleaner / inspector": ["cleaning", "inspection"],
+      "laundry / activities / runner": ["clock"],
       "dispatch / inspector": ["inspection", "operations"],
       dispatch: ["operations", "rooms", "reports"],
       operations: ["operations", "rooms", "reports"],
