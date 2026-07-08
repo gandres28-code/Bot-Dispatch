@@ -590,7 +590,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section id="cleanerAccessCard" class="card">
     <div class="section-title">
       <h2>Acceso del limpiador</h2>
       <small>Nombre exacto</small>
@@ -668,7 +668,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-
+<script src="/js/maid-core.js"></script>
 
 <script>
 let currentCleanerName = "";
@@ -680,6 +680,84 @@ let selectedReportFiles = [];
 let selectedUnit = "";
 let selectedUnitStatus = "";
 let selectedUnitArrival = false;
+
+function normalizeRole(role){
+  return String(role || "").trim().toLowerCase();
+}
+
+function canClean(role){
+  const cleanRole = normalizeRole(role);
+
+  return [
+    "cleaner",
+    "cleaner / inspector",
+    "inspector / cleaner",
+    "admin",
+    "manager",
+    "owner",
+    "company owner"
+  ].includes(cleanRole);
+}
+
+function waitForOSUser(){
+  return new Promise(resolve => {
+    let tries = 0;
+
+    const timer = setInterval(() => {
+      tries++;
+
+      if(window.OS && OS.user){
+        clearInterval(timer);
+        resolve(OS.user);
+        return;
+      }
+
+      if(tries > 30){
+        clearInterval(timer);
+        resolve(null);
+      }
+    }, 100);
+  });
+}
+
+async function bootCleanerPanel(){
+  const user = await waitForOSUser();
+  const savedName =
+    localStorage.getItem("employeeName") ||
+    localStorage.getItem("cleanerName") ||
+    "";
+
+  if(!user && !savedName){
+    window.location.href = "/launch";
+    return;
+  }
+
+  const role = user?.role || localStorage.getItem("employeeRole") || "";
+
+  if(user && !canClean(role)){
+    window.location.href = "/launch";
+    return;
+  }
+
+  const name = user?.name || savedName;
+  const input = document.getElementById("name");
+
+  if(input && name){
+    input.value = name;
+    currentCleanerName = name;
+    localStorage.setItem("cleanerName", name);
+    localStorage.setItem("employeeName", name);
+  }
+
+  const accessCard = document.getElementById("cleanerAccessCard");
+  if(accessCard){
+    accessCard.style.display = "none";
+  }
+
+  if(name){
+    loadCleanerAssignments(true);
+  }
+}
 
 function setButtonsDisabled(disabled){
   document.querySelectorAll(".action-btn").forEach(button => {
@@ -818,11 +896,17 @@ function updateCleanerDashboard(units){
 }
 
 function restoreCleanerName(){
-  const savedName = localStorage.getItem("cleanerName") || "";
+  const savedName =
+    localStorage.getItem("employeeName") ||
+    localStorage.getItem("cleanerName") ||
+    "";
+
   const input = document.getElementById("name");
+
   if(savedName && input){
     input.value = savedName;
     currentCleanerName = savedName;
+    localStorage.setItem("cleanerName", savedName);
   }
 }
 
@@ -833,7 +917,8 @@ async function loadCleanerAssignments(showLoading){
   if(name){ localStorage.setItem("cleanerName", name); }
 
   if(!name){
-    alert("Escribe tu nombre");
+    alert("No se encontró tu sesión. Vuelve a entrar desde Launch.");
+    window.location.href = "/launch";
     return;
   }
 
@@ -1008,7 +1093,8 @@ async function sendAction(action){
   const note = document.getElementById("note").value.trim();
 
   if(!name){
-    alert("Escribe tu nombre");
+    alert("No se encontró tu sesión. Vuelve a entrar desde Launch.");
+    window.location.href = "/launch";
     return;
   }
 
@@ -1092,7 +1178,8 @@ async function submitReportToAI(action){
   const hasPhotos = selectedReportFiles.length > 0;
 
   if(!name){
-    alert("Escribe tu nombre");
+    alert("No se encontró tu sesión. Vuelve a entrar desde Launch.");
+    window.location.href = "/launch";
     return;
   }
 
@@ -1267,7 +1354,7 @@ const photosCount =
   }
 }
 
-document.addEventListener("DOMContentLoaded", restoreCleanerName);
+document.addEventListener("DOMContentLoaded", bootCleanerPanel);
 
 let socket = null;
 
