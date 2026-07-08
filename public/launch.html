@@ -47,11 +47,7 @@
       margin-bottom:18px;
     }
 
-    h1{
-      margin:0;
-      font-size:32px;
-      letter-spacing:-.05em;
-    }
+    h1{ margin:0; font-size:32px; letter-spacing:-.05em; }
 
     p{
       color:#cbd5e1;
@@ -102,6 +98,8 @@
       box-shadow:0 14px 28px rgba(37,99,235,.35);
     }
 
+    button:disabled{ opacity:.65; cursor:not-allowed; }
+
     .status{
       margin-top:14px;
       color:#fca5a5;
@@ -110,11 +108,62 @@
       min-height:20px;
     }
 
+    .status.ok{ color:#86efac; }
+
     .small{
       margin-top:18px;
       color:#94a3b8;
       font-size:12px;
       text-align:center;
+    }
+
+    .choice{
+      display:none;
+      margin-top:18px;
+      padding-top:18px;
+      border-top:1px solid rgba(255,255,255,.14);
+    }
+
+    .choice h2{
+      margin:0 0 6px;
+      font-size:20px;
+      letter-spacing:-.04em;
+    }
+
+    .choice p{
+      margin:0 0 12px;
+      font-size:13px;
+    }
+
+    .choice-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .choice-grid button{
+      margin:0;
+      min-height:100px;
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:none;
+      font-size:15px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+    }
+
+    .choice-grid b{
+      font-size:28px;
+      line-height:1;
+    }
+
+    .secondary{
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:none;
     }
   </style>
 </head>
@@ -125,22 +174,131 @@
     <h1>417 Maid</h1>
     <p>Ingresa tu código para entrar a tu área de trabajo.</p>
 
-   <label for="code">Nombre o código</label>
-<input id="code" placeholder="Ejemplo: Maria o 1234" autocomplete="off" inputmode="text">
+    <div id="loginBox">
+      <label for="code">Código de empleado</label>
+      <input id="code" placeholder="Ejemplo: 1234" autocomplete="off" inputmode="text">
+      <button id="loginBtn" onclick="login()">Entrar</button>
+    </div>
 
-    <button onclick="login()">Entrar</button>
+    <div id="roleChoice" class="choice">
+      <h2>¿Qué vas a hacer hoy?</h2>
+      <p id="choiceName">Selecciona tu área de trabajo.</p>
+
+      <div class="choice-grid">
+        <button onclick="goCleaning()"><b>🧹</b>Limpieza</button>
+        <button onclick="goInspection()"><b>🔍</b>Inspección</button>
+      </div>
+
+      <button class="secondary" onclick="resetLogin()">Usar otro código</button>
+    </div>
 
     <div id="status" class="status"></div>
 
     <div class="small">
-      Limpieza · Inspecciones · Operaciones
+      Limpieza · Inspecciones · Operaciones · Clock
     </div>
   </div>
 
 <script>
+let currentUser = null;
+
+function normalizeRole(role){
+  return String(role || "").trim().toLowerCase();
+}
+
+function saveUser(data, typedCode){
+  const realCode = data.code || typedCode || "";
+
+  localStorage.setItem("employeeCode", realCode);
+  localStorage.setItem("employeeName", data.name || "");
+  localStorage.setItem("employeeRole", data.role || "");
+
+  currentUser = {
+    name: data.name || "",
+    code: realCode,
+    role: data.role || "",
+  };
+}
+
+function goCleaning(){
+  if(currentUser?.name){
+    localStorage.setItem("cleanerName", currentUser.name);
+  }
+  window.location.href = "/";
+}
+
+function goInspection(){
+  window.location.href = "/inspector";
+}
+
+function showRoleChoice(){
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("roleChoice").style.display = "block";
+  document.getElementById("choiceName").innerText =
+    currentUser?.name
+      ? `${currentUser.name}, selecciona tu área de trabajo.`
+      : "Selecciona tu área de trabajo.";
+}
+
+function resetLogin(){
+  currentUser = null;
+  document.getElementById("roleChoice").style.display = "none";
+  document.getElementById("loginBox").style.display = "block";
+  document.getElementById("status").innerText = "";
+  document.getElementById("status").className = "status";
+  document.getElementById("loginBtn").disabled = false;
+  document.getElementById("code").focus();
+}
+
+function routeUser(){
+  const role = normalizeRole(currentUser?.role);
+
+  if(role === "cleaner"){
+    goCleaning();
+    return;
+  }
+
+  if(role === "inspector"){
+    goInspection();
+    return;
+  }
+
+  if(role === "cleaner / inspector"){
+    showRoleChoice();
+    return;
+  }
+
+  if(role === "dispatch / inspector"){
+    window.location.href = "/app";
+    return;
+  }
+
+  if(
+    role === "laundry / activities" ||
+    role === "laundry / activities / runner" ||
+    role === "laundry" ||
+    role === "activities" ||
+    role === "runner"
+  ){
+    window.location.href = "/time-clock";
+    return;
+  }
+
+  if(role === "admin" || role === "dispatch" || role === "manager" || role === "operations"){
+    window.location.href = "/app";
+    return;
+  }
+
+  document.getElementById("status").innerText = "Tu rol no tiene acceso configurado.";
+  document.getElementById("loginBtn").disabled = false;
+}
+
 async function login(){
   const code = document.getElementById("code").value.trim();
   const status = document.getElementById("status");
+  const btn = document.getElementById("loginBtn");
+
+  status.className = "status";
 
   if(!code){
     status.innerText = "Escribe tu código.";
@@ -148,6 +306,7 @@ async function login(){
   }
 
   status.innerText = "Verificando...";
+  btn.disabled = true;
 
   try{
     const response = await fetch(`/login-role?code=${encodeURIComponent(code)}&t=${Date.now()}`);
@@ -155,31 +314,20 @@ async function login(){
 
     if(!data.ok){
       status.innerText = data.message || "Código no encontrado.";
+      btn.disabled = false;
       return;
     }
 
-    localStorage.setItem("employeeCode", code);
-    localStorage.setItem("employeeName", data.name || "");
-    localStorage.setItem("employeeRole", data.role || "");
+    saveUser(data, code);
 
-    if(data.role === "Cleaner"){
-      localStorage.setItem("cleanerName", data.name || code);
-      window.location.href = "/";
-      return;
-    }
-    if(data.role === "Inspector" || data.role === "Dispatch / Inspector"){
-      window.location.href = "/inspector";
-      return;
-    }
+    status.className = "status ok";
+    status.innerText = "Acceso correcto. Abriendo...";
 
-    if(data.role === "Admin" || data.role === "Dispatch" || data.role === "Manager"){
-      window.location.href = "/app";
-      return;
-    }
+    routeUser();
 
-    status.innerText = "Tu rol no tiene acceso configurado.";
   }catch(error){
     status.innerText = "Error verificando código.";
+    btn.disabled = false;
   }
 }
 
