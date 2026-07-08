@@ -849,6 +849,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/js/maid-core.js"></script>
 <script>
 let isSending = false;
 let lastSendKey = "";
@@ -859,6 +860,44 @@ let currentInspectorCode = "";
 let currentInspectorName = "";
 let autoRefreshTimer = null;
 let lastUnits = [];
+
+function normalizeRole(role){
+  return String(role||"").trim().toLowerCase();
+}
+function canInspect(role){
+  const r=normalizeRole(role);
+  return [
+    "inspector",
+    "cleaner / inspector",
+    "inspector / cleaner",
+    "dispatch / inspector",
+    "admin","manager","owner","company owner"
+  ].includes(r);
+}
+async function bootInspectorPanel(){
+  if(window.OS && OS.user){
+    const u=OS.user;
+    if(!canInspect(u.role)){
+      location.href="/launch";
+      return;
+    }
+    document.getElementById("code").value=u.code||"";
+    document.getElementById("code").closest(".card").style.display="none";
+    currentInspectorCode=u.code||"";
+    currentInspectorName=u.name||"";
+    loadInspectorAssignments();
+    return;
+  }
+  const saved=localStorage.getItem("employeeCode");
+  if(saved){
+    document.getElementById("code").value=saved;
+    currentInspectorCode=saved;
+    loadInspectorAssignments();
+  }else{
+    location.href="/launch";
+  }
+}
+
 
 function escapeHtml(value){
   return String(value || "")
@@ -1169,7 +1208,7 @@ async function sendInspectionAction(action){
   const unit = document.getElementById("unit").value.trim().toUpperCase();
 
   if(!name){
-    alert("Escribe tu nombre");
+    alert("Sesión no válida."); location.href="/launch";
     return;
   }
 
@@ -1253,7 +1292,7 @@ async function sendSmartReport(action){
   const hasPhotos = selectedReportFiles.length > 0;
 
   if(!name){
-    alert("Escribe tu nombre");
+    alert("Sesión no válida."); location.href="/launch";
     return;
   }
 
@@ -1468,15 +1507,7 @@ socket.on("ops-update", () => {
   }
 });
 
-window.addEventListener("load", () => {
-  const savedCode = localStorage.getItem("inspectorCode");
-
-  if(savedCode){
-    document.getElementById("code").value = savedCode;
-    currentInspectorCode = savedCode;
-    loadInspectorAssignments();
-  }
-});
+window.addEventListener("load", bootInspectorPanel);
 </script>
 </body>
 </html>
