@@ -63,6 +63,7 @@ function getPermissionsFromRole(role) {
 
   const permissions = {
     cleaner: ["cleaning"],
+    "cleaner / inspector": ["cleaning", "inspection"],
     inspector: ["inspection"],
     "dispatch / inspector": ["inspection", "operations", "rooms"],
     dispatch: ["operations", "rooms", "reports"],
