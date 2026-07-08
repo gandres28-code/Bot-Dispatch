@@ -136,10 +136,3 @@ try {
 } catch (error) {
   console.log(error);
 }
-setTimeout(() => {
-  if (!OS.user) return;
-
-  if (!OS.can("operations") && !OS.can("all")) {
-    window.location.href = "/launch";
-  }
-}, 800);
