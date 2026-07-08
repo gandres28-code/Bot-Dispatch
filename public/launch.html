@@ -224,11 +224,11 @@ function goCleaning(){
   if(currentUser?.name){
     localStorage.setItem("cleanerName", currentUser.name);
   }
-  window.location.href = "/";
+ OS.open("cleaning");
 }
 
 function goInspection(){
-  window.location.href = "/inspector";
+  OS.open("inspection");
 }
 
 function showRoleChoice(){
