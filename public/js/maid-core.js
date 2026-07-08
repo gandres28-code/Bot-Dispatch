@@ -1,80 +1,135 @@
 window.OS = {
   user: null,
 
+  modules: {
+    dashboard: {
+      title: "Dashboard",
+      url: "/app",
+      permission: "operations",
+    },
+
+    cleaning: {
+      title: "Limpieza",
+      url: "/",
+      permission: "cleaning",
+    },
+
+    inspection: {
+      title: "Inspecciones",
+      url: "/inspector",
+      permission: "inspection",
+    },
+
+    operations: {
+      title: "Operaciones",
+      url: "/operations.html",
+      permission: "operations",
+    },
+
+    master: {
+      title: "Master",
+      url: "/master",
+      permission: "rooms",
+    },
+
+    clock: {
+      title: "Clock In/Out",
+      url: "/time-clock",
+      permission: "clock",
+    },
+
+    payroll: {
+      title: "Nómina",
+      url: "/payroll-excel",
+      permission: "reports",
+    },
+
+    launch: {
+      title: "Launch",
+      url: "/launch",
+      permission: "public",
+    },
+  },
+
+  permissionsByRole: {
+    cleaner: ["cleaning"],
+
+    inspector: ["inspection"],
+
+    "cleaner / inspector": ["cleaning", "inspection"],
+    "inspector / cleaner": ["cleaning", "inspection"],
+
+    "dispatch / inspector": ["inspection", "operations", "rooms", "reports"],
+
+    "laundry / activities": ["clock"],
+    "laundry / activities / runner": ["clock"],
+    laundry: ["clock"],
+    activities: ["clock"],
+    runner: ["clock"],
+
+    dispatch: ["operations", "rooms", "reports"],
+    operations: ["operations", "rooms", "reports"],
+
+    admin: ["all"],
+    manager: ["all"],
+    owner: ["all"],
+    "company owner": ["all"],
+  },
+
+  normalizeRole(role) {
+    return String(role || "").trim().toLowerCase();
+  },
+
   can(permission) {
-    const role = String(this.user.role || "").toLowerCase();
+    if (!permission) return false;
 
-    const permissions = {
-      cleaner: ["cleaning"],
-      inspector: ["inspection"],
-      "cleaner / inspector": ["cleaning", "inspection"],
-      "laundry / activities / runner": ["clock"],
-      "dispatch / inspector": ["inspection", "operations"],
-      dispatch: ["operations", "rooms", "reports"],
-      operations: ["operations", "rooms", "reports"],
-      admin: ["all"],
-      manager: ["all"],
-    };
-    require(permission) {
+    if (!this.user) return false;
 
+    const role = this.normalizeRole(this.user.role);
+    const allowed = this.permissionsByRole[role] || [];
+
+    return allowed.includes("all") || allowed.includes(permission);
+  },
+
+  require(permission) {
     if (!this.user) {
-
-        console.log("Esperando usuario...");
-
-        return;
-
+      console.log("Esperando usuario...");
+      return false;
     }
 
-    if (this.can("all")) return;
-
-    if (this.can(permission)) return;
+    if (this.can("all") || this.can(permission)) {
+      return true;
+    }
 
     console.warn("Acceso denegado:", permission);
 
     localStorage.clear();
-
     window.location.href = "/launch";
 
-},
-    open(module){
+    return false;
+  },
 
-    const routes={
+  open(moduleName) {
+    const module = this.modules[moduleName];
 
-        dashboard:"/app",
-
-        cleaning:"/",
-
-        inspection:"/inspector",
-
-        operations:"/operations.html",
-
-        master:"/master",
-
-        clock:"/time-clock",
-
-        payroll:"/payroll-excel",
-
-        launch:"/launch"
-
-    };
-
-    const url=routes[module];
-
-    if(!url){
-
-        console.warn("Ruta no encontrada:",module);
-
-        return;
-
+    if (!module) {
+      console.warn("Módulo no encontrado:", moduleName);
+      return;
     }
 
-    window.location.href=url;
+    const isPublic = module.permission === "public";
+    const hasAccess =
+      isPublic ||
+      this.can("all") ||
+      this.can(module.permission);
 
-},
+    if (!hasAccess) {
+      console.warn("Acceso denegado al módulo:", moduleName);
+      window.location.href = "/launch";
+      return;
+    }
 
-    const allowed = permissions[role] || [];
-
-    return allowed.includes("all") || allowed.includes(permission);
+    window.location.href = module.url;
   },
 
   notify({ type = "info", title = "", message = "" }) {
@@ -119,45 +174,56 @@ window.OS = {
     }
   },
 
-  async loadUser(){
+  async loadUser() {
+    const code = localStorage.getItem("employeeCode");
 
-    const code=localStorage.getItem("employeeCode");
+    if (!code) {
+      console.log("No hay código de empleado");
+      return;
+    }
 
-    if(!code){
-        console.log("No hay código de empleado");
+    try {
+      const response = await fetch(`/api/me?code=${encodeURIComponent(code)}&t=${Date.now()}`);
+      const data = await response.json();
+
+      if (!data.ok) {
+        console.log(data.message);
+        this.user = null;
         return;
+      }
+
+      this.user = data.user;
+
+      if (this.user?.code) {
+        localStorage.setItem("employeeCode", this.user.code);
+      }
+
+      if (this.user?.name) {
+        localStorage.setItem("employeeName", this.user.name);
+      }
+
+      if (this.user?.role) {
+        localStorage.setItem("employeeRole", this.user.role);
+      }
+
+      console.log("Usuario cargado", this.user);
+
+      window.dispatchEvent(
+        new CustomEvent("os-user-loaded", {
+          detail: this.user,
+        })
+      );
+
+    } catch (error) {
+      console.log("Error cargando usuario:", error.message);
+      this.user = null;
     }
+  },
 
-    try{
-
-        const response=await fetch(`/api/me?code=${encodeURIComponent(code)}`);
-
-        const data=await response.json();
-
-        if(!data.ok){
-
-            console.log(data.message);
-
-            return;
-
-        }
-
-        this.user=data.user;
-
-        console.log("Usuario cargado",this.user);
-
-    }
-
-    catch(error){
-
-        console.log(error);
-
-    }
-
-},
-
-  init() {
+  async init() {
     this.initSocket();
+
+    await this.loadUser();
 
     console.log("417 Maid OS Core loaded", {
       user: this.user,
