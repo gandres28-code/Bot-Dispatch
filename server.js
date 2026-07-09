@@ -1030,6 +1030,9 @@ if (action === "INSPECTION_START") return "■ Inspección iniciada";
 if (action === "READY_GUEST") return "■ Ready for Guest";
 if (action === "INSPECTION_REPORT") return "■ Error de limpieza reportado";
 if (action === "INSPECTION_SUPPLIES") return "■ Solicitud de inspector";
+if (action === "GUEST_OUT") return "Guest Out";
+if (action === "PRE_INSPECTION_START") return "Pre Inspection Started";
+if (action === "PRE_INSPECTION_COMPLETE") return "Pre Inspection Complete";
 if (action === "LOST_FOUND") return "■ Lost & Found";
 if (action === "PHOTO") return "■ Foto adjunta";
 return "Actualización";
@@ -1088,6 +1091,97 @@ function getAssignedCleaner(page) {
     ""
   );
 }
+
+function readCheckboxProp(page, names) {
+  const props = page?.properties || {};
+
+  for (const name of names) {
+    if (props[name]?.checkbox !== undefined) {
+      return props[name].checkbox === true;
+    }
+  }
+
+  return false;
+}
+
+function readDateProp(page, names) {
+  const props = page?.properties || {};
+
+  for (const name of names) {
+    if (props[name]?.date?.start) {
+      return props[name].date.start;
+    }
+  }
+
+  return "";
+}
+
+function hasProp(page, name) {
+  return !!page?.properties?.[name];
+}
+
+function getRoomOpsFlags(page) {
+  return {
+    guestOut: readCheckboxProp(page, [
+      "Guest Out",
+      "guest out",
+      "GuestOut",
+      "Guest out",
+      "Guests Out",
+    ]),
+
+    guestOutAt: readDateProp(page, [
+      "Guest Out At",
+      "guest out at",
+      "Guest Out Time",
+    ]),
+
+    preInspection: readCheckboxProp(page, [
+      "Pre Inspection",
+      "Pre-Inspection",
+      "Pre Inspected",
+      "pre inspection",
+      "Pre inspection",
+    ]),
+
+    preInspectionStarted: readCheckboxProp(page, [
+      "Pre Inspection Started",
+      "Pre-Inspection Started",
+      "pre inspection started",
+    ]),
+
+    preInspectionStartedAt: readDateProp(page, [
+      "Pre Inspection Started At",
+      "Pre-Inspection Started At",
+      "Pre Inspection Start At",
+    ]),
+
+    preInspectionCompletedAt: readDateProp(page, [
+      "Pre Inspection Completed At",
+      "Pre-Inspection Completed At",
+      "Pre Inspection At",
+    ]),
+  };
+}
+
+function setCheckboxIfExists(page, props, name, value) {
+  if (hasProp(page, name)) {
+    props[name] = {
+      checkbox: !!value,
+    };
+  }
+}
+
+function setDateIfExists(page, props, name, value) {
+  if (hasProp(page, name)) {
+    props[name] = {
+      date: {
+        start: value,
+      },
+    };
+  }
+}
+
 async function getDatabaseSchema(databaseId) {
 const cacheKey = `schema:${databaseId}`;
 const cached = getCache(cacheKey);
@@ -2057,7 +2151,10 @@ const allowedActions = [
 "INSPECTION_START",
 "READY_GUEST",
 "INSPECTION_REPORT",
-"INSPECTION_SUPPLIES"
+"INSPECTION_SUPPLIES",
+"GUEST_OUT",
+"PRE_INSPECTION_START",
+"PRE_INSPECTION_COMPLETE"
 ];
 if (!allowedActions.includes(action)) {
 throw new Error("Acción no permitida");
@@ -2167,6 +2264,22 @@ for (const page of matches) {
         start: now,
       },
     };
+  }
+
+  if (action === "GUEST_OUT") {
+    setCheckboxIfExists(page, props, "Guest Out", true);
+    setDateIfExists(page, props, "Guest Out At", now);
+  }
+
+  if (action === "PRE_INSPECTION_START") {
+    setCheckboxIfExists(page, props, "Pre Inspection Started", true);
+    setDateIfExists(page, props, "Pre Inspection Started At", now);
+  }
+
+  if (action === "PRE_INSPECTION_COMPLETE") {
+    setCheckboxIfExists(page, props, "Pre Inspection", true);
+    setCheckboxIfExists(page, props, "Pre Inspection Started", false);
+    setDateIfExists(page, props, "Pre Inspection Completed At", now);
   }
 
   const autoCloseCleaning =
@@ -3421,8 +3534,12 @@ app.post("/action", async (req, res) => {
       await notifyInspectors(unit);
     }
     broadcastOpsUpdate({
-  type: "action",
-});
+      type: "action",
+      action,
+      unit,
+      employee: name,
+      message: note || "",
+    });
     res.json({
       success: true,
       message: `Enviado correctamente: ${result.label} - ${unit}`,
@@ -3467,8 +3584,12 @@ app.post("/inspector-action", async (req, res) => {
 
     const result = await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
     broadcastOpsUpdate({
-  type: "action",
-});
+      type: "action",
+      action,
+      unit,
+      employee: name,
+      message: note || "",
+    });
     res.json({
       success: true,
       message: `Inspector: ${result.label} - ${unit}`,
@@ -3892,12 +4013,21 @@ app.get("/inspector-assignments", async (req, res) => {
           props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
           "";
 
+        const flags = getRoomOpsFlags(page);
+
         return {
           id: page.id,
           unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
           status: props["Cleaning Status"]?.status?.name || "",
           priority: props.Priority?.select?.name || "Normal",
           assignedInspector,
+          arrival: !!props.Arrival?.checkbox,
+          guestOut: flags.guestOut,
+          guestOutAt: flags.guestOutAt,
+          preInspection: flags.preInspection,
+          preInspectionStarted: flags.preInspectionStarted,
+          preInspectionStartedAt: flags.preInspectionStartedAt,
+          preInspectionCompletedAt: flags.preInspectionCompletedAt,
         };
       })
       .filter((item) => {
@@ -3971,12 +4101,20 @@ if(cached){
           props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
           "";
 
+        const flags = getRoomOpsFlags(page);
+
         return {
           id: page.id,
           unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
           status: props["Cleaning Status"]?.status?.name || "",
           assignedCleaner,
           arrival: !!props.Arrival?.checkbox,
+          guestOut: flags.guestOut,
+          guestOutAt: flags.guestOutAt,
+          preInspection: flags.preInspection,
+          preInspectionStarted: flags.preInspectionStarted,
+          preInspectionStartedAt: flags.preInspectionStartedAt,
+          preInspectionCompletedAt: flags.preInspectionCompletedAt,
         };
       })
       .filter((item) => {
@@ -4110,12 +4248,20 @@ app.post("/mobile-cleaner-login", async (req, res) => {
           props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
           "";
 
+        const flags = getRoomOpsFlags(page);
+
         return {
           id: page.id,
           unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
           status: props["Cleaning Status"]?.status?.name || "",
           assignedCleaner,
           arrival: !!props.Arrival?.checkbox,
+          guestOut: flags.guestOut,
+          guestOutAt: flags.guestOutAt,
+          preInspection: flags.preInspection,
+          preInspectionStarted: flags.preInspectionStarted,
+          preInspectionStartedAt: flags.preInspectionStartedAt,
+          preInspectionCompletedAt: flags.preInspectionCompletedAt,
         };
       })
       .filter((item) => {
@@ -4686,8 +4832,12 @@ app.post("/master-action", async (req, res) => {
       ""
     );
     broadcastOpsUpdate({
-  type: "action",
-});
+      type: "action",
+      action,
+      unit,
+      employee: name,
+      message: note || "",
+    });
     res.json({
       ok: true,
       message: `Acción completada: ${result.label} - ${unit}`,
@@ -4772,8 +4922,12 @@ app.post("/master-update-unit", async (req, res) => {
       });
     }
     broadcastOpsUpdate({
-  type: "action",
-});
+      type: "action",
+      action,
+      unit,
+      employee: name,
+      message: note || "",
+    });
     res.json({
       ok: true,
       message: `Unidad ${unit} actualizada correctamente`,
