@@ -243,3 +243,13 @@ try {
 
 window.addEventListener("os-user-loaded", protectAppShell);
 protectAppShell();
+
+setTimeout(() => {
+  OS.notify({
+    type: "info",
+    title: "OS Store",
+    message: OSStore?.data?.session?.user?.name
+      ? `Sesión cargada: ${OSStore.data.session.user.name}`
+      : "Store cargado, pero sin usuario todavía."
+  });
+}, 2000);
