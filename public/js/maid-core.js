@@ -88,6 +88,14 @@ window.OS = {
 
   notify({ type = "info", title = "", message = "", duration = 5000 } = {}) {
     console.log(`[${type}] ${title}: ${message}`);
+    if (window.OSEvents) {
+  OSEvents.emit("notification", {
+    type,
+    title,
+    message,
+    time: new Date().toISOString()
+  });
+}
     if (window.OSStore) {
   OSStore.push("notifications", {
     type,
