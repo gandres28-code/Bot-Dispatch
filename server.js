@@ -20,6 +20,7 @@ const io = new Server(server, {
   },
 });
 let systemNotifications = [];
+let systemTimeline = [];
 function addNotification(title, message) {
   const notification = {
     id: Date.now(),
@@ -40,6 +41,12 @@ app.get("/notifications-data", (req, res) => {
   res.json({
     ok: true,
     notifications: systemNotifications,
+  });
+});
+app.get("/api/timeline", (req, res) => {
+  res.json({
+    ok: true,
+    timeline: systemTimeline.slice(0, 100),
   });
 });
 const multer = require("multer");
@@ -104,7 +111,11 @@ function broadcastOpsUpdate(payload = {}) {
     message: payload.message || payload.note || "",
     ...payload,
   };
+systemTimeline.unshift(event);
 
+if (systemTimeline.length > 300) {
+  systemTimeline.pop();
+}
   io.emit("ops-update", event);
 
   systemNotifications.unshift({
@@ -677,6 +688,7 @@ app.get("/api/bootstrap", async (req, res) => {
       assignments,
       stats,
       notifications,
+timeline: systemTimeline.slice(0, 100),
       hotel: {
         name: "Default Hotel",
       },
