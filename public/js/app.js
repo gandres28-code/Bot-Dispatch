@@ -194,3 +194,12 @@ try {
 
 window.addEventListener("os-user-loaded", protectAppShell);
 protectAppShell();
+setTimeout(() => {
+  if (window.OS) {
+    OS.notify({
+      type: "success",
+      title: "Prueba",
+      message: "Notification Center funcionando."
+    });
+  }
+}, 1500);
