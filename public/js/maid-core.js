@@ -2,58 +2,18 @@ window.OS = {
   user: null,
 
   modules: {
-    dashboard: {
-      title: "Dashboard",
-      url: "/app",
-      permission: "operations",
-    },
-
-    cleaning: {
-      title: "Limpieza",
-      url: "/",
-      permission: "cleaning",
-    },
-
-    inspection: {
-      title: "Inspecciones",
-      url: "/inspector",
-      permission: "inspection",
-    },
-
-    operations: {
-      title: "Operaciones",
-      url: "/operations.html",
-      permission: "operations",
-    },
-
-    master: {
-      title: "Master",
-      url: "/master",
-      permission: "rooms",
-    },
-
-    clock: {
-      title: "Clock In/Out",
-      url: "/time-clock",
-      permission: "clock",
-    },
-
-    payroll: {
-      title: "Nómina",
-      url: "/payroll-excel",
-      permission: "reports",
-    },
-
-    launch: {
-      title: "Launch",
-      url: "/launch",
-      permission: "public",
-    },
+    dashboard: { title: "Dashboard", url: "/app", permission: "operations" },
+    cleaning: { title: "Limpieza", url: "/", permission: "cleaning" },
+    inspection: { title: "Inspecciones", url: "/inspector", permission: "inspection" },
+    operations: { title: "Operaciones", url: "/operations.html", permission: "operations" },
+    master: { title: "Master", url: "/master", permission: "rooms" },
+    clock: { title: "Clock In/Out", url: "/time-clock", permission: "clock" },
+    payroll: { title: "Nómina", url: "/payroll-excel", permission: "reports" },
+    launch: { title: "Launch", url: "/launch", permission: "public" },
   },
 
   permissionsByRole: {
     cleaner: ["cleaning"],
-
     inspector: ["inspection"],
 
     "cleaner / inspector": ["cleaning", "inspection"],
@@ -82,7 +42,6 @@ window.OS = {
 
   can(permission) {
     if (!permission) return false;
-
     if (!this.user) return false;
 
     const role = this.normalizeRole(this.user.role);
@@ -102,10 +61,8 @@ window.OS = {
     }
 
     console.warn("Acceso denegado:", permission);
-
     localStorage.clear();
     window.location.href = "/launch";
-
     return false;
   },
 
@@ -118,10 +75,7 @@ window.OS = {
     }
 
     const isPublic = module.permission === "public";
-    const hasAccess =
-      isPublic ||
-      this.can("all") ||
-      this.can(module.permission);
+    const hasAccess = isPublic || this.can("all") || this.can(module.permission);
 
     if (!hasAccess) {
       console.warn("Acceso denegado al módulo:", moduleName);
@@ -132,25 +86,21 @@ window.OS = {
     window.location.href = module.url;
   },
 
-notify({
-  type = "info",
-  title = "",
-  message = ""
-}) {
+  notify({ type = "info", title = "", message = "", duration = 5000 } = {}) {
+    console.log(`[${type}] ${title}: ${message}`);
 
-  if (window.NotificationCenter) {
+    if (window.NotificationCenter && typeof window.NotificationCenter.show === "function") {
+      window.NotificationCenter.show({ type, title, message, duration });
+      return;
+    }
 
-    NotificationCenter.show({
-      type,
-      title,
-      message
-    });
+    window.dispatchEvent(
+      new CustomEvent("os-notification", {
+        detail: { type, title, message, duration },
+      })
+    );
+  },
 
-  }
-
-  console.log(`[${type}] ${title}: ${message}`);
-
-},
   api: {
     async get(url) {
       const response = await fetch(url);
@@ -160,9 +110,7 @@ notify({
     async post(url, body) {
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body || {}),
       });
 
@@ -203,17 +151,9 @@ notify({
 
       this.user = data.user;
 
-      if (this.user?.code) {
-        localStorage.setItem("employeeCode", this.user.code);
-      }
-
-      if (this.user?.name) {
-        localStorage.setItem("employeeName", this.user.name);
-      }
-
-      if (this.user?.role) {
-        localStorage.setItem("employeeRole", this.user.role);
-      }
+      if (this.user && this.user.code) localStorage.setItem("employeeCode", this.user.code);
+      if (this.user && this.user.name) localStorage.setItem("employeeName", this.user.name);
+      if (this.user && this.user.role) localStorage.setItem("employeeRole", this.user.role);
 
       console.log("Usuario cargado", this.user);
 
@@ -231,7 +171,6 @@ notify({
 
   async init() {
     this.initSocket();
-
     await this.loadUser();
 
     console.log("417 Maid OS Core loaded", {
