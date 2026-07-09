@@ -765,6 +765,14 @@
     #bigStatus.error{ background:var(--red); }
     #bigStatus.loading{ background:var(--blue); }
 
+    body.hide-bottom-nav .bottom-nav{
+      display:none;
+    }
+
+    body.hide-bottom-nav .app-shell{
+      padding-bottom:28px;
+    }
+
     .bottom-nav{
       position:fixed;
       left:0;
@@ -995,6 +1003,25 @@ function normalizeRole(role){
   return String(role || "").trim().toLowerCase();
 }
 
+function shouldHideBottomNav(role){
+  const cleanRole = normalizeRole(role);
+
+  return [
+    "cleaner",
+    "inspector",
+    "cleaner / inspector",
+    "inspector / cleaner"
+  ].includes(cleanRole);
+}
+
+function updateBottomNavVisibility(role){
+  if(shouldHideBottomNav(role)){
+    document.body.classList.add("hide-bottom-nav");
+  }else{
+    document.body.classList.remove("hide-bottom-nav");
+  }
+}
+
 function canClean(role){
   const cleanRole = normalizeRole(role);
 
@@ -1045,6 +1072,8 @@ async function bootCleanerPanel(){
   }
 
   const role = user?.role || localStorage.getItem("employeeRole") || "";
+
+  updateBottomNavVisibility(role);
 
   if(user && !canClean(role)){
     window.location.href = "/launch";
@@ -1825,7 +1854,10 @@ async function loadMyReports(){
   }
 }
 
-document.addEventListener("DOMContentLoaded", bootCleanerPanel);
+document.addEventListener("DOMContentLoaded", () => {
+  updateBottomNavVisibility(localStorage.getItem("employeeRole") || "");
+  bootCleanerPanel();
+});
 
 document.addEventListener("visibilitychange", () => {
   if(!document.hidden && currentCleanerName){
