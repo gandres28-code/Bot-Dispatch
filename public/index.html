@@ -1,66 +1,79 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <title>417 Maid | Limpieza</title>
+  <title>417 Maid OS | Limpieza</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101827">
+  <meta name="theme-color" content="#f8fafc">
 
   <style>
     :root{
-      --bg:#eef2f7;
-      --ink:#101827;
+      --bg:#f6f8fb;
+      --surface:#ffffff;
+      --ink:#101828;
       --muted:#667085;
-      --line:#e6eaf0;
-      --card:#ffffff;
       --soft:#f8fafc;
-      --green:#16a34a;
-      --green-soft:#dcfce7;
-      --red:#dc2626;
-      --red-soft:#fee2e2;
+      --line:#e4e7ec;
+
       --blue:#2563eb;
-      --blue-soft:#dbeafe;
-      --amber:#f59e0b;
-      --amber-soft:#ffedd5;
+      --blue-soft:#eff6ff;
+
+      --gray:#98a2b3;
+      --gray-soft:#f2f4f7;
+
+      --red:#dc2626;
+      --red-soft:#fef2f2;
+
+      --amber:#d97706;
+      --amber-soft:#fff7ed;
+
+      --green:#16a34a;
+      --green-soft:#ecfdf3;
+
       --purple:#7c3aed;
-      --purple-soft:#ede9fe;
-      --shadow:0 16px 38px rgba(15,23,42,.10);
-      --shadow-soft:0 8px 22px rgba(15,23,42,.07);
-      --radius:24px;
-      --nav-height:0px;
+      --purple-soft:#f5f3ff;
+
+      --shadow:0 18px 45px rgba(15,23,42,.08);
+      --shadow-soft:0 8px 22px rgba(15,23,42,.055);
+      --radius:28px;
     }
 
-    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    *{
+      box-sizing:border-box;
+      -webkit-tap-highlight-color:transparent;
+    }
 
-    html,body{ min-height:100%; }
+    html,body{
+      margin:0;
+      min-height:100%;
+    }
 
     body{
-      margin:0;
       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;
       background:
-        radial-gradient(circle at 0% 0%, rgba(37,99,235,.18), transparent 34%),
-        radial-gradient(circle at 100% 8%, rgba(124,58,237,.13), transparent 30%),
-        linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%);
+        radial-gradient(circle at 0% 0%, rgba(37,99,235,.10), transparent 35%),
+        radial-gradient(circle at 100% 4%, rgba(124,58,237,.08), transparent 30%),
+        linear-gradient(180deg,#ffffff 0%, var(--bg) 100%);
       color:var(--ink);
     }
 
     .app-shell{
       width:100%;
-      max-width:560px;
+      max-width:640px;
       min-height:100vh;
       margin:0 auto;
-      padding:14px 14px calc(var(--nav-height) + 18px);
+      padding:0 16px 110px;
     }
 
     .topbar{
       position:sticky;
       top:0;
-      z-index:50;
-      margin:-14px -14px 14px;
-      padding:calc(env(safe-area-inset-top) + 14px) 14px 12px;
-      background:rgba(248,250,252,.88);
-      backdrop-filter:blur(18px);
-      border-bottom:1px solid rgba(226,232,240,.8);
+      z-index:80;
+      margin:0 -16px;
+      padding:calc(env(safe-area-inset-top) + 14px) 16px 12px;
+      background:rgba(255,255,255,.86);
+      backdrop-filter:blur(22px);
+      border-bottom:1px solid rgba(228,231,236,.8);
     }
 
     .topbar-inner{
@@ -68,27 +81,30 @@
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      max-width:560px;
-      margin:auto;
+      max-width:640px;
+      margin:0 auto;
     }
 
     .brand{
       display:flex;
       align-items:center;
-      gap:11px;
+      gap:12px;
       min-width:0;
     }
 
     .brand-mark{
-      width:44px;
-      height:44px;
+      width:46px;
+      height:46px;
       border-radius:16px;
       display:grid;
       place-items:center;
       color:#fff;
-      font-size:22px;
-      background:linear-gradient(135deg,#111827,#2563eb);
-      box-shadow:0 10px 24px rgba(37,99,235,.25);
+      font-size:17px;
+      font-weight:1000;
+      letter-spacing:-.06em;
+      background:linear-gradient(135deg,#111827,#1d4ed8);
+      box-shadow:0 12px 26px rgba(29,78,216,.22);
+      flex:0 0 auto;
     }
 
     .brand-title{
@@ -98,7 +114,7 @@
     .brand-title strong{
       display:block;
       font-size:17px;
-      letter-spacing:-.03em;
+      letter-spacing:-.04em;
       line-height:1.1;
     }
 
@@ -106,100 +122,352 @@
       display:block;
       color:var(--muted);
       font-size:12px;
-      font-weight:700;
+      font-weight:850;
       margin-top:2px;
     }
 
+    .switch-user{
+      text-decoration:none;
+      color:#344054;
+      background:#fff;
+      border:1px solid var(--line);
+      box-shadow:var(--shadow-soft);
+      border-radius:999px;
+      padding:10px 13px;
+      font-size:12px;
+      font-weight:1000;
+    }
 
     .hero{
-      color:white;
-      border-radius:30px;
-      padding:22px;
-      position:relative;
-      overflow:hidden;
-      background:
-        linear-gradient(135deg,rgba(17,24,39,.98),rgba(31,41,55,.96)),
-        radial-gradient(circle at 90% 10%, rgba(59,130,246,.55), transparent 30%);
-      box-shadow:var(--shadow);
+      padding:24px 0 16px;
     }
 
-    .hero:before{
-      content:"";
-      position:absolute;
-      width:190px;
-      height:190px;
-      border-radius:999px;
-      background:rgba(255,255,255,.08);
-      right:-70px;
-      top:-70px;
-    }
-
-    .hero-kicker{
-      display:inline-flex;
-      gap:7px;
-      align-items:center;
-      font-size:12px;
-      font-weight:950;
-      color:#bfdbfe;
-      background:rgba(255,255,255,.10);
-      border:1px solid rgba(255,255,255,.14);
-      border-radius:999px;
-      padding:7px 10px;
+    .hero-line{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
     }
 
     .hero h1{
-      margin:14px 0 7px;
-      font-size:30px;
+      margin:0;
+      font-size:34px;
       line-height:1.02;
-      letter-spacing:-.055em;
+      letter-spacing:-.065em;
+      color:#101828;
     }
 
-    .hero p{
+    .hero-name{
+      margin-top:7px;
+      color:#2563eb;
+      font-size:20px;
+      line-height:1.1;
+      font-weight:950;
+      letter-spacing:-.035em;
+    }
+
+    .refresh-button{
+      width:auto;
       margin:0;
-      color:#d8dee9;
-      font-size:14px;
-      line-height:1.45;
-      max-width:420px;
+      padding:11px 13px;
+      border-radius:999px;
+      background:#ffffff;
+      color:#344054;
+      border:1px solid var(--line);
+      box-shadow:var(--shadow-soft);
+      font-size:12px;
+      font-weight:1000;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      white-space:nowrap;
+    }
+
+    .refresh-symbol{
+      font-size:18px;
+      line-height:1;
+    }
+
+    .date-pill{
+      width:max-content;
+      max-width:100%;
+      margin-top:16px;
+      display:flex;
+      align-items:center;
+      gap:9px;
+      color:#344054;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:9px 12px;
+      box-shadow:var(--shadow-soft);
+      font-size:13px;
+      font-weight:950;
+    }
+
+    .date-box{
+      width:28px;
+      height:28px;
+      border-radius:10px;
+      background:#eff6ff;
+      color:#2563eb;
+      display:grid;
+      place-items:center;
+      font-size:13px;
+      font-weight:1000;
     }
 
     .stats-grid{
       display:grid;
       grid-template-columns:repeat(4,1fr);
-      gap:9px;
-      margin:12px 0 14px;
+      gap:8px;
+      margin:10px 0 18px;
     }
 
     .stat-card{
-      background:rgba(255,255,255,.92);
-      border:1px solid rgba(255,255,255,.75);
+      background:#fff;
+      border:1px solid var(--line);
       border-radius:20px;
       padding:12px 8px;
-      text-align:center;
       box-shadow:var(--shadow-soft);
+      text-align:center;
     }
 
     .stat-card strong{
       display:block;
-      font-size:20px;
-      letter-spacing:-.04em;
+      font-size:24px;
+      line-height:1;
+      letter-spacing:-.06em;
+      color:#101828;
     }
 
     .stat-card span{
       display:block;
-      margin-top:2px;
+      margin-top:6px;
       color:var(--muted);
+      font-size:10px;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.045em;
+    }
+
+    .section-bar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin:4px 0 12px;
+    }
+
+    .section-bar h2{
+      margin:0;
+      font-size:17px;
+      letter-spacing:-.035em;
+    }
+
+    .section-bar small{
+      color:var(--muted);
+      font-weight:850;
+      font-size:12px;
+    }
+
+    .assignment-list{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+
+    .assignment-card{
+      position:relative;
+      overflow:hidden;
+      min-height:166px;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:26px;
+      box-shadow:var(--shadow);
+      cursor:pointer;
+      transition:transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+    }
+
+    .assignment-card:active{
+      transform:scale(.99);
+    }
+
+    .assignment-card.selected{
+      border:2px solid #101828;
+      box-shadow:0 20px 44px rgba(16,24,40,.15);
+    }
+
+    .assignment-card:before{
+      content:"";
+      position:absolute;
+      inset:0 auto 0 0;
+      width:5px;
+      background:#98a2b3;
+    }
+
+    .assignment-card.not-started:before{ background:var(--gray); }
+    .assignment-card.not-started.arrival:before{ background:var(--red); }
+    .assignment-card.guest-out:before{ background:var(--amber); }
+    .assignment-card.pre-inspected:before{ background:var(--amber); }
+    .assignment-card.started:before{ background:var(--purple); }
+    .assignment-card.done:before{ background:var(--green); }
+
+    .room-layout{
+      display:grid;
+      grid-template-columns:1fr 118px;
+      min-height:126px;
+    }
+
+    .room-content{
+      padding:18px 15px 14px 19px;
+      min-width:0;
+    }
+
+    .room-title{
+      font-size:26px;
+      line-height:1.02;
+      font-weight:1000;
+      letter-spacing:-.06em;
+      color:#101828;
+      margin-bottom:16px;
+    }
+
+    .room-meta-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .meta-block label{
+      display:block;
+      margin:0 0 7px;
+      color:#667085;
+      font-size:10px;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.055em;
+    }
+
+    .meta-value{
+      display:inline-flex;
+      min-height:32px;
+      align-items:center;
+      justify-content:center;
+      border-radius:999px;
+      padding:8px 11px;
       font-size:11px;
-      font-weight:800;
+      line-height:1;
+      font-weight:1000;
+      text-transform:uppercase;
+      letter-spacing:.03em;
+      background:#f2f4f7;
+      color:#475467;
+      max-width:100%;
+      white-space:nowrap;
+    }
+
+    .meta-value.guest-out{
+      background:#fff3d6;
+      color:#92400e;
+    }
+
+    .meta-value.pre-inspected{
+      background:#dcfce7;
+      color:#166534;
+    }
+
+    .state-panel{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding:14px 11px;
+      font-size:13px;
+      font-weight:1000;
+      line-height:1.32;
+      letter-spacing:.015em;
+      text-transform:uppercase;
+      border-left:1px solid rgba(228,231,236,.78);
+    }
+
+    .assignment-card.not-started .state-panel{
+      background:#f8fafc;
+      color:#667085;
+    }
+
+    .assignment-card.not-started.arrival .state-panel{
+      background:#fef2f2;
+      color:#b42318;
+    }
+
+    .assignment-card.guest-out .state-panel{
+      background:#fff7ed;
+      color:#b45309;
+    }
+
+    .assignment-card.pre-inspected .state-panel{
+      background:#ecfdf3;
+      color:#166534;
+    }
+
+    .assignment-card.started .state-panel{
+      background:#f5f3ff;
+      color:#5b21b6;
+    }
+
+    .assignment-card.done .state-panel{
+      background:#ecfdf3;
+      color:#166534;
+    }
+
+    .room-footer{
+      border-top:1px solid #edf0f4;
+      padding:12px 16px 13px 19px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      color:#667085;
+      font-size:12px;
+      font-weight:850;
+    }
+
+    .room-footer strong{
+      color:#101828;
+      font-size:17px;
+      font-weight:1000;
+    }
+
+    .easy-tag{
+      color:#166534;
+      font-weight:1000;
+      text-transform:uppercase;
+      font-size:11px;
+      letter-spacing:.045em;
+    }
+
+    .arrival-tag{
+      color:#b42318;
+      font-weight:1000;
+      text-transform:uppercase;
+      font-size:11px;
+      letter-spacing:.045em;
     }
 
     .card{
-      background:rgba(255,255,255,.94);
-      border:1px solid rgba(255,255,255,.78);
+      background:#fff;
+      border:1px solid var(--line);
       border-radius:var(--radius);
-      padding:17px;
+      padding:18px;
       box-shadow:var(--shadow-soft);
-      margin-bottom:14px;
-      backdrop-filter:blur(16px);
+      margin-bottom:16px;
+    }
+
+    .hidden{ display:none !important; }
+
+    .access-card{
+      margin-top:14px;
     }
 
     .section-title{
@@ -213,14 +481,14 @@
     .section-title h2{
       margin:0;
       font-size:17px;
-      letter-spacing:-.03em;
+      letter-spacing:-.035em;
     }
 
     .section-title span,
     .section-title small{
       color:var(--muted);
       font-size:12px;
-      font-weight:800;
+      font-weight:850;
     }
 
     label{
@@ -231,25 +499,11 @@
       color:#344054;
     }
 
-    .input-wrap{
-      position:relative;
-    }
-
-    .input-icon{
-      position:absolute;
-      left:14px;
-      top:50%;
-      transform:translateY(-50%);
-      font-size:18px;
-      opacity:.82;
-      pointer-events:none;
-    }
-
     input, textarea{
       width:100%;
       border:1px solid var(--line);
       background:#f8fafc;
-      color:#101827;
+      color:#101828;
       border-radius:18px;
       outline:none;
       font-size:16px;
@@ -258,11 +512,7 @@
     }
 
     input{
-      padding:16px 16px;
-    }
-
-    .input-wrap input{
-      padding-left:45px;
+      padding:16px;
     }
 
     textarea{
@@ -273,7 +523,7 @@
     }
 
     input:focus, textarea:focus{
-      background:white;
+      background:#fff;
       border-color:#93c5fd;
       box-shadow:0 0 0 4px rgba(59,130,246,.12);
     }
@@ -296,9 +546,9 @@
     button:disabled{ opacity:.58; cursor:not-allowed; transform:none; }
 
     .btn-primary{ background:linear-gradient(135deg,#2563eb,#1d4ed8); }
-    .start{ background:linear-gradient(135deg,#22c55e,#16a34a); }
-    .done{ background:linear-gradient(135deg,#111827,#374151); }
-    .report{ background:linear-gradient(135deg,#7c3aed,#5b21b6); }
+    .start{ background:linear-gradient(135deg,#7c3aed,#5b21b6); }
+    .done{ background:linear-gradient(135deg,#16a34a,#15803d); }
+    .report{ background:linear-gradient(135deg,#111827,#344054); }
     .neutral{ background:#475467; }
 
     .btn-row{
@@ -310,7 +560,7 @@
     .small-link{
       width:auto;
       margin:0;
-      padding:9px 12px;
+      padding:10px 13px;
       border-radius:999px;
       background:#eef2ff;
       color:#3730a3;
@@ -319,200 +569,25 @@
       border:1px solid #e0e7ff;
     }
 
-    .cleaner-name{
+    .cleaner-chip{
       display:inline-flex;
       align-items:center;
       gap:8px;
       color:#1f2937;
-      background:#f8fafc;
-      border:1px solid var(--line);
-      border-radius:999px;
-      padding:8px 11px;
-      font-size:13px;
-      font-weight:950;
-      margin-bottom:11px;
-    }
-
-    .assignment-grid{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:12px;
-      margin-top:8px;
-    }
-
-    .assignment-card{
-      position:relative;
-      overflow:hidden;
-      min-height:126px;
-      padding:16px 15px 14px;
-      border-radius:22px;
       background:#fff;
       border:1px solid var(--line);
-      box-shadow:var(--shadow-soft);
-      cursor:pointer;
-      display:flex;
-      flex-direction:column;
-      justify-content:space-between;
-    }
-
-    .assignment-card:before{
-      content:"";
-      position:absolute;
-      inset:0 auto 0 0;
-      width:7px;
-      background:#98a2b3;
-    }
-
-    .assignment-card.arrival:before{ background:var(--red); }
-    .assignment-card.started:before{ background:var(--purple); }
-    .assignment-card.done:before{ background:var(--green); }
-    .assignment-card.ready:before{ background:#059669; }
-
-    .assignment-card.selected{
-      border:2px solid #111827;
-      box-shadow:0 14px 30px rgba(17,24,39,.15);
-      transform:translateY(-1px);
-    }
-
-    .unit-name{
-      font-size:24px;
-      font-weight:1000;
-      letter-spacing:-.055em;
-      line-height:1;
-    }
-
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      width:max-content;
-      max-width:100%;
-      margin-top:10px;
-      padding:7px 10px;
       border-radius:999px;
-      font-size:11px;
-      font-weight:950;
-      background:#f2f4f7;
-      color:#344054;
-      text-transform:uppercase;
-      letter-spacing:.02em;
-    }
-
-    .pill.arrival{ background:var(--red-soft); color:#991b1b; }
-    .pill.started{ background:var(--purple-soft); color:#5b21b6; }
-    .pill.done{ background:var(--green-soft); color:#166534; }
-
-    .tap-hint{
-      font-size:12px;
-      color:#667085;
-      font-weight:850;
-    }
-
-
-    /* Visual board states for cleaner cards */
-    .assignment-card{
-      min-height:154px;
-      transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
-    }
-
-    .assignment-card.not-started:before{ background:#98a2b3; }
-    .assignment-card.not-started.arrival:before{ background:var(--red); }
-    .assignment-card.guest-out:before{ background:var(--amber); }
-    .assignment-card.pre-inspected:before{ background:var(--amber); }
-    .assignment-card.started:before{ background:var(--purple); }
-    .assignment-card.done:before{ background:var(--green); }
-
-    .assignment-card.guest-out{
-      background:linear-gradient(180deg,#fff 0%,#fffbeb 100%);
-      border-color:#fed7aa;
-    }
-
-    .assignment-card.pre-inspected{
-      background:linear-gradient(180deg,#fff 0%,#f0fdf4 100%);
-      border-color:#bbf7d0;
-    }
-
-    .assignment-card.started{
-      background:linear-gradient(180deg,#fff 0%,#f5f3ff 100%);
-      border-color:#ddd6fe;
-    }
-
-    .assignment-card.done{
-      background:linear-gradient(180deg,#fff 0%,#f0fdf4 100%);
-      border-color:#bbf7d0;
-    }
-
-    .room-meta{
-      display:flex;
-      gap:7px;
-      flex-wrap:wrap;
-      margin-top:10px;
-    }
-
-    .pill.normal{ background:#f2f4f7; color:#344054; }
-    .pill.guest-out{ background:var(--amber-soft); color:#92400e; }
-    .pill.pre-inspected{ background:var(--green-soft); color:#166534; }
-
-    .action-state{
-      margin-top:13px;
-      padding:12px;
-      border-radius:16px;
-      background:rgba(248,250,252,.92);
-      border:1px solid rgba(226,232,240,.9);
-    }
-
-    .action-state strong{
-      display:block;
+      padding:9px 12px;
       font-size:13px;
-      letter-spacing:.02em;
-      text-transform:uppercase;
-    }
-
-    .action-state span{
-      display:block;
-      margin-top:4px;
-      color:#667085;
-      font-size:12px;
-      font-weight:800;
-      line-height:1.3;
-    }
-
-    .assignment-card.guest-out .action-state{
-      background:#fffbeb;
-      border-color:#fed7aa;
-    }
-
-    .assignment-card.pre-inspected .action-state,
-    .assignment-card.done .action-state{
-      background:#f0fdf4;
-      border-color:#bbf7d0;
-    }
-
-    .assignment-card.started .action-state{
-      background:#f5f3ff;
-      border-color:#ddd6fe;
-    }
-
-    .precheck-badge{
-      margin-top:10px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-      border-radius:14px;
-      background:#ecfdf3;
-      border:1px solid #bbf7d0;
-      color:#166534;
-      padding:9px 10px;
-      font-size:11px;
       font-weight:950;
-      text-transform:uppercase;
-      letter-spacing:.045em;
+      margin-bottom:12px;
+      box-shadow:var(--shadow-soft);
     }
 
     .selected-unit{
       display:none;
-      border-radius:20px;
-      padding:15px;
+      border-radius:22px;
+      padding:16px;
       background:linear-gradient(135deg,#f8fafc,#ffffff);
       border:1px solid var(--line);
       margin-bottom:12px;
@@ -530,7 +605,7 @@
       font-size:13px;
       display:block;
       margin-top:6px;
-      font-weight:700;
+      font-weight:750;
     }
 
     .photo-box{
@@ -546,7 +621,7 @@
       font-size:13px;
       color:var(--muted);
       line-height:1.35;
-      font-weight:700;
+      font-weight:750;
     }
 
     .history-list{
@@ -600,9 +675,9 @@
     .empty{
       text-align:center;
       color:var(--muted);
-      padding:24px 10px;
+      padding:26px 10px;
       font-size:14px;
-      font-weight:700;
+      font-weight:750;
       line-height:1.35;
     }
 
@@ -634,18 +709,64 @@
     #bigStatus.error{ background:var(--red); }
     #bigStatus.loading{ background:var(--blue); }
 
+    .bottom-nav{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      z-index:90;
+      padding:8px 12px calc(env(safe-area-inset-bottom) + 8px);
+      background:rgba(255,255,255,.88);
+      backdrop-filter:blur(20px);
+      border-top:1px solid rgba(228,231,236,.86);
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+    }
 
-    .hidden{ display:none; }
+    .nav-item{
+      text-decoration:none;
+      color:#667085;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+      min-height:54px;
+      border-radius:18px;
+      font-size:11px;
+      font-weight:950;
+    }
 
-    @media(max-width:520px){
-      .app-shell{ padding-left:12px; padding-right:12px; }
-      .assignment-grid{ grid-template-columns:1fr; }
-      .btn-row{ grid-template-columns:1fr; }
-      .hero h1{ font-size:28px; }
-      .stats-grid{ grid-template-columns:repeat(4,1fr); }
-      .stat-card{ padding:11px 5px; }
-      .stat-card strong{ font-size:18px; }
-      .stat-card span{ font-size:10px; }
+    .nav-item.active{
+      color:#1d4ed8;
+      background:#eff6ff;
+    }
+
+    .nav-dot{
+      width:6px;
+      height:6px;
+      border-radius:999px;
+      background:currentColor;
+      opacity:.55;
+    }
+
+    @media(max-width:390px){
+      .room-layout{
+        grid-template-columns:1fr 108px;
+      }
+
+      .room-title{
+        font-size:24px;
+      }
+
+      .state-panel{
+        font-size:12px;
+      }
+
+      .stats-grid{
+        grid-template-columns:repeat(2,1fr);
+      }
     }
   </style>
 </head>
@@ -660,17 +781,31 @@
       <div class="brand">
         <div class="brand-mark">417</div>
         <div class="brand-title">
-          <strong>Limpieza</strong>
-          <span>417 Maid Housekeeping</span>
+          <strong>417 Maid OS</strong>
+          <span>Limpieza</span>
         </div>
       </div>
+      <a class="switch-user" href="/launch" onclick="localStorage.clear()">Cambiar</a>
     </div>
   </header>
 
   <section class="hero">
-    <div class="hero-kicker">Live · Cleaner Workspace</div>
-    <h1>Mis unidades de hoy</h1>
-    <p>View today’s assigned units, start and finish cleaning, and send reports from one clean workspace.</p>
+    <div class="hero-line">
+      <div>
+        <h1>Mis unidades</h1>
+        <div id="heroCleanerName" class="hero-name">Cargando...</div>
+      </div>
+
+      <button class="refresh-button" onclick="loadCleanerAssignments(false)">
+        <span class="refresh-symbol">↻</span>
+        Actualizar
+      </button>
+    </div>
+
+    <div class="date-pill">
+      <span class="date-box" id="dateDay">--</span>
+      <span id="dateText">Hoy</span>
+    </div>
   </section>
 
   <section class="stats-grid">
@@ -680,11 +815,11 @@
     </div>
     <div class="stat-card">
       <strong id="statProgress">0</strong>
-      <span>Started</span>
+      <span>Progreso</span>
     </div>
     <div class="stat-card">
       <strong id="statDone">0</strong>
-      <span>Done</span>
+      <span>Finished</span>
     </div>
     <div class="stat-card">
       <strong id="statArrivals">0</strong>
@@ -692,17 +827,14 @@
     </div>
   </section>
 
-  <section id="cleanerAccessCard" class="card">
+  <section id="cleanerAccessCard" class="card access-card">
     <div class="section-title">
       <h2>Acceso del limpiador</h2>
       <small>Nombre exacto</small>
     </div>
 
     <label for="name">Nombre del limpiador</label>
-    <div class="input-wrap">
-      <span class="input-icon"></span>
-      <input id="name" placeholder="Ejemplo: Maria" autocomplete="name">
-    </div>
+    <input id="name" placeholder="Ejemplo: Maria" autocomplete="name">
 
     <button class="btn-primary action-btn" onclick="loadCleanerAssignments(true)">
       Ver mis unidades
@@ -711,14 +843,15 @@
     <p id="status"></p>
   </section>
 
-  <section class="card">
-    <div class="section-title">
-      <h2>Mis unidades</h2>
-      <button class="small-link" onclick="loadCleanerAssignments(false)">Actualizar</button>
+  <section>
+    <div class="section-bar">
+      <div>
+        <h2>Lista de trabajo</h2>
+        <small id="cleanerName">Sin limpiador cargado</small>
+      </div>
     </div>
 
-    <div id="cleanerName" class="cleaner-name">Sin limpiador cargado</div>
-    <div id="assignments" class="empty">Escribe tu nombre y presiona “Ver mis unidades”.</div>
+    <div id="assignments" class="empty">Cargando tus unidades...</div>
   </section>
 
   <section id="cleaningPanel" class="card hidden">
@@ -745,7 +878,7 @@
     </div>
 
     <label for="note">Reporte para operaciones</label>
-    <textarea id="note" placeholder="Ejemplo: Faltan 3 towels, toilet tapado, puerta dañada, basura extra, etc."></textarea>
+    <textarea id="note" placeholder="Ejemplo: Faltan towels, toilet tapado, puerta dañada, basura extra, etc."></textarea>
 
     <div class="photo-box">
       <label for="photoInput" style="margin-top:0;">Fotos del reporte</label>
@@ -768,6 +901,25 @@
   </section>
 
 </div>
+
+<nav class="bottom-nav">
+  <a class="nav-item" href="/app">
+    <span class="nav-dot"></span>
+    Dashboard
+  </a>
+  <a class="nav-item active" href="/">
+    <span class="nav-dot"></span>
+    Limpieza
+  </a>
+  <a class="nav-item" href="/operations.html">
+    <span class="nav-dot"></span>
+    Ops
+  </a>
+  <a class="nav-item" href="/launch" onclick="localStorage.clear()">
+    <span class="nav-dot"></span>
+    Salir
+  </a>
+</nav>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/maid-core.js"></script>
@@ -823,6 +975,8 @@ function waitForOSUser(){
 }
 
 async function bootCleanerPanel(){
+  setupDate();
+
   const user = await waitForOSUser();
   const savedName =
     localStorage.getItem("employeeName") ||
@@ -851,6 +1005,8 @@ async function bootCleanerPanel(){
     localStorage.setItem("employeeName", name);
   }
 
+  setCleanerDisplayName(name);
+
   const accessCard = document.getElementById("cleanerAccessCard");
   if(accessCard){
     accessCard.style.display = "none";
@@ -859,6 +1015,33 @@ async function bootCleanerPanel(){
   if(name){
     loadCleanerAssignments(true);
   }
+}
+
+function setupDate(){
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, "0");
+
+  const text = now.toLocaleDateString("es-US", {
+    month:"short",
+    day:"numeric",
+    year:"numeric"
+  });
+
+  const dayBox = document.getElementById("dateDay");
+  const dateText = document.getElementById("dateText");
+
+  if(dayBox) dayBox.innerText = day;
+  if(dateText) dateText.innerText = text;
+}
+
+function setCleanerDisplayName(name){
+  const safeName = name || "Cleaner";
+
+  const hero = document.getElementById("heroCleanerName");
+  const chip = document.getElementById("cleanerName");
+
+  if(hero) hero.innerText = safeName;
+  if(chip) chip.innerText = `Cleaner: ${safeName}`;
 }
 
 function setButtonsDisabled(disabled){
@@ -883,7 +1066,8 @@ function showBigStatus(message, type){
 }
 
 function setStatus(message){
-  document.getElementById("status").innerText = message || "";
+  const el = document.getElementById("status");
+  if(el) el.innerText = message || "";
 }
 
 function playBeep(type){
@@ -915,11 +1099,11 @@ function vibratePhone(type){
 
 function escapeHtml(value){
   return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function safeJsString(value){
@@ -992,7 +1176,7 @@ function getCleanerState(item){
     return {
       key:"started",
       title:"In Progress",
-      detail:"Cleaning has started",
+      detail:"Started cleaning",
       cardClass:"started"
     };
   }
@@ -1009,16 +1193,16 @@ function getCleanerState(item){
 
     return {
       key:"guest-out",
-      title:"Guest Out",
-      detail:"You can start when ready",
+      title:"Ready to Start",
+      detail:"Guest out",
       cardClass:"guest-out"
     };
   }
 
   return {
     key:"not-started",
-    title:"Not Started",
-    detail:item?.arrival ? "Arrival room • Waiting for guest out" : "Assigned room",
+    title:item?.arrival ? "Waiting Guest" : "Not Started",
+    detail:item?.arrival ? "Arrival room" : "Assigned room",
     cardClass:item?.arrival ? "not-started arrival" : "not-started"
   };
 }
@@ -1032,7 +1216,6 @@ function getStatusLabel(status, arrival){
 
   return arrival ? "ARRIVAL" : "Not Started";
 }
-
 
 function updateCleanerDashboard(units){
   const total = Array.isArray(units) ? units.length : 0;
@@ -1066,14 +1249,18 @@ function restoreCleanerName(){
     input.value = savedName;
     currentCleanerName = savedName;
     localStorage.setItem("cleanerName", savedName);
+    setCleanerDisplayName(savedName);
   }
 }
-
 
 async function loadCleanerAssignments(showLoading){
   const name = document.getElementById("name").value.trim();
   currentCleanerName = name;
-  if(name){ localStorage.setItem("cleanerName", name); }
+
+  if(name){
+    localStorage.setItem("cleanerName", name);
+    setCleanerDisplayName(name);
+  }
 
   if(!name){
     alert("No se encontró tu sesión. Vuelve a entrar desde Launch.");
@@ -1082,7 +1269,7 @@ async function loadCleanerAssignments(showLoading){
   }
 
   if(showLoading){
-    document.getElementById("assignments").innerHTML = "Cargando tus unidades...";
+    document.getElementById("assignments").innerHTML = "<div class='empty'>Cargando tus unidades...</div>";
   }
 
   try{
@@ -1095,7 +1282,7 @@ async function loadCleanerAssignments(showLoading){
       return;
     }
 
-    document.getElementById("cleanerName").innerText = `Cleaner: ${data.cleaner}`;
+    setCleanerDisplayName(data.cleaner || name);
     updateCleanerDashboard(data.units || []);
 
     if(!data.units || data.units.length === 0){
@@ -1106,7 +1293,7 @@ async function loadCleanerAssignments(showLoading){
       return;
     }
 
-    let html = `<div class="assignment-grid">`;
+    let html = `<div class="assignment-list">`;
 
     data.units.forEach(item => {
       const state = getCleanerState(item);
@@ -1115,42 +1302,47 @@ async function loadCleanerAssignments(showLoading){
       const guestOut = isGuestOut(item);
       const preInspected = isPreInspected(item);
 
+      const guestText = guestOut ? "Guest Out" : "Guest In";
+      const preText = preInspected ? "Pre-Inspected" : "Pending";
+      const footerRight = preInspected ? "Easier Clean" : (item.arrival ? "Arrival" : "Open");
+
       html += `
         <div
           class="assignment-card ${state.cardClass} ${selectedClass}"
           onclick="selectCleanerAssignment('${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
           id="${cardId}"
         >
-          <div>
-            <div class="unit-name">${escapeHtml(item.unit)}</div>
+          <div class="room-layout">
+            <div class="room-content">
+              <div class="room-title">${escapeHtml(item.unit)}</div>
 
-            <div class="room-meta">
-              <span class="pill ${item.arrival ? "arrival" : "normal"}">
-                ${item.arrival ? "Arrival" : "Standard"}
-              </span>
+              <div class="room-meta-grid">
+                <div class="meta-block">
+                  <label>Guest Status</label>
+                  <span class="meta-value ${guestOut ? "guest-out" : ""}">
+                    ${escapeHtml(guestText)}
+                  </span>
+                </div>
 
-              ${guestOut ? `<span class="pill guest-out">Guest Out</span>` : ""}
-
-              ${preInspected ? `<span class="pill pre-inspected">Pre-Inspected</span>` : ""}
+                <div class="meta-block">
+                  <label>Pre Inspection</label>
+                  <span class="meta-value ${preInspected ? "pre-inspected" : ""}">
+                    ${escapeHtml(preText)}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div class="action-state">
-              <strong>${escapeHtml(state.title)}</strong>
-              <span>${escapeHtml(state.detail)}</span>
+            <div class="state-panel">
+              ${escapeHtml(state.title)}
             </div>
-
-            ${
-              preInspected && state.key !== "done"
-                ? `<div class="precheck-badge">
-                    <span>Pre-inspected</span>
-                    <span>Cleaning should be easier</span>
-                  </div>`
-                : ""
-            }
           </div>
 
-          <div class="tap-hint">
-            Tap to open actions
+          <div class="room-footer">
+            <span>${escapeHtml(state.detail)}</span>
+            <strong class="${preInspected ? "easy-tag" : (item.arrival ? "arrival-tag" : "")}">
+              ${escapeHtml(footerRight)}
+            </strong>
           </div>
         </div>
       `;
@@ -1236,7 +1428,6 @@ function updatePhotoCount(){
 }
 
 async function uploadPhotosWithReport({ unit, name, action, note, role }){
-  const photoInput = document.getElementById("photoInput");
   const formData = new FormData();
 
   formData.append("unit", unit);
@@ -1348,7 +1539,6 @@ async function sendSmartReport(){
   await submitReportToAI("GENERAL_REPORT");
 }
 
-
 async function submitReportToAI(action){
   if(isSending){
     return;
@@ -1458,31 +1648,26 @@ async function loadMyReports(){
     data.reports.forEach(item => {
       const time = item.timeDisplay || item.time || "";
       const action =
-  item.aiCategory ||
-  item.category ||
-  item.action ||
-  "Reporte";
+        item.aiCategory ||
+        item.category ||
+        item.action ||
+        "Reporte";
 
-const note =
-  item.message ||
-  item.originalMessage ||
-  item.note ||
-  item.aiSummary ||
-  "";
+      const note =
+        item.message ||
+        item.originalMessage ||
+        item.note ||
+        item.aiSummary ||
+        "";
 
-const sent =
-  item.hotsosSent
-    ? "HotSOS enviado"
-    : (item.needsHotSOS
-        ? "Pendiente HotSOS"
-        : "Guardado");
+      const sent =
+        item.hotsosSent
+          ? "HotSOS enviado"
+          : (item.needsHotSOS
+              ? "Pendiente HotSOS"
+              : "Guardado");
 
-const photos =
-  item.photos || [];
-
-const photosCount =
-  photos.length ||
-  Number(item.photosCount || 0);
+      const photos = item.photos || [];
 
       html += `
         <div class="history-item">
@@ -1492,37 +1677,24 @@ const photosCount =
           </div>
           <div class="history-action">${escapeHtml(action)}</div>
           ${note ? `<div class="history-note">${escapeHtml(note)}</div>` : ""}
-         ${
-  photos.length > 0
-    ? `
-      <div class="photo-preview" style="margin-top:10px;">
-        ${photos.map(photo => {
-          const url =
-            photo.url ||
-            photo.photoUrl ||
-            "";
+          ${
+            photos.length > 0
+              ? `
+                <div class="photo-preview" style="margin-top:10px;">
+                  ${photos.map(photo => {
+                    const url = photo.url || photo.photoUrl || "";
+                    if(!url) return "";
 
-          if(!url) return "";
-
-          return `
-            <a href="${url}" target="_blank">
-              <img
-                src="${url}"
-                style="
-                  width:90px;
-                  height:90px;
-                  object-fit:cover;
-                  border-radius:12px;
-                  margin-right:6px;
-                "
-              >
-            </a>
-          `;
-        }).join("")}
-      </div>
-    `
-    : ""
-}
+                    return `
+                      <a href="${url}" target="_blank">
+                        <img src="${url}" style="width:90px;height:90px;object-fit:cover;border-radius:12px;margin-right:6px;">
+                      </a>
+                    `;
+                  }).join("")}
+                </div>
+              `
+              : ""
+          }
         </div>
       `;
     });
