@@ -215,6 +215,9 @@ try {
   socket.on("ops-update", (event) => {
     loadAdminDashboard();
     notifyOpsUpdate(event);
+    if (window.OSStore) {
+  OSStore.push("timeline", event, 300);
+}
     if (window.OSEvents) {
   OSEvents.emit("ops-update", event);
 }
