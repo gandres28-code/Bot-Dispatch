@@ -215,6 +215,9 @@ try {
   socket.on("ops-update", (event) => {
     loadAdminDashboard();
     notifyOpsUpdate(event);
+    if (window.OSEvents) {
+  OSEvents.emit("ops-update", event);
+}
 
     const dashboardFrame = document.getElementById("dashboardFrame");
 
