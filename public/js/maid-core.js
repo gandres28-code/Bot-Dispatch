@@ -191,7 +191,31 @@ window.OS = {
       this.user = null;
     }
   },
+async loadBootstrap() {
+  const code = localStorage.getItem("employeeCode");
 
+  if (!code || !window.OSServices || !window.OSStore) return;
+
+  try {
+    const data = await OSServices.bootstrap(code);
+
+    if (!data.ok) return;
+
+    OSStore.set("session", data.session);
+    OSStore.set("assignments", data.assignments || []);
+    OSStore.set("notifications", data.notifications || []);
+    OSStore.set("stats", data.stats || {});
+    OSStore.set("hotel", data.hotel || {});
+    OSStore.set("settings", data.settings || {});
+
+    if (window.OSEvents) {
+      OSEvents.emit("bootstrap-loaded", data);
+    }
+
+  } catch (error) {
+    console.log("Bootstrap error:", error.message);
+  }
+},
   async init() {
     this.initSocket();
     await this.loadUser();
