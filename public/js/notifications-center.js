@@ -128,16 +128,6 @@ window.NotificationCenter = {
 function initNotificationCenter() {
   if (window.NotificationCenter) {
     window.NotificationCenter.init();
-
-    // Prueba temporal para confirmar que el archivo sí está cargando.
-    setTimeout(() => {
-      window.NotificationCenter.show({
-        type: "success",
-        title: "Notification Center",
-        message: "El archivo notifications-center.js sí está funcionando.",
-        duration: 6000
-      });
-    }, 1200);
   }
 }
 
