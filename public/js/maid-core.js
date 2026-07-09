@@ -195,6 +195,7 @@ window.OS = {
   async init() {
     this.initSocket();
     await this.loadUser();
+    await this.loadBootstrap();
 
     console.log("417 Maid OS Core loaded", {
       user: this.user,
