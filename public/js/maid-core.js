@@ -88,6 +88,14 @@ window.OS = {
 
   notify({ type = "info", title = "", message = "", duration = 5000 } = {}) {
     console.log(`[${type}] ${title}: ${message}`);
+    if (window.OSStore) {
+  OSStore.push("notifications", {
+    type,
+    title,
+    message,
+    time: new Date().toISOString()
+  });
+}
 
     if (window.NotificationCenter && typeof window.NotificationCenter.show === "function") {
       window.NotificationCenter.show({ type, title, message, duration });
@@ -150,6 +158,13 @@ window.OS = {
       }
 
       this.user = data.user;
+      if (window.OSStore) {
+  OSStore.set("session", {
+    user: this.user,
+    permissions: this.user.permissions || [],
+    startedAt: new Date().toISOString()
+  });
+}
 
       if (this.user && this.user.code) localStorage.setItem("employeeCode", this.user.code);
       if (this.user && this.user.name) localStorage.setItem("employeeName", this.user.name);
