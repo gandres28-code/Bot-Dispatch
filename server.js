@@ -95,19 +95,31 @@ function broadcastOpsUpdate(payload = {}) {
   clearOpsCache();
 
   const event = {
+    id: Date.now(),
     time: new Date().toISOString(),
+    type: payload.type || "ops-update",
+    action: payload.action || "",
+    unit: payload.unit || "",
+    employee: payload.employee || payload.person || "",
+    message: payload.message || payload.note || "",
     ...payload,
   };
 
   io.emit("ops-update", event);
 
-  // También enviar al centro de notificaciones
-  io.emit("system-notification", {
-    id: Date.now(),
+  systemNotifications.unshift({
+    id: event.id,
     title: getNotificationTitle(event),
     message: getNotificationMessage(event),
     time: new Date().toLocaleTimeString(),
+    event,
   });
+
+  if (systemNotifications.length > 100) {
+    systemNotifications.pop();
+  }
+
+  io.emit("system-notification", systemNotifications[0]);
 }
 function getNotificationTitle(event) {
 
