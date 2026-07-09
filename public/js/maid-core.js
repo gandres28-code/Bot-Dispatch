@@ -204,6 +204,7 @@ async loadBootstrap() {
     OSStore.set("session", data.session);
     OSStore.set("assignments", data.assignments || []);
     OSStore.set("notifications", data.notifications || []);
+    OSStore.set("timeline", data.timeline || []);
     OSStore.set("stats", data.stats || {});
     OSStore.set("hotel", data.hotel || {});
     OSStore.set("settings", data.settings || {});
