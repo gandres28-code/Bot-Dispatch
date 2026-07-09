@@ -13,7 +13,9 @@ window.OSServices = {
 
     return response.json();
   },
-
+bootstrap(code) {
+  return OSServices.get(`/api/bootstrap?code=${encodeURIComponent(code)}&t=${Date.now()}`);
+},
   auth: {
     me(code) {
       return OSServices.get(`/api/me?code=${encodeURIComponent(code)}&t=${Date.now()}`);
