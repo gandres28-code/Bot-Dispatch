@@ -1182,6 +1182,91 @@
       }
     }
 
+  
+    /* Professional inline report sheet */
+    .report-sheet{
+      position:fixed;
+      left:14px;
+      right:14px;
+      bottom:calc(env(safe-area-inset-bottom) + 16px);
+      z-index:120;
+      max-width:610px;
+      margin:0 auto;
+      background:rgba(255,255,255,.96);
+      backdrop-filter:blur(22px);
+      border:1px solid rgba(228,231,236,.95);
+      border-radius:28px;
+      padding:16px;
+      box-shadow:0 28px 70px rgba(15,23,42,.24);
+    }
+
+    .report-sheet-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .report-sheet-head span{
+      display:block;
+      color:#667085;
+      font-size:11px;
+      font-weight:1000;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      margin-bottom:4px;
+    }
+
+    .report-sheet-head strong{
+      display:block;
+      color:#101828;
+      font-size:24px;
+      font-weight:1000;
+      letter-spacing:-.055em;
+      line-height:1;
+    }
+
+    .sheet-close{
+      width:auto;
+      margin:0;
+      padding:10px 13px;
+      border-radius:999px;
+      background:#f8fafc;
+      color:#344054;
+      border:1px solid #e4e7ec;
+      box-shadow:none;
+      font-size:12px;
+      font-weight:1000;
+    }
+
+    .report-sheet textarea{
+      min-height:118px;
+      background:#f8fafc;
+      border-radius:20px;
+      font-size:15px;
+    }
+
+    .photo-box.compact{
+      margin-top:10px;
+      padding:12px;
+      border-radius:18px;
+    }
+
+    .send-report{
+      margin-top:12px;
+      background:linear-gradient(135deg,#111827,#344054);
+    }
+
+    body.report-open:before{
+      content:"";
+      position:fixed;
+      inset:0;
+      z-index:110;
+      background:rgba(15,23,42,.18);
+      backdrop-filter:blur(2px);
+    }
+
   </style>
 </head>
 
@@ -1268,39 +1353,28 @@
     <div id="assignments" class="empty">Cargando tus unidades...</div>
   </section>
 
-  <section id="cleaningPanel" class="card hidden">
-    <div class="section-title">
-      <h2>Acciones de unidad</h2>
-      <span id="unitStatusText"></span>
-    </div>
+  <section id="cleaningPanel" class="report-sheet hidden">
+    <div class="report-sheet-head">
+      <div>
+        <span>Reporte de unidad</span>
+        <strong id="selectedUnitLabel"></strong>
+      </div>
 
-    <div id="selectedUnitBox" class="selected-unit">
-      <strong id="selectedUnitLabel"></strong>
-      <span>Las acciones se guardan en operaciones y en tu historial.</span>
+      <button class="sheet-close" onclick="closeReportPanel()">Cerrar</button>
     </div>
 
     <input id="unit" class="hidden" placeholder="Unidad">
+    <span id="unitStatusText" class="hidden"></span>
 
-    <div class="btn-row">
-      <button class="start action-btn" onclick="sendAction('START')">
-        Iniciar limpieza
-      </button>
+    <textarea id="note" placeholder="Escribe el reporte aquí. Ejemplo: faltan towels, toilet tapado, puerta dañada, basura extra, etc."></textarea>
 
-      <button class="done action-btn" onclick="sendAction('DONE')">
-        Terminar unidad
-      </button>
-    </div>
-
-    <label for="note">Reporte para operaciones</label>
-    <textarea id="note" placeholder="Ejemplo: Faltan towels, toilet tapado, puerta dañada, basura extra, etc."></textarea>
-
-    <div class="photo-box">
-      <label for="photoInput" style="margin-top:0;">Fotos del reporte</label>
+    <div class="photo-box compact">
+      <label for="photoInput" style="margin-top:0;">Fotos</label>
       <input type="file" id="photoInput" accept="image/*" capture="environment" multiple onchange="addSelectedPhotos()">
-      <div id="photoCount" class="photo-meta">Toca para abrir la cámara. Puedes tomar varias fotos antes de enviar.</div>
+      <div id="photoCount" class="photo-meta">Puedes agregar fotos si es necesario.</div>
     </div>
 
-    <button class="report action-btn" onclick="sendSmartReport()">
+    <button class="report send-report action-btn" onclick="sendSmartReport()">
       Enviar reporte
     </button>
   </section>
@@ -1869,17 +1943,24 @@ function openReportForUnit(event, unit, status, arrival){
 
   if(panel){
     panel.classList.remove("hidden");
+    document.body.classList.add("report-open");
   }
 
   if(note){
     setTimeout(() => {
       note.focus();
-      note.scrollIntoView({
-        behavior:"smooth",
-        block:"center"
-      });
-    }, 120);
+    }, 160);
   }
+}
+
+function closeReportPanel(){
+  const panel = document.getElementById("cleaningPanel");
+
+  if(panel){
+    panel.classList.add("hidden");
+  }
+
+  document.body.classList.remove("report-open");
 }
 
 function selectCleanerAssignment(unit, status, arrival){
@@ -1887,11 +1968,13 @@ function selectCleanerAssignment(unit, status, arrival){
   selectedUnitStatus = status || "";
   selectedUnitArrival = !!arrival;
 
-  document.getElementById("unit").value = unit;
-  document.getElementById("cleaningPanel").classList.remove("hidden");
-  document.getElementById("selectedUnitBox").style.display = "block";
-  document.getElementById("selectedUnitLabel").innerText = unit;
-  document.getElementById("unitStatusText").innerText = getStatusLabel(status, arrival);
+  const unitInput = document.getElementById("unit");
+  const unitLabel = document.getElementById("selectedUnitLabel");
+  const statusText = document.getElementById("unitStatusText");
+
+  if(unitInput) unitInput.value = unit;
+  if(unitLabel) unitLabel.innerText = unit;
+  if(statusText) statusText.innerText = getStatusLabel(status, arrival);
 
   document.querySelectorAll(".assignment-card").forEach(card => {
     card.classList.remove("selected");
@@ -1904,7 +1987,6 @@ function selectCleanerAssignment(unit, status, arrival){
     card.classList.add("selected");
   }
 
-  showBigStatus(`Unidad seleccionada: ${unit}`, "success");
   loadMyReports();
 }
 
@@ -2110,6 +2192,7 @@ async function submitReportToAI(action){
     document.getElementById("photoInput").value = "";
     updatePhotoCount();
 
+    closeReportPanel();
     await loadMyReports();
     await loadCleanerAssignments(false);
 
@@ -2220,6 +2303,12 @@ async function loadMyReports(){
 document.addEventListener("DOMContentLoaded", () => {
   updateBottomNavVisibility(localStorage.getItem("employeeRole") || "");
   bootCleanerPanel();
+});
+
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape"){
+    closeReportPanel();
+  }
 });
 
 document.addEventListener("visibilitychange", () => {
