@@ -417,7 +417,7 @@
     }
 
     .assignment-card.done .state-panel{
-      background:#ecfdf3;
+      background:#f0fdf4;
       color:#166534;
     }
 
@@ -454,6 +454,62 @@
       font-size:11px;
       letter-spacing:.045em;
     }
+
+
+    .quick-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      padding:0 16px 14px 19px;
+    }
+
+    .quick-action{
+      margin:0;
+      padding:12px 10px;
+      border-radius:15px;
+      font-size:12px;
+      font-weight:1000;
+      box-shadow:none;
+      letter-spacing:.02em;
+      text-transform:uppercase;
+    }
+
+    .quick-action.finish{
+      background:#111827;
+      color:#fff;
+    }
+
+    .quick-action.report{
+      background:#f8fafc;
+      color:#344054;
+      border:1px solid #e4e7ec;
+    }
+
+    .quick-action.start{
+      background:#7c3aed;
+      color:#fff;
+    }
+
+    .assignment-card.done .quick-action.finish{
+      background:#dcfce7;
+      color:#166534;
+      border:1px solid #bbf7d0;
+    }
+
+    .state-panel{
+      cursor:pointer;
+    }
+
+    .state-panel small{
+      display:block;
+      margin-top:7px;
+      font-size:10px;
+      line-height:1.15;
+      font-weight:950;
+      opacity:.76;
+      letter-spacing:.035em;
+    }
+
 
     .card{
       background:#fff;
@@ -1333,8 +1389,12 @@ async function loadCleanerAssignments(showLoading){
               </div>
             </div>
 
-            <div class="state-panel">
+            <div
+              class="state-panel"
+              onclick="quickFinishUnit(event, '${safeJsString(item.unit)}')"
+            >
               ${escapeHtml(state.title)}
+              <small>Tap to Finish</small>
             </div>
           </div>
 
@@ -1343,6 +1403,22 @@ async function loadCleanerAssignments(showLoading){
             <strong class="${preInspected ? "easy-tag" : (item.arrival ? "arrival-tag" : "")}">
               ${escapeHtml(footerRight)}
             </strong>
+          </div>
+
+          <div class="quick-actions">
+            <button
+              class="quick-action finish"
+              onclick="quickFinishUnit(event, '${safeJsString(item.unit)}')"
+            >
+              Finish
+            </button>
+
+            <button
+              class="quick-action report"
+              onclick="openReportForUnit(event, '${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
+            >
+              Report
+            </button>
           </div>
         </div>
       `;
@@ -1371,6 +1447,47 @@ function startCleanerAutoRefresh(){
       loadCleanerAssignments(false);
     }
   }, 15000);
+}
+
+
+async function quickFinishUnit(event, unit){
+  if(event){
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  if(!unit || isSending){
+    return;
+  }
+
+  selectCleanerAssignment(unit, "", false);
+  await sendAction("DONE");
+}
+
+function openReportForUnit(event, unit, status, arrival){
+  if(event){
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  selectCleanerAssignment(unit, status, arrival);
+
+  const panel = document.getElementById("cleaningPanel");
+  const note = document.getElementById("note");
+
+  if(panel){
+    panel.classList.remove("hidden");
+  }
+
+  if(note){
+    setTimeout(() => {
+      note.focus();
+      note.scrollIntoView({
+        behavior:"smooth",
+        block:"center"
+      });
+    }, 120);
+  }
 }
 
 function selectCleanerAssignment(unit, status, arrival){
@@ -1709,6 +1826,18 @@ async function loadMyReports(){
 }
 
 document.addEventListener("DOMContentLoaded", bootCleanerPanel);
+
+document.addEventListener("visibilitychange", () => {
+  if(!document.hidden && currentCleanerName){
+    loadCleanerAssignments(false);
+  }
+});
+
+window.addEventListener("focus", () => {
+  if(currentCleanerName){
+    loadCleanerAssignments(false);
+  }
+});
 
 let socket = null;
 
