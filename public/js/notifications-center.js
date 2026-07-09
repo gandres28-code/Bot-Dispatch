@@ -142,3 +142,8 @@ window.addEventListener("os-notification", (event) => {
     window.NotificationCenter.show(event.detail || {});
   }
 });
+if (window.OSEvents) {
+  OSEvents.on("notification", (data) => {
+    NotificationCenter.show(data);
+  });
+}
