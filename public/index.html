@@ -832,6 +832,150 @@
         grid-template-columns:repeat(2,1fr);
       }
     }
+  
+    /* Cleaner Panel V2.1 refinements */
+    .assignment-card{
+      background:#ffffff !important;
+      border:1px solid #e4e7ec;
+      box-shadow:0 16px 36px rgba(15,23,42,.075);
+    }
+
+    .assignment-card.done,
+    .assignment-card.started,
+    .assignment-card.guest-out,
+    .assignment-card.pre-inspected,
+    .assignment-card.not-started{
+      background:#ffffff !important;
+    }
+
+    .assignment-card.done{
+      border-color:#bbf7d0;
+      box-shadow:0 16px 36px rgba(22,163,74,.10);
+    }
+
+    .assignment-card.done:after{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius:26px;
+      border:1px solid rgba(22,163,74,.22);
+      pointer-events:none;
+    }
+
+    .assignment-card.pre-inspected{
+      border-color:#fde68a;
+      box-shadow:0 16px 36px rgba(217,119,6,.10);
+    }
+
+    .room-layout{
+      grid-template-columns:1fr 112px;
+      background:#fff;
+    }
+
+    .state-panel{
+      background:#f8fafc !important;
+      border-left:1px solid #edf0f4;
+      color:#344054 !important;
+      font-size:13px;
+      padding:12px 10px;
+    }
+
+    .assignment-card.not-started.arrival .state-panel{
+      background:#fef2f2 !important;
+      color:#b42318 !important;
+    }
+
+    .assignment-card.guest-out .state-panel,
+    .assignment-card.pre-inspected .state-panel{
+      background:#fff7ed !important;
+      color:#92400e !important;
+    }
+
+    .assignment-card.started .state-panel{
+      background:#f5f3ff !important;
+      color:#5b21b6 !important;
+    }
+
+    .assignment-card.done .state-panel{
+      background:#f0fdf4 !important;
+      color:#166534 !important;
+    }
+
+    .meta-block label{
+      display:none;
+    }
+
+    .room-meta-grid{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+
+    .meta-value{
+      min-height:34px;
+      padding:9px 13px;
+      font-size:11px;
+    }
+
+    .meta-value.pre-inspected{
+      background:#fef3c7;
+      color:#92400e;
+      border:1px solid #fde68a;
+    }
+
+    .meta-value.pending-pre{
+      display:none;
+    }
+
+    .room-footer{
+      background:#fff;
+      border-top:1px solid #edf0f4;
+    }
+
+    .quick-actions{
+      grid-template-columns:1fr 52px;
+      background:#fff;
+      border-top:0;
+    }
+
+    .quick-action.report{
+      width:52px;
+      min-width:52px;
+      height:48px;
+      padding:0;
+      display:grid;
+      place-items:center;
+      font-size:20px;
+      border-radius:16px;
+      background:#f8fafc;
+      color:#344054;
+      border:1px solid #e4e7ec;
+    }
+
+    .quick-action.report span{
+      display:none;
+    }
+
+    .quick-action.finish{
+      height:48px;
+      border-radius:16px;
+    }
+
+    .assignment-card.done .quick-action.finish{
+      background:#f0fdf4;
+      color:#166534;
+      border:1px solid #bbf7d0;
+    }
+
+    .tap-label{
+      display:block;
+      font-size:12px;
+      font-weight:1000;
+      text-transform:uppercase;
+      letter-spacing:.045em;
+    }
+
   </style>
 </head>
 
@@ -1388,8 +1532,8 @@ async function loadCleanerAssignments(showLoading){
       const preInspected = isPreInspected(item);
 
       const guestText = guestOut ? "Guest Out" : "Guest In";
-      const preText = preInspected ? "Pre-Inspected" : "Pending";
-      const footerRight = preInspected ? "Easier Clean" : (item.arrival ? "Arrival" : "Open");
+      const preText = preInspected ? "Pre-Inspected" : "";
+      const footerRight = preInspected ? "Pre-Inspected" : (item.arrival ? "Arrival" : "");
 
       html += `
         <div
@@ -1411,7 +1555,7 @@ async function loadCleanerAssignments(showLoading){
 
                 <div class="meta-block">
                   <label>Pre Inspection</label>
-                  <span class="meta-value ${preInspected ? "pre-inspected" : ""}">
+                  <span class="meta-value ${preInspected ? "pre-inspected" : "pending-pre"}">
                     ${escapeHtml(preText)}
                   </span>
                 </div>
@@ -1420,10 +1564,11 @@ async function loadCleanerAssignments(showLoading){
 
             <div
               class="state-panel"
-              onclick="quickFinishUnit(event, '${safeJsString(item.unit)}')"
+              onclick="${state.key === "done" ? "" : (state.key === "not-started" || state.key === "guest-out" || state.key === "pre-inspected" ? `quickStartUnit(event, '${safeJsString(item.unit)}')` : `quickFinishUnit(event, '${safeJsString(item.unit)}')`)}"
             >
-              ${escapeHtml(state.title)}
-              <small>Tap to Finish</small>
+              <span class="tap-label">
+                ${state.key === "done" ? "Finished" : (state.key === "started" ? "Tap to Finish" : "Tap to Start")}
+              </span>
             </div>
           </div>
 
@@ -1437,16 +1582,18 @@ async function loadCleanerAssignments(showLoading){
           <div class="quick-actions">
             <button
               class="quick-action finish"
-              onclick="quickFinishUnit(event, '${safeJsString(item.unit)}')"
+              onclick="${state.key === "done" ? "" : (state.key === "started" ? `quickFinishUnit(event, '${safeJsString(item.unit)}')` : `quickStartUnit(event, '${safeJsString(item.unit)}')`)}"
             >
-              Finish
+              ${state.key === "started" ? "Tap to Finish" : (state.key === "done" ? "Finished" : "Tap to Start")}
             </button>
 
             <button
               class="quick-action report"
+              title="Reporte"
               onclick="openReportForUnit(event, '${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
             >
-              Report
+              ✎
+              <span>Report</span>
             </button>
           </div>
         </div>
@@ -1478,6 +1625,20 @@ function startCleanerAutoRefresh(){
   }, 15000);
 }
 
+
+async function quickStartUnit(event, unit){
+  if(event){
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  if(!unit || isSending){
+    return;
+  }
+
+  selectCleanerAssignment(unit, "", false);
+  await sendAction("START");
+}
 
 async function quickFinishUnit(event, unit){
   if(event){
