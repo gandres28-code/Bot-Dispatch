@@ -191,15 +191,14 @@ try {
 } catch (error) {
   console.log(error);
 }
-
-window.addEventListener("os-user-loaded", protectAppShell);
-protectAppShell();
 setTimeout(() => {
-  if (window.OS) {
-    OS.notify({
+  if (window.NotificationCenter) {
+    NotificationCenter.show({
       type: "success",
       title: "Prueba",
       message: "Notification Center funcionando."
     });
+  } else {
+    alert("NotificationCenter no está cargando");
   }
-}, 1500);
+}, 2000);
