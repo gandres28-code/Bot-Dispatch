@@ -1,9 +1,7 @@
 window.NotificationCenter = {
-
   container: null,
 
   init() {
-
     if (this.container) return;
 
     this.container = document.createElement("div");
@@ -11,10 +9,12 @@ window.NotificationCenter = {
 
     Object.assign(this.container.style, {
       position: "fixed",
-      top: "18px",
-      right: "18px",
-      width: "360px",
-      zIndex: "999999",
+      top: "calc(env(safe-area-inset-top) + 14px)",
+      right: "14px",
+      left: "14px",
+      maxWidth: "420px",
+      marginLeft: "auto",
+      zIndex: "2147483647",
       display: "flex",
       flexDirection: "column",
       gap: "12px",
@@ -24,13 +24,16 @@ window.NotificationCenter = {
     document.body.appendChild(this.container);
   },
 
-  show({
-    type = "info",
-    title = "",
-    message = "",
-    duration = 5000
-  }) {
+  escape(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  },
 
+  show({ type = "info", title = "", message = "", duration = 5000 } = {}) {
     this.init();
 
     const card = document.createElement("div");
@@ -42,50 +45,88 @@ window.NotificationCenter = {
       info: "#2563eb"
     };
 
+    const icons = {
+      success: "✅",
+      error: "⚠️",
+      warning: "🟠",
+      info: "🔔"
+    };
+
     card.innerHTML = `
       <div style="
         background:white;
         border-left:6px solid ${colors[type] || colors.info};
         border-radius:18px;
-        padding:18px;
-        box-shadow:0 12px 30px rgba(0,0,0,.18);
-        font-family:-apple-system,BlinkMacSystemFont,Segoe UI;
+        padding:16px 16px 16px 14px;
+        box-shadow:0 16px 38px rgba(15,23,42,.22);
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
         pointer-events:auto;
+        color:#111827;
+        border:1px solid rgba(226,232,240,.9);
       ">
-        <div style="font-weight:800;font-size:16px;margin-bottom:6px;">
-          ${title}
-        </div>
-
-        <div style="font-size:14px;color:#555;">
-          ${message}
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <div style="font-size:22px;line-height:1;">${icons[type] || icons.info}</div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:950;font-size:15px;margin-bottom:5px;">
+              ${this.escape(title)}
+            </div>
+            <div style="font-size:13px;color:#475467;line-height:1.35;">
+              ${this.escape(message)}
+            </div>
+          </div>
+          <button type="button" aria-label="Cerrar" style="
+            width:28px;
+            height:28px;
+            border:none;
+            border-radius:999px;
+            background:#f1f5f9;
+            color:#334155;
+            font-weight:900;
+            cursor:pointer;
+            padding:0;
+            margin:0;
+          ">×</button>
         </div>
       </div>
     `;
 
     card.style.opacity = "0";
-    card.style.transform = "translateX(80px)";
-    card.style.transition = ".35s";
+    card.style.transform = "translateY(-12px)";
+    card.style.transition = "opacity .28s ease, transform .28s ease";
+
+    const closeButton = card.querySelector("button");
+    closeButton.addEventListener("click", () => this.remove(card));
 
     this.container.prepend(card);
 
     requestAnimationFrame(() => {
       card.style.opacity = "1";
-      card.style.transform = "translateX(0)";
+      card.style.transform = "translateY(0)";
     });
 
+    if (duration > 0) {
+      setTimeout(() => this.remove(card), duration);
+    }
+  },
+
+  remove(card) {
+    if (!card) return;
+
+    card.style.opacity = "0";
+    card.style.transform = "translateY(-12px)";
+
     setTimeout(() => {
-
-      card.style.opacity = "0";
-      card.style.transform = "translateX(60px)";
-
-      setTimeout(() => card.remove(), 350);
-
-    }, duration);
-
+      if (card && card.parentNode) {
+        card.remove();
+      }
+    }, 300);
   }
-
 };
 
 window.addEventListener("DOMContentLoaded", () => {
   NotificationCenter.init();
+});
+
+window.addEventListener("os-notification", (event) => {
+  NotificationCenter.show(event.detail || {});
 });
