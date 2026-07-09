@@ -66,6 +66,7 @@
     }
 
     .topbar{
+      display:none;
       position:sticky;
       top:0;
       z-index:80;
@@ -209,7 +210,7 @@
       width:28px;
       height:28px;
       border-radius:10px;
-      background:#eff6ff;
+      background:linear-gradient(135deg,#eef2ff,#ede9fe);
       color:#2563eb;
       display:grid;
       place-items:center;
@@ -795,7 +796,7 @@
     }
 
     .nav-item.active{
-      color:#1d4ed8;
+      color:#4f46e5;
       background:#eff6ff;
     }
 
@@ -1266,15 +1267,15 @@
     }
 
     .hero{
-      padding:28px 0 18px;
+      padding:18px 0 18px;
     }
 
     .hero-card{
-      background:rgba(255,255,255,.82);
+      background:linear-gradient(135deg,#ffffff,#f7f9ff);
       border:1px solid rgba(228,231,236,.88);
       border-radius:30px;
       padding:20px;
-      box-shadow:0 18px 45px rgba(15,23,42,.07);
+      box-shadow:0 22px 50px rgba(37,99,235,.08);
     }
 
     .hero h1{
@@ -1559,11 +1560,11 @@
 
 <nav class="bottom-nav">
   <a class="nav-item active" href="/">
-    <span class="nav-dot"></span>
+    <span style="font-size:18px;">🧹</span>
     Limpieza
   </a>
   <button class="nav-item" type="button" onclick="openSettingsMenu()">
-    <span class="nav-dot"></span>
+    <span style="font-size:18px;">⚙️</span>
     Settings
   </button>
 </nav>
