@@ -132,16 +132,25 @@ window.OS = {
     window.location.href = module.url;
   },
 
-  notify({ type = "info", title = "", message = "" }) {
-    console.log(`[${type}] ${title}: ${message}`);
+notify({
+  type = "info",
+  title = "",
+  message = ""
+}) {
 
-    const event = new CustomEvent("os-notification", {
-      detail: { type, title, message },
+  if (window.NotificationCenter) {
+
+    NotificationCenter.show({
+      type,
+      title,
+      message
     });
 
-    window.dispatchEvent(event);
-  },
+  }
 
+  console.log(`[${type}] ${title}: ${message}`);
+
+},
   api: {
     async get(url) {
       const response = await fetch(url);
