@@ -407,6 +407,108 @@
       font-weight:850;
     }
 
+
+    /* Visual board states for cleaner cards */
+    .assignment-card{
+      min-height:154px;
+      transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+    }
+
+    .assignment-card.not-started:before{ background:#98a2b3; }
+    .assignment-card.not-started.arrival:before{ background:var(--red); }
+    .assignment-card.guest-out:before{ background:var(--amber); }
+    .assignment-card.pre-inspected:before{ background:var(--amber); }
+    .assignment-card.started:before{ background:var(--purple); }
+    .assignment-card.done:before{ background:var(--green); }
+
+    .assignment-card.guest-out{
+      background:linear-gradient(180deg,#fff 0%,#fffbeb 100%);
+      border-color:#fed7aa;
+    }
+
+    .assignment-card.pre-inspected{
+      background:linear-gradient(180deg,#fff 0%,#f0fdf4 100%);
+      border-color:#bbf7d0;
+    }
+
+    .assignment-card.started{
+      background:linear-gradient(180deg,#fff 0%,#f5f3ff 100%);
+      border-color:#ddd6fe;
+    }
+
+    .assignment-card.done{
+      background:linear-gradient(180deg,#fff 0%,#f0fdf4 100%);
+      border-color:#bbf7d0;
+    }
+
+    .room-meta{
+      display:flex;
+      gap:7px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+
+    .pill.normal{ background:#f2f4f7; color:#344054; }
+    .pill.guest-out{ background:var(--amber-soft); color:#92400e; }
+    .pill.pre-inspected{ background:var(--green-soft); color:#166534; }
+
+    .action-state{
+      margin-top:13px;
+      padding:12px;
+      border-radius:16px;
+      background:rgba(248,250,252,.92);
+      border:1px solid rgba(226,232,240,.9);
+    }
+
+    .action-state strong{
+      display:block;
+      font-size:13px;
+      letter-spacing:.02em;
+      text-transform:uppercase;
+    }
+
+    .action-state span{
+      display:block;
+      margin-top:4px;
+      color:#667085;
+      font-size:12px;
+      font-weight:800;
+      line-height:1.3;
+    }
+
+    .assignment-card.guest-out .action-state{
+      background:#fffbeb;
+      border-color:#fed7aa;
+    }
+
+    .assignment-card.pre-inspected .action-state,
+    .assignment-card.done .action-state{
+      background:#f0fdf4;
+      border-color:#bbf7d0;
+    }
+
+    .assignment-card.started .action-state{
+      background:#f5f3ff;
+      border-color:#ddd6fe;
+    }
+
+    .precheck-badge{
+      margin-top:10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      border-radius:14px;
+      background:#ecfdf3;
+      border:1px solid #bbf7d0;
+      color:#166534;
+      padding:9px 10px;
+      font-size:11px;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.045em;
+    }
+
     .selected-unit{
       display:none;
       border-radius:20px;
@@ -556,7 +658,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <div class="brand-mark">🧹</div>
+        <div class="brand-mark">417</div>
         <div class="brand-title">
           <strong>Limpieza</strong>
           <span>417 Maid Housekeeping</span>
@@ -566,9 +668,9 @@
   </header>
 
   <section class="hero">
-    <div class="hero-kicker">● En vivo · Cleaner Workspace</div>
+    <div class="hero-kicker">Live · Cleaner Workspace</div>
     <h1>Mis unidades de hoy</h1>
-    <p>Inicia, termina, reporta problemas, sube fotos y deja todo listo para operaciones desde una sola pantalla.</p>
+    <p>View today’s assigned units, start and finish cleaning, and send reports from one clean workspace.</p>
   </section>
 
   <section class="stats-grid">
@@ -598,12 +700,12 @@
 
     <label for="name">Nombre del limpiador</label>
     <div class="input-wrap">
-      <span class="input-icon">👤</span>
+      <span class="input-icon"></span>
       <input id="name" placeholder="Ejemplo: Maria" autocomplete="name">
     </div>
 
     <button class="btn-primary action-btn" onclick="loadCleanerAssignments(true)">
-      🔎 Ver mis unidades
+      Ver mis unidades
     </button>
 
     <p id="status"></p>
@@ -615,7 +717,7 @@
       <button class="small-link" onclick="loadCleanerAssignments(false)">Actualizar</button>
     </div>
 
-    <div id="cleanerName" class="cleaner-name">👤 Sin limpiador cargado</div>
+    <div id="cleanerName" class="cleaner-name">Sin limpiador cargado</div>
     <div id="assignments" class="empty">Escribe tu nombre y presiona “Ver mis unidades”.</div>
   </section>
 
@@ -634,11 +736,11 @@
 
     <div class="btn-row">
       <button class="start action-btn" onclick="sendAction('START')">
-        🟢 Iniciar limpieza
+        Iniciar limpieza
       </button>
 
       <button class="done action-btn" onclick="sendAction('DONE')">
-        ✅ Terminar unidad
+        Terminar unidad
       </button>
     </div>
 
@@ -652,7 +754,7 @@
     </div>
 
     <button class="report action-btn" onclick="sendSmartReport()">
-      📨 Enviar reporte inteligente
+      Enviar reporte
     </button>
   </section>
 
@@ -824,26 +926,101 @@ function safeJsString(value){
   return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-function getCleanerCardClass(status, arrival){
-  const cleanStatus = String(status || "").toLowerCase();
+function truthy(value){
+  if(value === true) return true;
 
-  if(cleanStatus.includes("ready")){
-    return "ready";
-  }
+  const text = String(value || "").trim().toLowerCase();
 
-  if(cleanStatus.includes("cleaned") || cleanStatus.includes("awaiting")){
-    return "done";
-  }
+  return [
+    "true",
+    "yes",
+    "si",
+    "sí",
+    "done",
+    "complete",
+    "completed",
+    "checked",
+    "out"
+  ].includes(text);
+}
 
-  if(cleanStatus.includes("progress")){
-    return "started";
-  }
-
-  if(arrival){
-    return "arrival";
+function getItemValue(item, names){
+  for(const name of names){
+    if(item && item[name] !== undefined && item[name] !== null){
+      return item[name];
+    }
   }
 
   return "";
+}
+
+function isGuestOut(item){
+  return truthy(getItemValue(item, [
+    "guestOut",
+    "Guest Out",
+    "guest_out",
+    "guestout",
+    "isGuestOut"
+  ]));
+}
+
+function isPreInspected(item){
+  return truthy(getItemValue(item, [
+    "preInspection",
+    "Pre Inspection",
+    "preInspected",
+    "Pre Inspected",
+    "pre_inspection",
+    "preInspectionComplete",
+    "preInspectionCompleted"
+  ]));
+}
+
+function getCleanerState(item){
+  const cleanStatus = String(item?.status || "").toLowerCase();
+
+  if(cleanStatus.includes("cleaned") || cleanStatus.includes("awaiting") || cleanStatus.includes("ready")){
+    return {
+      key:"done",
+      title:"Finished",
+      detail:"Cleaning complete",
+      cardClass:"done"
+    };
+  }
+
+  if(cleanStatus.includes("progress")){
+    return {
+      key:"started",
+      title:"In Progress",
+      detail:"Cleaning has started",
+      cardClass:"started"
+    };
+  }
+
+  if(isGuestOut(item)){
+    if(isPreInspected(item)){
+      return {
+        key:"pre-inspected",
+        title:"Ready to Start",
+        detail:"Guest out • Pre-inspection complete",
+        cardClass:"guest-out pre-inspected"
+      };
+    }
+
+    return {
+      key:"guest-out",
+      title:"Guest Out",
+      detail:"You can start when ready",
+      cardClass:"guest-out"
+    };
+  }
+
+  return {
+    key:"not-started",
+    title:"Not Started",
+    detail:item?.arrival ? "Arrival room • Waiting for guest out" : "Assigned room",
+    cardClass:item?.arrival ? "not-started arrival" : "not-started"
+  };
 }
 
 function getStatusLabel(status, arrival){
@@ -853,25 +1030,7 @@ function getStatusLabel(status, arrival){
     return cleanStatus;
   }
 
-  return arrival ? "ARRIVAL" : "Pendiente";
-}
-
-function getPillClass(status, arrival){
-  const cleanStatus = String(status || "").toLowerCase();
-
-  if(cleanStatus.includes("ready") || cleanStatus.includes("cleaned")){
-    return "done";
-  }
-
-  if(cleanStatus.includes("progress")){
-    return "started";
-  }
-
-  if(arrival){
-    return "arrival";
-  }
-
-  return "";
+  return arrival ? "ARRIVAL" : "Not Started";
 }
 
 
@@ -923,7 +1082,7 @@ async function loadCleanerAssignments(showLoading){
   }
 
   if(showLoading){
-    document.getElementById("assignments").innerHTML = "⏳ Cargando tus unidades...";
+    document.getElementById("assignments").innerHTML = "Cargando tus unidades...";
   }
 
   try{
@@ -936,7 +1095,7 @@ async function loadCleanerAssignments(showLoading){
       return;
     }
 
-    document.getElementById("cleanerName").innerText = `Limpiador: ${data.cleaner}`;
+    document.getElementById("cleanerName").innerText = `Cleaner: ${data.cleaner}`;
     updateCleanerDashboard(data.units || []);
 
     if(!data.units || data.units.length === 0){
@@ -950,25 +1109,48 @@ async function loadCleanerAssignments(showLoading){
     let html = `<div class="assignment-grid">`;
 
     data.units.forEach(item => {
-      const cardClass = getCleanerCardClass(item.status, item.arrival);
-      const pillClass = getPillClass(item.status, item.arrival);
+      const state = getCleanerState(item);
       const selectedClass = item.unit === selectedUnit ? "selected" : "";
       const cardId = "card-" + item.unit.replace(/[^a-zA-Z0-9]/g, "");
+      const guestOut = isGuestOut(item);
+      const preInspected = isPreInspected(item);
 
       html += `
         <div
-          class="assignment-card ${cardClass} ${selectedClass}"
+          class="assignment-card ${state.cardClass} ${selectedClass}"
           onclick="selectCleanerAssignment('${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
           id="${cardId}"
         >
           <div>
             <div class="unit-name">${escapeHtml(item.unit)}</div>
-            <span class="pill ${pillClass}">
-              ${item.arrival ? "🚨 " : ""}${escapeHtml(getStatusLabel(item.status, item.arrival))}
-            </span>
+
+            <div class="room-meta">
+              <span class="pill ${item.arrival ? "arrival" : "normal"}">
+                ${item.arrival ? "Arrival" : "Standard"}
+              </span>
+
+              ${guestOut ? `<span class="pill guest-out">Guest Out</span>` : ""}
+
+              ${preInspected ? `<span class="pill pre-inspected">Pre-Inspected</span>` : ""}
+            </div>
+
+            <div class="action-state">
+              <strong>${escapeHtml(state.title)}</strong>
+              <span>${escapeHtml(state.detail)}</span>
+            </div>
+
+            ${
+              preInspected && state.key !== "done"
+                ? `<div class="precheck-badge">
+                    <span>Pre-inspected</span>
+                    <span>Cleaning should be easier</span>
+                  </div>`
+                : ""
+            }
           </div>
-          <div style="font-size:12px; color:#6b7280; font-weight:800;">
-            Toca para abrir
+
+          <div class="tap-hint">
+            Tap to open actions
           </div>
         </div>
       `;
@@ -1107,7 +1289,7 @@ async function sendAction(action){
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
-    showBigStatus("⚠️ Ya fue enviado. Espera unos segundos.", "error");
+    showBigStatus("Ya fue enviado. Espera unos segundos.", "error");
     playBeep("error");
     vibratePhone("error");
     return;
@@ -1117,8 +1299,8 @@ async function sendAction(action){
   lastSendKey = sendKey;
   lastSendTime = now;
   setButtonsDisabled(true);
-  setStatus("⏳ Enviando...");
-  showBigStatus("⏳ Enviando acción...", "loading");
+  setStatus("Enviando...");
+  showBigStatus("Enviando acción...", "loading");
 
   try{
     const response = await fetch("/action",{
@@ -1136,8 +1318,8 @@ async function sendAction(action){
     const data = await response.json();
 
     if(data.success){
-      setStatus(data.message || "✅ Enviado");
-      showBigStatus(data.message || "✅ Enviado correctamente", "success");
+      setStatus(data.message || "Enviado");
+      showBigStatus(data.message || "Enviado correctamente", "success");
       playBeep("success");
       vibratePhone("success");
 
@@ -1152,8 +1334,8 @@ async function sendAction(action){
     }
 
   }catch(error){
-    setStatus("❌ Error: " + error.message);
-    showBigStatus("❌ Error: " + error.message, "error");
+    setStatus("Error: " + error.message);
+    showBigStatus("Error: " + error.message, "error");
     playBeep("error");
     vibratePhone("error");
   }finally{
@@ -1197,7 +1379,7 @@ async function submitReportToAI(action){
   const now = Date.now();
 
   if(sendKey === lastSendKey && now - lastSendTime < 30000){
-    showBigStatus("⚠️ Ese reporte ya fue enviado.", "error");
+    showBigStatus("Ese reporte ya fue enviado.", "error");
     playBeep("error");
     vibratePhone("error");
     return;
@@ -1207,8 +1389,8 @@ async function submitReportToAI(action){
   lastSendKey = sendKey;
   lastSendTime = now;
   setButtonsDisabled(true);
-  setStatus("⏳ Enviando reporte...");
-  showBigStatus(hasPhotos ? "📸 Subiendo fotos..." : "⏳ Enviando reporte...", "loading");
+  setStatus("Enviando reporte...");
+  showBigStatus(hasPhotos ? "Subiendo fotos..." : "Enviando reporte...", "loading");
 
   try{
     const data = await uploadPhotosWithReport({
@@ -1219,8 +1401,8 @@ async function submitReportToAI(action){
       role:"Cleaner"
     });
 
-    setStatus(data.message || "✅ Reporte enviado");
-    showBigStatus(data.message || "✅ Reporte enviado", "success");
+    setStatus(data.message || "Reporte enviado");
+    showBigStatus(data.message || "Reporte enviado", "success");
     playBeep("success");
     vibratePhone("success");
 
@@ -1233,8 +1415,8 @@ async function submitReportToAI(action){
     await loadCleanerAssignments(false);
 
   }catch(error){
-    setStatus("❌ Error: " + error.message);
-    showBigStatus("❌ Error: " + error.message, "error");
+    setStatus("Error: " + error.message);
+    showBigStatus("Error: " + error.message, "error");
     playBeep("error");
     vibratePhone("error");
   }finally{
@@ -1290,10 +1472,10 @@ const note =
 
 const sent =
   item.hotsosSent
-    ? "HotSOS enviado ✅"
+    ? "HotSOS enviado"
     : (item.needsHotSOS
         ? "Pendiente HotSOS"
-        : "Guardado ✅");
+        : "Guardado");
 
 const photos =
   item.photos || [];
