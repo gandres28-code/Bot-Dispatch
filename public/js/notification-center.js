@@ -26,11 +26,11 @@ window.NotificationCenter = {
 
   escape(value) {
     return String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   },
 
   show({ type = "info", title = "", message = "", duration = 5000 } = {}) {
@@ -95,7 +95,9 @@ window.NotificationCenter = {
     card.style.transition = "opacity .28s ease, transform .28s ease";
 
     const closeButton = card.querySelector("button");
-    closeButton.addEventListener("click", () => this.remove(card));
+    if (closeButton) {
+      closeButton.addEventListener("click", () => this.remove(card));
+    }
 
     this.container.prepend(card);
 
@@ -123,10 +125,30 @@ window.NotificationCenter = {
   }
 };
 
-window.addEventListener("DOMContentLoaded", () => {
-  NotificationCenter.init();
-});
+function initNotificationCenter() {
+  if (window.NotificationCenter) {
+    window.NotificationCenter.init();
+
+    // Prueba temporal para confirmar que el archivo sí está cargando.
+    setTimeout(() => {
+      window.NotificationCenter.show({
+        type: "success",
+        title: "Notification Center",
+        message: "El archivo notifications-center.js sí está funcionando.",
+        duration: 6000
+      });
+    }, 1200);
+  }
+}
+
+if (document.readyState === "loading") {
+  window.addEventListener("DOMContentLoaded", initNotificationCenter);
+} else {
+  initNotificationCenter();
+}
 
 window.addEventListener("os-notification", (event) => {
-  NotificationCenter.show(event.detail || {});
+  if (window.NotificationCenter) {
+    window.NotificationCenter.show(event.detail || {});
+  }
 });
