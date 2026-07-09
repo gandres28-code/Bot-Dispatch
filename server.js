@@ -49,6 +49,18 @@ app.get("/api/timeline", (req, res) => {
     timeline: systemTimeline.slice(0, 100),
   });
 });
+
+app.get("/api/cache-status", (req, res) => {
+  res.json({
+    ok: true,
+    rooms: ServerCache.rooms.size,
+    employees: ServerCache.employees.size,
+    dashboard: ServerCache.dashboard.size,
+    assignments: ServerCache.assignments.size,
+    timeline: systemTimeline.length,
+    notifications: systemNotifications.length,
+  });
+});
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const upload = multer({ storage: multer.memoryStorage() });
@@ -61,6 +73,55 @@ cloudinary.config({
 // ■ Anti duplicados
 const recentActions = new Map();
 const cacheStore = new Map();
+
+// =========================================================
+// SERVER CACHE ENGINE v1
+// =========================================================
+// Cache en memoria RAM para reducir llamadas repetidas a Notion.
+// Este cache vive mientras Render mantiene vivo el servidor.
+// Si Render reinicia, el cache se reconstruye automáticamente.
+const ServerCache = {
+  rooms: new Map(),
+  employees: new Map(),
+  dashboard: new Map(),
+  assignments: new Map(),
+
+  get(section, key) {
+    const bucket = this[section];
+
+    if (!bucket || typeof bucket.get !== "function") {
+      return null;
+    }
+
+    return bucket.get(key) || null;
+  },
+
+  set(section, key, value) {
+    if (!this[section] || typeof this[section].set !== "function") {
+      this[section] = new Map();
+    }
+
+    this[section].set(key, {
+      value,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  clear(section, key = null) {
+    const bucket = this[section];
+
+    if (!bucket || typeof bucket.clear !== "function") {
+      return;
+    }
+
+    if (key) {
+      bucket.delete(key);
+      return;
+    }
+
+    bucket.clear();
+  },
+};
 
 function getCache(key){
   const item = cacheStore.get(key);
@@ -97,6 +158,10 @@ function clearOpsCache(){
 function clearRoomCache(date = todayISO()){
   cacheStore.delete(`todayRooms:${date}`);
   cacheStore.delete(`roomsByDate:${date}`);
+
+  if (typeof ServerCache !== "undefined") {
+    ServerCache.clear("rooms", date);
+  }
 }
 function broadcastOpsUpdate(payload = {}) {
   clearOpsCache();
@@ -870,9 +935,24 @@ async function queryTodayRooms(forceRefresh = false) {
 // ■ Buscar unidades de cualquier fecha en la página central de Notion
 async function queryRoomsByDate(date, forceRefresh = false) {
   const cacheKey = date === todayISO() ? `todayRooms:${date}` : `roomsByDate:${date}`;
+
+  // Primero usamos ServerCache en RAM. Es más rápido y reduce llamadas a Notion.
+  const roomCache = !forceRefresh && typeof ServerCache !== "undefined"
+    ? ServerCache.get("rooms", date)
+    : null;
+
+  if (roomCache) {
+    return roomCache.value;
+  }
+
+  // Compatibilidad con el cache TTL anterior.
   const cached = !forceRefresh ? getCache(cacheKey) : null;
 
   if (cached) {
+    if (typeof ServerCache !== "undefined") {
+      ServerCache.set("rooms", date, cached);
+    }
+
     return cached;
   }
 
@@ -900,6 +980,11 @@ async function queryRoomsByDate(date, forceRefresh = false) {
 
   // Cache corto para el día activo, más largo para reportes de días pasados.
   setCache(cacheKey, pages, date === todayISO() ? 10000 : 120000);
+
+  if (typeof ServerCache !== "undefined") {
+    ServerCache.set("rooms", date, pages);
+  }
+
   return pages;
 }
 // ■ Status de Notion
@@ -1436,8 +1521,24 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
 }
 async function getEmployeesCached(forceRefresh = false) {
   const cacheKey = "employees:active";
+
+  const employeeCache = !forceRefresh && typeof ServerCache !== "undefined"
+    ? ServerCache.get("employees", "active")
+    : null;
+
+  if (employeeCache) {
+    return employeeCache.value;
+  }
+
   const cached = !forceRefresh ? getCache(cacheKey) : null;
-  if (cached) return cached;
+
+  if (cached) {
+    if (typeof ServerCache !== "undefined") {
+      ServerCache.set("employees", "active", cached);
+    }
+
+    return cached;
+  }
 
   if (!NOTION_EMPLOYEES_DATABASE_ID) return [];
 
@@ -1458,6 +1559,11 @@ async function getEmployeesCached(forceRefresh = false) {
   } while (cursor);
 
   setCache(cacheKey, results, 5 * 60 * 1000);
+
+  if (typeof ServerCache !== "undefined") {
+    ServerCache.set("employees", "active", results);
+  }
+
   return results;
 }
 
