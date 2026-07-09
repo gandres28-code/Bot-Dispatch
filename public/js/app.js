@@ -71,7 +71,11 @@ function openOSModule(moduleName) {
   }
 
   if (module.permission !== "public" && !OS.can(module.permission) && !OS.can("all")) {
-    alert("No tienes permiso para abrir este módulo.");
+    OS.notify({
+      type: "warning",
+      title: "Acceso denegado",
+      message: "No tienes permiso para abrir este módulo."
+    });
     return;
   }
 
@@ -142,13 +146,16 @@ function backToDashboard() {
 }
 
 function showComingSoon(name) {
-  alert(`${name} estará disponible próximamente en 417 Maid OS.`);
+  OS.notify({
+    type: "info",
+    title: "Próximamente",
+    message: `${name} estará disponible próximamente en 417 Maid OS.`
+  });
 }
 
 function protectAppShell() {
   if (!window.OS) return;
 
-  // Esperar a que maid-core.js cargue usuario
   setTimeout(() => {
     if (!OS.user) {
       window.location.href = "/launch";
@@ -167,6 +174,37 @@ function protectAppShell() {
   }, 600);
 }
 
+function notifyOpsUpdate(event) {
+  if (!window.OS || !OS.notify) return;
+
+  const unit = event?.unit || event?.room || "";
+  const employee = event?.employee || event?.person || event?.name || "Operación";
+  const action = event?.action || event?.type || "Nueva actividad";
+
+  let title = "Nueva actividad";
+  let type = "info";
+
+  if (String(action).includes("DONE")) {
+    title = "Unidad terminada";
+    type = "success";
+  } else if (String(action).includes("READY")) {
+    title = "Ready for Guest";
+    type = "success";
+  } else if (String(action).includes("ISSUE") || String(action).includes("REPORT")) {
+    title = "Nuevo reporte";
+    type = "warning";
+  } else if (String(action).includes("START")) {
+    title = "Actividad iniciada";
+    type = "info";
+  }
+
+  OS.notify({
+    type,
+    title,
+    message: unit ? `${employee} · ${unit}` : "Actividad actualizada"
+  });
+}
+
 // Compatibilidad
 loadAdminDashboard();
 setInterval(loadAdminDashboard, 30000);
@@ -174,8 +212,9 @@ setInterval(loadAdminDashboard, 30000);
 try {
   const socket = io();
 
-  socket.on("ops-update", () => {
+  socket.on("ops-update", (event) => {
     loadAdminDashboard();
+    notifyOpsUpdate(event);
 
     const dashboardFrame = document.getElementById("dashboardFrame");
 
@@ -188,17 +227,19 @@ try {
     }
   });
 
+  socket.on("system-notification", (notification) => {
+    if (!window.OS || !OS.notify) return;
+
+    OS.notify({
+      type: notification.type || "info",
+      title: notification.title || "Notificación",
+      message: notification.message || "",
+    });
+  });
+
 } catch (error) {
   console.log(error);
 }
-setTimeout(() => {
-  if (window.NotificationCenter) {
-    NotificationCenter.show({
-      type: "success",
-      title: "Prueba",
-      message: "Notification Center funcionando."
-    });
-  } else {
-    alert("NotificationCenter no está cargando");
-  }
-}, 2000);
+
+window.addEventListener("os-user-loaded", protectAppShell);
+protectAppShell();
