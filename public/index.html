@@ -765,14 +765,6 @@
     #bigStatus.error{ background:var(--red); }
     #bigStatus.loading{ background:var(--blue); }
 
-    body.hide-bottom-nav .bottom-nav{
-      display:none;
-    }
-
-    body.hide-bottom-nav .app-shell{
-      padding-bottom:28px;
-    }
-
     .bottom-nav{
       position:fixed;
       left:0;
@@ -1267,6 +1259,178 @@
       backdrop-filter:blur(2px);
     }
 
+  
+    /* Header and home polish */
+    .topbar-inner{
+      justify-content:flex-start;
+    }
+
+    .hero{
+      padding:28px 0 18px;
+    }
+
+    .hero-card{
+      background:rgba(255,255,255,.82);
+      border:1px solid rgba(228,231,236,.88);
+      border-radius:30px;
+      padding:20px;
+      box-shadow:0 18px 45px rgba(15,23,42,.07);
+    }
+
+    .hero h1{
+      font-size:38px;
+      letter-spacing:-.075em;
+    }
+
+    .hero-name{
+      font-size:22px;
+      color:#1d4ed8;
+    }
+
+    .hero-subtitle{
+      margin-top:10px;
+      color:#667085;
+      font-size:13px;
+      font-weight:800;
+      line-height:1.35;
+    }
+
+    .refresh-button{
+      background:#101828;
+      color:#fff;
+      border-color:#101828;
+      box-shadow:0 14px 28px rgba(16,24,40,.16);
+    }
+
+    .date-pill{
+      box-shadow:none;
+      background:#f8fafc;
+    }
+
+    .stats-grid{
+      margin-top:14px;
+      gap:10px;
+    }
+
+    .stat-card{
+      border-radius:22px;
+      padding:14px 8px;
+      box-shadow:0 12px 26px rgba(15,23,42,.055);
+    }
+
+    .stat-card strong{
+      font-size:25px;
+    }
+
+    .stat-card span{
+      font-size:9px;
+      letter-spacing:.06em;
+    }
+
+    .section-bar{
+      margin-top:18px;
+      margin-bottom:14px;
+    }
+
+    .section-bar h2{
+      font-size:19px;
+    }
+
+    .settings-sheet{
+      position:fixed;
+      left:14px;
+      right:14px;
+      bottom:calc(env(safe-area-inset-bottom) + 86px);
+      z-index:130;
+      max-width:610px;
+      margin:0 auto;
+      background:rgba(255,255,255,.96);
+      backdrop-filter:blur(22px);
+      border:1px solid rgba(228,231,236,.95);
+      border-radius:28px;
+      padding:16px;
+      box-shadow:0 28px 70px rgba(15,23,42,.22);
+    }
+
+    .settings-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .settings-head strong{
+      font-size:20px;
+      letter-spacing:-.04em;
+    }
+
+    .settings-head button{
+      width:auto;
+      margin:0;
+      padding:9px 12px;
+      border-radius:999px;
+      background:#f8fafc;
+      color:#344054;
+      border:1px solid #e4e7ec;
+      box-shadow:none;
+      font-size:12px;
+    }
+
+    .settings-option{
+      width:100%;
+      border:1px solid #e4e7ec;
+      background:#f8fafc;
+      color:#101828;
+      box-shadow:none;
+      border-radius:18px;
+      padding:15px;
+      text-align:left;
+      font-size:15px;
+      font-weight:1000;
+    }
+
+    .bottom-nav{
+      grid-template-columns:repeat(2,1fr) !important;
+      max-width:610px;
+      margin:0 auto;
+      left:14px !important;
+      right:14px !important;
+      bottom:calc(env(safe-area-inset-bottom) + 10px) !important;
+      border:1px solid rgba(228,231,236,.95);
+      border-radius:28px;
+      box-shadow:0 18px 46px rgba(15,23,42,.12);
+    }
+
+    .nav-item{
+      min-height:58px;
+      font-size:12px;
+    }
+
+    .nav-item.active{
+      color:#1d4ed8;
+      background:#eff6ff;
+    }
+
+  
+    .bottom-nav button.nav-item{
+      width:auto;
+      margin:0;
+      padding:0;
+      border:none;
+      box-shadow:none;
+      background:transparent;
+      color:#667085;
+      cursor:pointer;
+    }
+
+    .bottom-nav button.nav-item.active,
+    .bottom-nav button.nav-item:focus{
+      color:#1d4ed8;
+      background:#eff6ff;
+      outline:none;
+    }
+
   </style>
 </head>
 
@@ -1284,26 +1448,29 @@
           <span>Limpieza</span>
         </div>
       </div>
-      <a class="switch-user" href="/launch" onclick="localStorage.clear()">Cambiar</a>
+
     </div>
   </header>
 
   <section class="hero">
-    <div class="hero-line">
-      <div>
-        <h1>Mis unidades</h1>
-        <div id="heroCleanerName" class="hero-name">Cargando...</div>
+    <div class="hero-card">
+      <div class="hero-line">
+        <div>
+          <h1>Mis unidades</h1>
+          <div id="heroCleanerName" class="hero-name">Cargando...</div>
+          <div class="hero-subtitle">Tu lista de trabajo en vivo para el día de hoy.</div>
+        </div>
+
+        <button class="refresh-button" onclick="loadCleanerAssignments(false)">
+          <span class="refresh-symbol">↻</span>
+          Actualizar
+        </button>
       </div>
 
-      <button class="refresh-button" onclick="loadCleanerAssignments(false)">
-        <span class="refresh-symbol">↻</span>
-        Actualizar
-      </button>
-    </div>
-
-    <div class="date-pill">
-      <span class="date-box" id="dateDay">--</span>
-      <span id="dateText">Hoy</span>
+      <div class="date-pill">
+        <span class="date-box" id="dateDay">--</span>
+        <span id="dateText">Hoy</span>
+      </div>
     </div>
   </section>
 
@@ -1391,23 +1558,26 @@
 </div>
 
 <nav class="bottom-nav">
-  <a class="nav-item" href="/app">
-    <span class="nav-dot"></span>
-    Dashboard
-  </a>
   <a class="nav-item active" href="/">
     <span class="nav-dot"></span>
     Limpieza
   </a>
-  <a class="nav-item" href="/operations.html">
+  <button class="nav-item" type="button" onclick="openSettingsMenu()">
     <span class="nav-dot"></span>
-    Ops
-  </a>
-  <a class="nav-item" href="/launch" onclick="localStorage.clear()">
-    <span class="nav-dot"></span>
-    Salir
-  </a>
+    Settings
+  </button>
 </nav>
+
+<section id="settingsSheet" class="settings-sheet hidden">
+  <div class="settings-head">
+    <strong>Settings</strong>
+    <button onclick="closeSettingsMenu()">Cerrar</button>
+  </div>
+
+  <button class="settings-option" onclick="localStorage.clear(); window.location.href='/launch';">
+    Cambiar usuario
+  </button>
+</section>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/maid-core.js"></script>
@@ -1439,11 +1609,7 @@ function shouldHideBottomNav(role){
 }
 
 function updateBottomNavVisibility(role){
-  if(shouldHideBottomNav(role)){
-    document.body.classList.add("hide-bottom-nav");
-  }else{
-    document.body.classList.remove("hide-bottom-nav");
-  }
+  document.body.classList.remove("hide-bottom-nav");
 }
 
 function canClean(role){
@@ -2297,6 +2463,20 @@ async function loadMyReports(){
   }catch(error){
     document.getElementById("history").innerHTML =
       "<div class='empty'>No se pudo cargar el historial.</div>";
+  }
+}
+
+function openSettingsMenu(){
+  const sheet = document.getElementById("settingsSheet");
+  if(sheet){
+    sheet.classList.remove("hidden");
+  }
+}
+
+function closeSettingsMenu(){
+  const sheet = document.getElementById("settingsSheet");
+  if(sheet){
+    sheet.classList.add("hidden");
   }
 }
 
