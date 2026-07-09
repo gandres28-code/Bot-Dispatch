@@ -161,6 +161,8 @@ function clearRoomCache(date = todayISO()){
 
   if (typeof ServerCache !== "undefined") {
     ServerCache.clear("rooms", date);
+    ServerCache.clear("dashboard");
+    ServerCache.clear("assignments");
   }
 }
 function broadcastOpsUpdate(payload = {}) {
