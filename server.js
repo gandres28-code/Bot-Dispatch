@@ -618,6 +618,68 @@ app.get("/api/me", async (req, res) => {
     });
   }
 });
+app.get("/api/bootstrap", async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim();
+
+    if (!code) {
+      return res.status(401).json({
+        ok: false,
+        message: "Código requerido",
+      });
+    }
+
+    const meResponse = await EmployeeService.findEmployeeByCode(
+      notion,
+      NOTION_EMPLOYEES_DATABASE_ID,
+      code
+    );
+
+    if (!meResponse) {
+      return res.status(404).json({
+        ok: false,
+        message: "Empleado no encontrado",
+      });
+    }
+
+    const user = EmployeeService.pageToEmployee(meResponse);
+
+    if (!user.active) {
+      return res.status(403).json({
+        ok: false,
+        message: "Empleado inactivo",
+      });
+    }
+
+    const stats = {};
+    const assignments = [];
+    const notifications = systemNotifications.slice(0, 50);
+
+    res.json({
+      ok: true,
+      session: {
+        user,
+        permissions: user.permissions || [],
+        startedAt: new Date().toISOString(),
+      },
+      assignments,
+      stats,
+      notifications,
+      hotel: {
+        name: "Default Hotel",
+      },
+      settings: {},
+    });
+
+  } catch (error) {
+    console.error("Error en /api/bootstrap:", error.message);
+
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 // ■ Fecha de hoy
 function todayISO() {
 return new Intl.DateTimeFormat("en-CA", {
