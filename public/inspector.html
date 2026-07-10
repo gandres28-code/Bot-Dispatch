@@ -6,19 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f8fafc">
   <style>
-    :root{--bg:#f6f8fb;--ink:#101828;--muted:#667085;--line:#e4e7ec;--amber:#d97706;--green:#16a34a;--purple:#7c3aed;--blue:#2563eb;--red:#dc2626;--shadow:0 18px 45px rgba(15,23,42,.08);--soft:0 8px 22px rgba(15,23,42,.055)}
-    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;background:radial-gradient(circle at 0 0,rgba(245,158,11,.10),transparent 35%),radial-gradient(circle at 100% 4%,rgba(124,58,237,.08),transparent 30%),linear-gradient(180deg,#fff 0%,var(--bg) 100%);color:var(--ink)}
+    :root{--bg:#f6f8fb;--ink:#101828;--muted:#667085;--line:#e4e7ec;--teal:#0f766e;--green:#16a34a;--purple:#7c3aed;--blue:#2563eb;--red:#dc2626;--shadow:0 18px 45px rgba(15,23,42,.08);--soft:0 8px 22px rgba(15,23,42,.055)}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%}body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;background:radial-gradient(circle at 0 0,rgba(8,145,178,.10),transparent 35%),radial-gradient(circle at 100% 4%,rgba(124,58,237,.08),transparent 30%),linear-gradient(180deg,#fff 0%,var(--bg) 100%);color:var(--ink)}
     .app-shell{width:100%;max-width:640px;min-height:100vh;margin:0 auto;padding:18px 16px 110px}.hidden{display:none!important}
-    .hero-card{background:linear-gradient(135deg,#fff,#fffaf2);border:1px solid rgba(228,231,236,.88);border-radius:30px;padding:20px;box-shadow:0 22px 50px rgba(245,158,11,.08)}.hero-line{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.hero h1{margin:0;font-size:38px;line-height:1.02;letter-spacing:-.075em}.hero-name{margin-top:7px;color:#d97706;font-size:22px;line-height:1.1;font-weight:950;letter-spacing:-.035em}.hero-subtitle{margin-top:10px;color:#667085;font-size:13px;font-weight:800;line-height:1.35}.refresh-button{width:auto;margin:0;padding:11px 13px;border-radius:999px;background:#101828;color:#fff;border:1px solid #101828;box-shadow:0 14px 28px rgba(16,24,40,.16);font-size:12px;font-weight:1000;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}.refresh-symbol{font-size:18px;line-height:1}
-    .date-pill{width:max-content;max-width:100%;margin-top:16px;display:flex;align-items:center;gap:9px;color:#344054;background:#f8fafc;border:1px solid var(--line);border-radius:999px;padding:9px 12px;font-size:13px;font-weight:950}.date-box{width:28px;height:28px;border-radius:10px;background:#fff7ed;color:#d97706;display:grid;place-items:center;font-size:13px;font-weight:1000}
-    .today-progress{margin-top:16px;padding:14px;border-radius:24px;background:rgba(255,255,255,.74);border:1px solid rgba(228,231,236,.9);box-shadow:0 14px 34px rgba(15,23,42,.055)}.today-progress-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;color:#344054;font-size:12px;font-weight:950}.progress-track{height:11px;border-radius:999px;background:#eef2f7;overflow:hidden;border:1px solid rgba(228,231,236,.9)}.progress-fill{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,#f59e0b,#7c3aed,#16a34a);transition:width .55s ease}
-    .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:14px 0 18px}.stat-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;text-align:left;padding:15px;border-radius:24px;background:rgba(255,255,255,.88);border:1px solid var(--line);box-shadow:0 12px 26px rgba(15,23,42,.055)}.stat-icon{width:44px;height:44px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:21px;flex:0 0 auto}.stat-icon.pre{background:#fff7ed;color:#92400e}.stat-icon.final{background:#eff6ff;color:#1d4ed8}.stat-icon.progress{background:#f5f3ff;color:#5b21b6}.stat-icon.general{background:#ecfdf3;color:#166534}.stat-card strong{display:block;font-size:27px;line-height:1;letter-spacing:-.06em}.stat-card span{display:block;margin-top:4px;color:#667085;font-size:10px;font-weight:950;text-transform:uppercase;letter-spacing:.06em}
-    .card{background:#fff;border:1px solid var(--line);border-radius:28px;padding:18px;box-shadow:var(--soft);margin-bottom:16px}.section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.section-title span:first-child{font-size:17px;font-weight:1000;letter-spacing:-.035em}.muted,.section-title small{color:var(--muted);font-size:12px;font-weight:850;line-height:1.35}input,textarea{width:100%;border:1px solid var(--line);background:#f8fafc;color:#101828;border-radius:18px;outline:none;font-size:16px;transition:.16s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}input{padding:16px}textarea{min-height:118px;padding:15px;resize:vertical;line-height:1.38}input:focus,textarea:focus{background:#fff;border-color:#fbbf24;box-shadow:0 0 0 4px rgba(245,158,11,.12)}button{width:100%;border:none;border-radius:18px;padding:16px 17px;margin:8px 0;font-size:16px;font-weight:950;color:white;cursor:pointer;transition:transform .12s ease,opacity .12s ease,box-shadow .12s ease;box-shadow:0 11px 22px rgba(15,23,42,.13)}button:active{transform:scale(.986)}button:disabled{opacity:.58;cursor:not-allowed;transform:none}.btn-primary{background:linear-gradient(135deg,#d97706,#b45309)}.report{background:linear-gradient(135deg,#111827,#344054)}
-    .tab-bar{display:flex;gap:8px;overflow-x:auto;padding:4px 0 14px;scrollbar-width:none}.tab-bar::-webkit-scrollbar{display:none}.tab-btn{width:auto;margin:0;padding:11px 14px;border-radius:999px;background:#fff;color:#667085;border:1px solid var(--line);box-shadow:var(--soft);font-size:12px;white-space:nowrap;flex:0 0 auto}.tab-btn.active{background:linear-gradient(135deg,#fff7ed,#ffedd5);color:#92400e;border-color:#fed7aa}
+    .hero-card{background:linear-gradient(135deg,#fff,#f0fdfa);border:1px solid rgba(228,231,236,.88);border-radius:30px;padding:20px;box-shadow:0 22px 50px rgba(8,145,178,.08)}.hero-line{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.hero h1{margin:0;font-size:38px;line-height:1.02;letter-spacing:-.075em}.hero-name{margin-top:7px;color:#0f766e;font-size:22px;line-height:1.1;font-weight:950;letter-spacing:-.035em}.hero-subtitle{margin-top:10px;color:#667085;font-size:13px;font-weight:800;line-height:1.35}.refresh-button{width:auto;margin:0;padding:11px 13px;border-radius:999px;background:#101828;color:#fff;border:1px solid #101828;box-shadow:0 14px 28px rgba(16,24,40,.16);font-size:12px;font-weight:1000;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}.refresh-symbol{font-size:18px;line-height:1}
+    .date-pill{width:max-content;max-width:100%;margin-top:16px;display:flex;align-items:center;gap:9px;color:#344054;background:#f8fafc;border:1px solid var(--line);border-radius:999px;padding:9px 12px;font-size:13px;font-weight:950}.date-box{width:28px;height:28px;border-radius:10px;background:#f0fdfa;color:#0f766e;display:grid;place-items:center;font-size:13px;font-weight:1000}
+    .today-progress{margin-top:16px;padding:14px;border-radius:24px;background:rgba(255,255,255,.74);border:1px solid rgba(228,231,236,.9);box-shadow:0 14px 34px rgba(15,23,42,.055)}.today-progress-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;color:#344054;font-size:12px;font-weight:950}.progress-track{height:11px;border-radius:999px;background:#eef2f7;overflow:hidden;border:1px solid rgba(228,231,236,.9)}.progress-fill{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,#0891b2,#7c3aed,#16a34a);transition:width .55s ease}
+    .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:14px 0 18px}.stat-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;text-align:left;padding:15px;border-radius:24px;background:rgba(255,255,255,.88);border:1px solid var(--line);box-shadow:0 12px 26px rgba(15,23,42,.055)}.stat-icon{width:44px;height:44px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:21px;flex:0 0 auto}.stat-icon.pre{background:#f0fdfa;color:#115e59}.stat-icon.final{background:#eff6ff;color:#1d4ed8}.stat-icon.progress{background:#f5f3ff;color:#5b21b6}.stat-icon.general{background:#ecfdf3;color:#166534}.stat-card strong{display:block;font-size:27px;line-height:1;letter-spacing:-.06em}.stat-card span{display:block;margin-top:4px;color:#667085;font-size:10px;font-weight:950;text-transform:uppercase;letter-spacing:.06em}
+    .card{background:#fff;border:1px solid var(--line);border-radius:28px;padding:18px;box-shadow:var(--soft);margin-bottom:16px}.section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.section-title span:first-child{font-size:17px;font-weight:1000;letter-spacing:-.035em}.muted,.section-title small{color:var(--muted);font-size:12px;font-weight:850;line-height:1.35}input,textarea{width:100%;border:1px solid var(--line);background:#f8fafc;color:#101828;border-radius:18px;outline:none;font-size:16px;transition:.16s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}input{padding:16px}textarea{min-height:118px;padding:15px;resize:vertical;line-height:1.38}input:focus,textarea:focus{background:#fff;border-color:#67e8f9;box-shadow:0 0 0 4px rgba(8,145,178,.12)}button{width:100%;border:none;border-radius:18px;padding:16px 17px;margin:8px 0;font-size:16px;font-weight:950;color:white;cursor:pointer;transition:transform .12s ease,opacity .12s ease,box-shadow .12s ease;box-shadow:0 11px 22px rgba(15,23,42,.13)}button:active{transform:scale(.986)}button:disabled{opacity:.58;cursor:not-allowed;transform:none}.btn-primary{background:linear-gradient(135deg,#0f766e,#0f766e)}.report{background:linear-gradient(135deg,#111827,#344054)}
+    .tab-bar{display:flex;gap:8px;overflow-x:auto;padding:4px 0 14px;scrollbar-width:none}.tab-bar::-webkit-scrollbar{display:none}.tab-btn{width:auto;margin:0;padding:11px 14px;border-radius:999px;background:#fff;color:#667085;border:1px solid var(--line);box-shadow:var(--soft);font-size:12px;white-space:nowrap;flex:0 0 auto}.tab-btn.active{background:linear-gradient(135deg,#f0fdfa,#ccfbf1);color:#115e59;border-color:#99f6e4}
     .building-group{margin-bottom:15px;border:1px solid var(--line);border-radius:24px;background:rgba(255,255,255,.82);overflow:hidden;box-shadow:var(--soft)}.building-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 15px;background:#fff;cursor:pointer}.building-header strong{font-size:14px;letter-spacing:-.02em}.building-header span{color:#667085;font-size:12px;font-weight:950}.building-body{display:flex;flex-direction:column;gap:12px;padding:0 12px 12px}.building-group.closed .building-body{display:none}
-    .inspection-card{position:relative;overflow:hidden;min-height:154px;background:#fff;border:1px solid #e4e7ec;border-radius:24px;box-shadow:0 16px 36px rgba(15,23,42,.065);cursor:pointer;animation:cardIn .32s ease both}@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.inspection-card:before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:#98a2b3}.inspection-card.pre:before{background:#f59e0b}.inspection-card.final:before{background:#2563eb}.inspection-card.active:before{background:#7c3aed}.inspection-card.ready:before{background:#16a34a}.inspection-card.urgent:before{background:#dc2626}.inspection-card.selected{border:2px solid #101828;box-shadow:0 20px 44px rgba(16,24,40,.15)}.inspection-layout{display:grid;grid-template-columns:1fr 118px;min-height:112px;background:#fff}.inspection-content{padding:18px 16px 12px 20px;min-width:0}.room-title{font-size:27px;line-height:1.02;font-weight:1000;letter-spacing:-.06em;margin-bottom:14px}.meta-row{display:flex;flex-wrap:wrap;gap:8px}.meta-pill{min-height:34px;border-radius:999px;padding:9px 14px;font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.03em;background:#f2f4f7;color:#475467;border:1px solid transparent;display:inline-flex;align-items:center}.meta-pill.guest,.meta-pill.pre{background:#fff3d6;color:#92400e;border-color:#fde68a}.meta-pill.ready{background:#dcfce7;color:#166534;border-color:#bbf7d0}.action-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px 10px;border-left:1px solid #edf0f4;background:#f8fafc;color:#344054;gap:8px}.inspection-card.pre .action-panel{background:#fff7ed;color:#92400e}.inspection-card.final .action-panel{background:#eff6ff;color:#1d4ed8}.inspection-card.active .action-panel{background:#f5f3ff;color:#5b21b6}.inspection-card.ready .action-panel{background:#ecfdf3;color:#166534}.action-circle{width:48px;height:48px;border-radius:999px;display:grid;place-items:center;border:2px dashed currentColor;opacity:.88;font-size:19px;line-height:1}.tap-label{display:block;font-size:11px;line-height:1.18;font-weight:1000;text-transform:uppercase;letter-spacing:.045em}.inspection-footer{border-top:1px solid #edf0f4;padding:12px 16px 13px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#667085;font-size:12px;font-weight:850;background:#fff}.footer-right{display:flex;align-items:center;gap:12px}.status-tag{font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.045em;color:#344054}.inline-report{width:46px;height:46px;min-width:46px;margin:0;padding:0;border-radius:16px;display:grid;place-items:center;background:#f8fafc;color:#344054;border:1px solid #e4e7ec;box-shadow:none;font-size:22px;line-height:1}
+    .inspection-card{position:relative;overflow:hidden;min-height:154px;background:#fff;border:1px solid #e4e7ec;border-radius:24px;box-shadow:0 16px 36px rgba(15,23,42,.065);cursor:pointer;animation:cardIn .32s ease both}@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.inspection-card:before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:#98a2b3}.inspection-card.pre:before{background:#0891b2}.inspection-card.final:before{background:#2563eb}.inspection-card.active:before{background:#7c3aed}.inspection-card.ready:before{background:#16a34a}.inspection-card.urgent:before{background:#dc2626}.inspection-card.selected{border:2px solid #101828;box-shadow:0 20px 44px rgba(16,24,40,.15)}.inspection-layout{display:grid;grid-template-columns:1fr 118px;min-height:112px;background:#fff}.inspection-content{padding:18px 16px 12px 20px;min-width:0}.room-title{font-size:27px;line-height:1.02;font-weight:1000;letter-spacing:-.06em;margin-bottom:14px}.meta-row{display:flex;flex-wrap:wrap;gap:8px}.meta-pill{min-height:34px;border-radius:999px;padding:9px 14px;font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.03em;background:#f2f4f7;color:#475467;border:1px solid transparent;display:inline-flex;align-items:center}.meta-pill.guest,.meta-pill.pre{background:#ecfeff;color:#115e59;border-color:#a5f3fc}.meta-pill.ready{background:#dcfce7;color:#166534;border-color:#bbf7d0}.action-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px 10px;border-left:1px solid #edf0f4;background:#f8fafc;color:#344054;gap:8px}.inspection-card.pre .action-panel{background:#f0fdfa;color:#115e59}.inspection-card.final .action-panel{background:#eff6ff;color:#1d4ed8}.inspection-card.active .action-panel{background:#f5f3ff;color:#5b21b6}.inspection-card.ready .action-panel{background:#ecfdf3;color:#166534}.action-circle{width:48px;height:48px;border-radius:999px;display:grid;place-items:center;border:2px dashed currentColor;opacity:.88;font-size:19px;line-height:1}.tap-label{display:block;font-size:11px;line-height:1.18;font-weight:1000;text-transform:uppercase;letter-spacing:.045em}.inspection-footer{border-top:1px solid #edf0f4;padding:12px 16px 13px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#667085;font-size:12px;font-weight:850;background:#fff}.footer-right{display:flex;align-items:center;gap:12px}.status-tag{font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.045em;color:#344054}.inline-report{width:46px;height:46px;min-width:46px;margin:0;padding:0;border-radius:16px;display:grid;place-items:center;background:#f8fafc;color:#344054;border:1px solid #e4e7ec;box-shadow:none;font-size:22px;line-height:1}
     .report-sheet,.settings-sheet{position:fixed;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 86px);z-index:130;max-width:610px;margin:0 auto;background:rgba(255,255,255,.96);backdrop-filter:blur(22px);border:1px solid rgba(228,231,236,.95);border-radius:28px;padding:16px;box-shadow:0 28px 70px rgba(15,23,42,.22);animation:sheetUp .24s ease both}@keyframes sheetUp{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.sheet-head span{display:block;color:#667085;font-size:11px;font-weight:1000;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}.sheet-head strong{display:block;color:#101828;font-size:24px;font-weight:1000;letter-spacing:-.055em;line-height:1}.sheet-close{width:auto;margin:0;padding:10px 13px;border-radius:999px;background:#f8fafc;color:#344054;border:1px solid #e4e7ec;box-shadow:none;font-size:12px;font-weight:1000}.file-box{border:1.5px dashed #cbd5e1;background:#f8fafc;padding:12px;border-radius:18px;margin-top:10px}.file-box label{font-weight:950;display:block;margin-bottom:4px;color:#344054}.photo-preview{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.photo-preview img{width:100%;height:82px;object-fit:cover;border-radius:12px;border:1px solid #e4e7ec}.history-list{display:flex;flex-direction:column;gap:10px;margin-top:10px}.history-item{background:#fff;border:1px solid var(--line);border-radius:18px;padding:13px;box-shadow:0 6px 14px rgba(15,23,42,.04)}.history-top{display:flex;justify-content:space-between;gap:10px;color:#667085;font-size:12px;font-weight:850;margin-bottom:7px}.history-note{margin-top:6px;color:#344054;font-size:14px;line-height:1.38;white-space:pre-wrap}.empty{text-align:center;color:#667085;padding:26px 10px;font-size:14px;font-weight:750;line-height:1.35}#status{min-height:20px;text-align:center;color:#344054;font-weight:950;margin:10px 0 0;font-size:14px}#bigStatus{display:none;position:fixed;top:0;left:0;width:100%;padding:calc(env(safe-area-inset-top) + 15px) 16px 15px;color:white;font-size:16px;font-weight:1000;text-align:center;z-index:9999;box-shadow:0 8px 25px rgba(0,0,0,.25)}#bigStatus.success{background:#16a34a}#bigStatus.error{background:#dc2626}#bigStatus.loading{background:#2563eb}
-    .bottom-nav{position:fixed;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:90;max-width:610px;margin:0 auto;padding:8px;background:rgba(255,255,255,.88);backdrop-filter:blur(20px);border:1px solid rgba(228,231,236,.95);border-radius:28px;box-shadow:0 18px 46px rgba(15,23,42,.12);display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.nav-item{text-decoration:none;color:#667085;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px;border-radius:18px;font-size:12px;font-weight:950;background:transparent;box-shadow:none;border:none;cursor:pointer;padding:0;margin:0;width:auto}.nav-item.active{color:#92400e;background:linear-gradient(135deg,#fff7ed,#ffedd5)}.settings-option{width:100%;border:1px solid #e4e7ec;background:#f8fafc;color:#101828;box-shadow:none;border-radius:18px;padding:15px;text-align:left;font-size:15px;font-weight:1000}@media(max-width:390px){.inspection-layout{grid-template-columns:1fr 108px}.room-title{font-size:24px}.action-circle{width:44px;height:44px}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+    .bottom-nav{position:fixed;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:90;max-width:610px;margin:0 auto;padding:8px;background:rgba(255,255,255,.88);backdrop-filter:blur(20px);border:1px solid rgba(228,231,236,.95);border-radius:28px;box-shadow:0 18px 46px rgba(15,23,42,.12);display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.nav-item{text-decoration:none;color:#667085;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px;border-radius:18px;font-size:12px;font-weight:950;background:transparent;box-shadow:none;border:none;cursor:pointer;padding:0;margin:0;width:auto}.nav-item.active{color:#115e59;background:linear-gradient(135deg,#f0fdfa,#ccfbf1)}.settings-option{width:100%;border:1px solid #e4e7ec;background:#f8fafc;color:#101828;box-shadow:none;border-radius:18px;padding:15px;text-align:left;font-size:15px;font-weight:1000}@media(max-width:390px){.inspection-layout{grid-template-columns:1fr 108px}.room-title{font-size:24px}.action-circle{width:44px;height:44px}.stats-grid{grid-template-columns:repeat(2,1fr)}}
   
     /* Progress circles and loading animation */
     .action-circle{
@@ -35,7 +35,7 @@
       border-radius:999px;
       background:#fff;
     }
-    .inspection-card.pre .action-circle:after{background:#fff7ed}
+    .inspection-card.pre .action-circle:after{background:#f0fdfa}
     .inspection-card.final .action-circle:after{background:#eff6ff}
     .inspection-card.active .action-circle:after{background:#f5f3ff}
     .inspection-card.ready .action-circle:after{background:#ecfdf3}
@@ -50,6 +50,9 @@
     @keyframes circleSpin{to{transform:rotate(360deg)}}
     .inspection-card.card-loading{pointer-events:none;opacity:.78}
 
+  
+    .inspection-card.general:before{background:#64748b}
+    .inspection-card.general .action-panel{background:#f8fafc;color:#475569}
   </style>
 </head>
 <body>
@@ -58,29 +61,28 @@
   <section class="hero"><div class="hero-card"><div class="hero-line"><div><h1>Inspecciones</h1><div id="heroInspectorName" class="hero-name">Cargando...</div><div class="hero-subtitle">Tus unidades separadas por edificio y organizadas por etapa de inspección.</div></div><button class="refresh-button" onclick="loadInspectorAssignments(false)"><span class="refresh-symbol">↻</span>Actualizar</button></div><div class="date-pill"><span class="date-box" id="dateDay">--</span><span id="dateText">Hoy</span></div><div class="today-progress"><div class="today-progress-top"><span>Progreso de hoy</span><strong id="todayProgressText">0 de 0</strong></div><div class="progress-track"><div id="todayProgressFill" class="progress-fill"></div></div></div></div></section>
   <section class="stats-grid">
     <div class="stat-card">
-      <div class="stat-icon pre">🚪</div>
-      <div><strong id="statGuest">0</strong><span>Guest Out</span></div>
+      <div class="stat-icon pre">◔</div>
+      <div><strong id="statPre">0</strong><span>Pre inspección</span></div>
     </div>
-    
     <div class="stat-card">
-      <div class="stat-icon final">📋</div>
+      <div class="stat-icon final">◫</div>
       <div><strong id="statFinal">0</strong><span>Para inspeccionar</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon progress">⏳</div>
-      <div><strong id="statProgress">0</strong><span>En progreso</span></div>
+      <div class="stat-icon general">▦</div>
+      <div><strong id="statGeneral">0</strong><span>Vista general</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon general">📊</div>
-      <div><strong id="statReady">0</strong><span>Vista general</span></div>
+      <div class="stat-icon progress">✓</div>
+      <div><strong id="statCompleted">0</strong><span>Completadas</span></div>
     </div>
   </section>
   <section id="accessCard" class="card"><div class="section-title"><span>Acceso</span><small>Código de inspector</small></div><input id="code" placeholder="Código del inspector" autocomplete="off"><button class="btn-primary action-btn" onclick="loadInspectorAssignments(false)">Ver mis inspecciones</button><div id="inspectorName" style="text-align:center;font-weight:900;margin:12px 0;"></div></section>
   <section><div class="tab-bar">
-      <button id="tab-guest" class="tab-btn active" onclick="setActiveTab('guest')">Guest Out</button>
+      <button id="tab-pre" class="tab-btn active" onclick="setActiveTab('pre')">Pre inspección</button>
       <button id="tab-final" class="tab-btn" onclick="setActiveTab('final')">Para inspeccionar</button>
-      <button id="tab-active" class="tab-btn" onclick="setActiveTab('active')">En progreso</button>
-      <button id="tab-ready" class="tab-btn" onclick="setActiveTab('ready')">Vista general</button>
+      <button id="tab-general" class="tab-btn" onclick="setActiveTab('general')">Vista general</button>
+      <button id="tab-completed" class="tab-btn" onclick="setActiveTab('completed')">Completadas</button>
     </div><div id="assignments" class="empty">Cargando inspecciones...</div></section>
   <input id="name" class="hidden"><input id="unit" class="hidden"><p id="status"></p>
   <section id="reportSheet" class="report-sheet hidden"><div class="sheet-head"><div><span>Reporte de inspección</span><strong id="selectedUnitLabel"></strong></div><button class="sheet-close" onclick="closeReportPanel()">Cerrar</button></div><textarea id="note" placeholder="Escribe el reporte aquí. Ejemplo: faltan towels, hay cabello en baño, sink tapado, item encontrado..."></textarea><div class="file-box"><label>Fotos</label><div class="muted">Puedes agregar fotos como evidencia si es necesario.</div><input type="file" id="photoInput" accept="image/*" capture="environment" multiple onchange="addSelectedPhotos()"><div id="photoPreview" class="photo-preview"></div></div><button class="report action-btn" onclick="sendSmartReport('INSPECTION_REPORT')">Enviar reporte</button></section>
@@ -90,7 +92,7 @@
 <section id="settingsSheet" class="settings-sheet hidden"><div class="sheet-head"><div><span>Settings</span><strong>Cuenta</strong></div><button class="sheet-close" onclick="closeSettingsMenu()">Cerrar</button></div><button class="settings-option" onclick="localStorage.clear();window.location.href='/launch';">Cambiar usuario</button></section>
 <script src="/socket.io/socket.io.js"></script><script src="/js/maid-core.js"></script>
 <script>
-let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",autoRefreshTimer=null,lastUnits=[],activeTab="guest",collapsedBuildings={};
+let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",autoRefreshTimer=null,lastUnits=[],activeTab="pre",collapsedBuildings={};
 function normalizeRole(role){return String(role||"").trim().toLowerCase()}function canInspect(role){return["inspector","cleaner / inspector","inspector / cleaner","dispatch / inspector","admin","manager","owner","company owner"].includes(normalizeRole(role))}
 function setupDate(){const now=new Date(),day=String(now.getDate()).padStart(2,"0"),text=now.toLocaleDateString("es-US",{month:"short",day:"numeric",year:"numeric"});document.getElementById("dateDay").innerText=day;document.getElementById("dateText").innerText=text}
 async function waitForOSUser(){return new Promise(resolve=>{let tries=0;const timer=setInterval(()=>{tries++;if(window.OS&&OS.user){clearInterval(timer);resolve(OS.user);return}if(tries>30){clearInterval(timer);resolve(null)}},100)})}
@@ -171,25 +173,35 @@ async function bootInspectorPanel(){
 function setInspectorDisplayName(name){const safe=name||"Inspector";document.getElementById("heroInspectorName").innerText=safe;document.getElementById("inspectorName").innerText=`Inspector: ${safe}`}
 function escapeHtml(v){return String(v||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}function safeJsString(v){return String(v||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}function truthy(v){if(v===true)return true;return["true","yes","si","sí","done","complete","completed","checked","out"].includes(String(v||"").trim().toLowerCase())}function getItemValue(item,names){for(const n of names){if(item&&item[n]!==undefined&&item[n]!==null)return item[n]}return""}function isGuestOut(item){return truthy(getItemValue(item,["guestOut","Guest Out","guest_out","guestout","isGuestOut"]))}function isPreInspected(item){return truthy(getItemValue(item,["preInspection","Pre Inspection","preInspected","Pre Inspected","pre_inspection","preInspectionComplete","preInspectionCompleted"]))}function isPreInspectionStarted(item){return truthy(getItemValue(item,["preInspectionStarted","Pre Inspection Started","pre_inspection_started"]))}function cleanStatus(item){return String(item?.status||"").toLowerCase()}
 function classifyInspectionUnit(item){
-  const s=cleanStatus(item);
+  const status=cleanStatus(item);
 
-  if(s.includes("ready")) return "ready";
-  if(s.includes("inspection started")) return "active";
-  if(isPreInspectionStarted(item)) return "active";
-  if(s.includes("cleaned") || s.includes("awaiting")) return "final";
-  if(isGuestOut(item) && !isPreInspected(item)) return "guest";
+  if(status.includes("ready")){
+    return "completed";
+  }
 
-  return "waiting";
+  if(status.includes("inspection started")){
+    return "final";
+  }
+
+  if(status.includes("cleaned") || status.includes("awaiting")){
+    return "final";
+  }
+
+  if(isGuestOut(item) && !isPreInspected(item)){
+    return "pre";
+  }
+
+  return "general";
 }
 function getUnitState(item){
   const group=classifyInspectionUnit(item);
   const status=cleanStatus(item);
 
-  if(group==="ready"){
+  if(group==="completed"){
     return{
       cardClass:"ready",
-      title:"Terminada",
-      action:"Terminada",
+      title:"Completada",
+      action:"Completada",
       footer:"Ready for Guest",
       actionType:null,
       circle:"full"
@@ -197,85 +209,108 @@ function getUnitState(item){
   }
 
   if(group==="final"){
-    return{
-      cardClass:"final",
-      title:"Para inspeccionar",
-      action:"Comenzar",
-      footer:"Lista para inspección",
-      actionType:"INSPECTION_START",
-      circle:"empty"
-    };
-  }
-
-  if(group==="active"){
     if(status.includes("inspection started")){
       return{
         cardClass:"active",
-        title:"En progreso",
+        title:"En inspección",
         action:"Terminar",
-        footer:"Inspección en progreso",
+        footer:"Inspección iniciada",
         actionType:"READY_GUEST",
         circle:"half"
       };
     }
 
+    return{
+      cardClass:"final",
+      title:"Para inspeccionar",
+      action:"Comenzar",
+      footer:"Limpieza terminada",
+      actionType:"INSPECTION_START",
+      circle:"empty"
+    };
+  }
+
+  if(group==="pre"){
     if(isPreInspectionStarted(item)){
       return{
         cardClass:"active",
-        title:"En progreso",
+        title:"Pre inspección",
         action:"Terminar",
-        footer:"Pre inspección en progreso",
+        footer:"Pre inspección iniciada",
         actionType:"PRE_INSPECTION_COMPLETE",
         circle:"half"
       };
     }
-  }
 
-  if(group==="guest"){
     return{
       cardClass:"pre",
-      title:"Guest Out",
+      title:"Pre inspección",
       action:"Comenzar",
-      footer:"Lista para pre inspección",
+      footer:"Guest Out",
       actionType:"PRE_INSPECTION_START",
       circle:"empty"
     };
   }
 
   return{
-    cardClass:"pre",
-    title:"En limpieza",
-    action:"Esperando",
-    footer:"Todavía no está lista para inspección",
+    cardClass:"general",
+    title:"Asignada",
+    action:"Ver",
+    footer:"En limpieza o esperando Guest Out",
     actionType:null,
     circle:"empty"
   };
 }
 function getBuildingName(unit){
   const raw=String(unit||"").trim().toUpperCase();
-  const finalWithDash=raw.match(/(?:-|–|—|\s)\s*([A-Z])\s*$/);
-  if(finalWithDash)return `Edificio ${finalWithDash[1]}`;
-  const simpleFinal=raw.match(/\b([A-Z])\s*$/);
-  if(simpleFinal)return `Edificio ${simpleFinal[1]}`;
+
+  const explicitBuilding=raw.match(/(?:-|–|—)\s*([A-Z])\s*$/);
+  if(explicitBuilding){
+    return `Edificio ${explicitBuilding[1]}`;
+  }
+
+  const roomWithBuilding=raw.match(/^\s*\d{2,4}[A-Z+\s]*.*?\s([A-Z])\s*$/);
+  if(roomWithBuilding){
+    return `Edificio ${roomWithBuilding[1]}`;
+  }
+
   return "Casas";
 }
 function updateStats(units){
-  const guest=units.filter(i=>classifyInspectionUnit(i)==="guest").length;
-  const final=units.filter(i=>classifyInspectionUnit(i)==="final").length;
-  const active=units.filter(i=>classifyInspectionUnit(i)==="active").length;
-  const ready=units.filter(i=>classifyInspectionUnit(i)==="ready").length;
+  const pre=units.filter(item=>classifyInspectionUnit(item)==="pre").length;
+  const final=units.filter(item=>classifyInspectionUnit(item)==="final").length;
+  const completed=units.filter(item=>classifyInspectionUnit(item)==="completed").length;
   const total=units.length;
-  const visibleTotal=total-ready;
-  const percent=total?Math.round((ready/total)*100):0;
+  const percent=total?Math.round((completed/total)*100):0;
 
-  document.getElementById("statGuest").innerText=guest;
+  document.getElementById("statPre").innerText=pre;
   document.getElementById("statFinal").innerText=final;
-  document.getElementById("statProgress").innerText=active;
-  document.getElementById("statReady").innerText=visibleTotal;
-  document.getElementById("todayProgressText").innerText=`${ready} completadas · ${visibleTotal} visibles`;
+  document.getElementById("statGeneral").innerText=total;
+  document.getElementById("statCompleted").innerText=completed;
+  document.getElementById("todayProgressText").innerText=`${completed} de ${total} completadas`;
   document.getElementById("todayProgressFill").style.width=`${percent}%`;
 }
-function setActiveTab(tab){activeTab=tab;document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));const btn=document.getElementById(`tab-${tab}`);if(btn)btn.classList.add("active");renderAssignments()}
+function setActiveTab(tab){
+  activeTab=tab;
+
+  document.querySelectorAll(".tab-btn").forEach(button=>{
+    button.classList.remove("active");
+  });
+
+  const activeButton=document.getElementById(`tab-${tab}`);
+  if(activeButton){
+    activeButton.classList.add("active");
+  }
+
+  if(tab==="general"){
+    collapsedBuildings={};
+    lastUnits.forEach(item=>{
+      collapsedBuildings[getBuildingName(item.unit)]=true;
+    });
+  }
+
+  renderAssignments();
+}
 async function loadInspectorAssignments(silent=false){
   if(loadInspectorAssignments._running)return;
 
@@ -303,12 +338,25 @@ async function loadInspectorAssignments(silent=false){
     loadInspectorAssignments._running=false;
     location.href="/launch";
     return;
-  }if(!silent)document.getElementById("assignments").innerHTML="<div class='empty'>Cargando inspecciones...</div>";try{const res=await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`),data=await res.json();if(!data.ok){if(!silent){document.getElementById("assignments").innerHTML="";alert(data.message||"No se pudieron cargar las inspecciones")}return}currentInspectorName=data.inspector||currentInspectorName||"";document.getElementById("name").value=currentInspectorName;setInspectorDisplayName(currentInspectorName);lastUnits=data.units||[];updateStats(lastUnits);renderAssignments();startInspectorAutoRefresh();if(!silent)loadMyHistory(false);if(silent)requestAnimationFrame(()=>scrollTo(0,y))}catch(e){if(!silent){document.getElementById("assignments").innerHTML="";alert("Error cargando inspecciones: "+e.message)}}finally{loadInspectorAssignments._running=false}}
-function renderAssignments(){const c=document.getElementById("assignments");if(!lastUnits.length){c.innerHTML="<div class='empty'>No tienes unidades asignadas hoy.</div>";return}const visible=lastUnits.filter(i=>{
-  const group=classifyInspectionUnit(i);
-  if(activeTab==="ready") return group!=="ready";
+  }if(!silent)document.getElementById("assignments").innerHTML="<div class='empty'>Cargando inspecciones...</div>";try{const res=await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`),data=await res.json();if(!data.ok){if(!silent){document.getElementById("assignments").innerHTML="";alert(data.message||"No se pudieron cargar las inspecciones")}return}currentInspectorName=data.inspector||currentInspectorName||"";document.getElementById("name").value=currentInspectorName;setInspectorDisplayName(currentInspectorName);lastUnits=data.units||[];
+if(activeTab==="general"){
+  collapsedBuildings={};
+  lastUnits.forEach(item=>{
+    collapsedBuildings[getBuildingName(item.unit)]=true;
+  });
+}
+updateStats(lastUnits);
+renderAssignments();startInspectorAutoRefresh();if(!silent)loadMyHistory(false);if(silent)requestAnimationFrame(()=>scrollTo(0,y))}catch(e){if(!silent){document.getElementById("assignments").innerHTML="";alert("Error cargando inspecciones: "+e.message)}}finally{loadInspectorAssignments._running=false}}
+function renderAssignments(){const c=document.getElementById("assignments");if(!lastUnits.length){c.innerHTML="<div class='empty'>No tienes unidades asignadas hoy.</div>";return}const visible=lastUnits.filter(item=>{
+  const group=classifyInspectionUnit(item);
+
+  if(activeTab==="general"){
+    return true;
+  }
+
   return group===activeTab;
-});if(!visible.length){c.innerHTML="<div class='empty'>No hay unidades en esta sección.</div>";return}const groups={};visible.forEach(i=>{const b=getBuildingName(i.unit);if(!groups[b])groups[b]=[];groups[b].push(i)});let html="";Object.keys(groups).sort().forEach(building=>{const closed=collapsedBuildings[building]===true,units=groups[building];html+=`<div class="building-group ${closed?"closed":""}"><div class="building-header" onclick="toggleBuilding('${safeJsString(building)}')"><strong>${escapeHtml(building)}</strong><span>${units.length} units</span></div><div class="building-body">`;units.forEach(item=>{const st=getUnitState(item),id=String(item.unit||"").replace(/[^a-zA-Z0-9]/g,""),guest=isGuestOut(item),pre=isPreInspected(item),urgent=String(item.priority||"").toLowerCase()==="urgent",cls=`${st.cardClass} ${urgent?"urgent":""}`;html+=`<div class="inspection-card ${cls}" id="card-${id}" onclick="selectAssignment('${safeJsString(item.unit)}')"><div class="inspection-layout"><div class="inspection-content"><div class="room-title">${escapeHtml(item.unit)}</div><div class="meta-row">${guest?`<span class="meta-pill guest">Guest Out</span>`:""}${pre?`<span class="meta-pill pre">Pre-Inspected</span>`:""}${st.cardClass==="ready"?`<span class="meta-pill ready">Ready</span>`:""}${urgent?`<span class="meta-pill" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">Urgent</span>`:""}</div></div><div class="action-panel" onclick="quickInspectionAction(event,'${st.actionType||""}','${safeJsString(item.unit)}')"><span class="action-circle ${st.circle}"></span><span class="tap-label">${escapeHtml(st.action)}</span></div></div><div class="inspection-footer"><span>${escapeHtml(st.footer)}</span><div class="footer-right"><strong class="status-tag">${escapeHtml(st.title)}</strong><button class="inline-report" title="Reporte" onclick="openReportForUnit(event,'${safeJsString(item.unit)}')">✎</button></div></div></div>`});html+=`</div></div>`});c.innerHTML=html;if(selectedUnit)markSelectedCard(selectedUnit)}
+});
+if(!visible.length){c.innerHTML="<div class='empty'>No hay unidades en esta sección.</div>";return}const groups={};visible.forEach(i=>{const b=getBuildingName(i.unit);if(!groups[b])groups[b]=[];groups[b].push(i)});let html="";Object.keys(groups).sort().forEach(building=>{const closed=collapsedBuildings[building]===true,units=groups[building];html+=`<div class="building-group ${closed?"closed":""}"><div class="building-header" onclick="toggleBuilding('${safeJsString(building)}')"><strong>${escapeHtml(building)}</strong><span>${units.length} units</span></div><div class="building-body">`;units.forEach(item=>{const st=getUnitState(item),id=String(item.unit||"").replace(/[^a-zA-Z0-9]/g,""),guest=isGuestOut(item),pre=isPreInspected(item),urgent=String(item.priority||"").toLowerCase()==="urgent",cls=`${st.cardClass} ${urgent?"urgent":""}`;html+=`<div class="inspection-card ${cls}" id="card-${id}" onclick="selectAssignment('${safeJsString(item.unit)}')"><div class="inspection-layout"><div class="inspection-content"><div class="room-title">${escapeHtml(item.unit)}</div><div class="meta-row">${guest?`<span class="meta-pill guest">Guest Out</span>`:""}${pre?`<span class="meta-pill pre">Pre-Inspected</span>`:""}${st.cardClass==="ready"?`<span class="meta-pill ready">Ready</span>`:""}${urgent?`<span class="meta-pill" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">Urgent</span>`:""}</div></div><div class="action-panel" onclick="quickInspectionAction(event,'${st.actionType||""}','${safeJsString(item.unit)}')"><span class="action-circle ${st.circle}"></span><span class="tap-label">${escapeHtml(st.action)}</span></div></div><div class="inspection-footer"><span>${escapeHtml(st.footer)}</span><div class="footer-right"><strong class="status-tag">${escapeHtml(st.title)}</strong><button class="inline-report" title="Reporte" onclick="openReportForUnit(event,'${safeJsString(item.unit)}')">✎</button></div></div></div>`});html+=`</div></div>`});c.innerHTML=html;if(selectedUnit)markSelectedCard(selectedUnit)}
 function toggleBuilding(b){collapsedBuildings[b]=!collapsedBuildings[b];renderAssignments()}function markSelectedCard(unit){document.querySelectorAll(".inspection-card").forEach(c=>c.classList.remove("selected"));const card=document.getElementById("card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,""));if(card)card.classList.add("selected")}function selectAssignment(unit){selectedUnit=unit;document.getElementById("unit").value=unit;document.getElementById("selectedUnitLabel").innerText=unit;markSelectedCard(unit);loadMyHistory(true)}
 function setButtonsDisabled(d){document.querySelectorAll(".action-btn").forEach(b=>b.disabled=d)}function showBigStatus(m,t){const b=document.getElementById("bigStatus");b.className="";b.classList.add(t);b.innerText=m;b.style.display="block";if(t!=="loading")setTimeout(()=>b.style.display="none",3300)}function playBeep(type){try{const A=window.AudioContext||window.webkitAudioContext,a=new A(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type="sine";o.frequency.value=type==="success"?880:220;g.gain.setValueAtTime(.12,a.currentTime);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.25);o.start(a.currentTime);o.stop(a.currentTime+.25)}catch(e){}}function vibratePhone(type){if(navigator.vibrate)navigator.vibrate(type==="success"?[90,40,90]:[240,80,240])}
 function setInspectionCardLoading(unit,loading){
@@ -344,30 +392,38 @@ function applyLocalInspectorAction(action,unit){
 
   if(action==="PRE_INSPECTION_START"){
     item.preInspectionStarted=true;
-    activeTab="active";
+    activeTab="pre";
   }
 
   if(action==="PRE_INSPECTION_COMPLETE"){
     item.preInspectionStarted=false;
     item.preInspection=true;
+    activeTab="pre";
   }
 
   if(action==="INSPECTION_START"){
     item.status="Inspection Started";
-    activeTab="active";
+    activeTab="final";
   }
 
   if(action==="READY_GUEST"){
     item.status="Ready for Guest";
+    activeTab="final";
   }
 
   updateStats(lastUnits);
-  document.querySelectorAll(".tab-btn").forEach(button=>button.classList.remove("active"));
+
+  document.querySelectorAll(".tab-btn").forEach(button=>{
+    button.classList.remove("active");
+  });
+
   const activeButton=document.getElementById(`tab-${activeTab}`);
-  if(activeButton)activeButton.classList.add("active");
+  if(activeButton){
+    activeButton.classList.add("active");
+  }
+
   renderAssignments();
 }
-
 async function sendInspectionAction(action){if(isSending)return;const name=document.getElementById("name").value.trim()||currentInspectorName,unit=selectedUnit||document.getElementById("unit").value.trim().toUpperCase();if(!name){alert("Sesión no válida.");location.href="/launch";return}if(!unit){alert("Selecciona una unidad");return}const key=`${action}-${unit}-${name}`,now=Date.now();if(key===lastSendKey&&now-lastSendTime<30000){showBigStatus("Ya fue enviado. Espera unos segundos.","error");playBeep("error");vibratePhone("error");return}isSending=true;lastSendKey=key;lastSendTime=now;setInspectionCardLoading(unit,true);setButtonsDisabled(true);document.getElementById("status").innerText="Enviando...";showBigStatus("Enviando acción...","loading");try{const res=await fetch("/inspector-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,unit,note:"",name,photoUrl:""})}),data=await res.json();if(data.success){
   document.getElementById("status").innerText=data.message||"Enviado";
   showBigStatus(data.message||"Enviado correctamente","success");
@@ -378,21 +434,23 @@ async function sendInspectionAction(action){if(isSending)return;const name=docum
   const isFinish=action==="PRE_INSPECTION_COMPLETE"||action==="READY_GUEST";
 
   if(isStart){
-    updateCircleVisual(unit,"half","En progreso");
+    updateCircleVisual(unit,"half","Terminar");
+
     setTimeout(()=>{
       applyLocalInspectorAction(action,unit);
       loadInspectorAssignments(true);
       loadMyHistory(true);
-    },350);
+    },300);
   }
 
   if(isFinish){
-    updateCircleVisual(unit,"full","Terminada");
+    updateCircleVisual(unit,"full","Completada");
+
     setTimeout(()=>{
       applyLocalInspectorAction(action,unit);
       loadInspectorAssignments(true);
       loadMyHistory(true);
-    },700);
+    },850);
   }
 }else{document.getElementById("status").innerText=data.message||"Error";showBigStatus(data.message||"Error","error");playBeep("error");vibratePhone("error")}}catch(e){document.getElementById("status").innerText="Error: "+e.message;showBigStatus("Error: "+e.message,"error");playBeep("error");vibratePhone("error")}finally{setInspectionCardLoading(unit,false);isSending=false;setButtonsDisabled(false)}}
 function openReportForUnit(event,unit){if(event){event.stopPropagation();event.preventDefault()}selectAssignment(unit);document.getElementById("reportSheet").classList.remove("hidden");setTimeout(()=>document.getElementById("note").focus(),150)}function closeReportPanel(){document.getElementById("reportSheet").classList.add("hidden")}
