@@ -1208,7 +1208,11 @@ function setCheckboxIfExists(page, props, name, value) {
     props[name] = {
       checkbox: !!value,
     };
+
+    return name;
   }
+
+  return "";
 }
 
 function setDateIfExists(page, props, name, value) {
@@ -1218,7 +1222,41 @@ function setDateIfExists(page, props, name, value) {
         start: value,
       },
     };
+
+    return name;
   }
+
+  return "";
+}
+
+function setFirstExistingCheckbox(page, props, possibleNames, value) {
+  for (const name of possibleNames) {
+    if (hasProp(page, name)) {
+      props[name] = {
+        checkbox: !!value,
+      };
+
+      return name;
+    }
+  }
+
+  return "";
+}
+
+function setFirstExistingDate(page, props, possibleNames, value) {
+  for (const name of possibleNames) {
+    if (hasProp(page, name)) {
+      props[name] = {
+        date: {
+          start: value,
+        },
+      };
+
+      return name;
+    }
+  }
+
+  return "";
 }
 
 async function getDatabaseSchema(databaseId) {
@@ -2311,14 +2349,80 @@ for (const page of matches) {
   }
 
   if (action === "PRE_INSPECTION_START") {
-    setCheckboxIfExists(page, props, "Pre Inspection Started", true);
-    setDateIfExists(page, props, "Pre Inspection Started At", now);
+    const startedProperty = setFirstExistingCheckbox(
+      page,
+      props,
+      [
+        "Pre Inspection Started",
+        "Pre-Inspection Started",
+        "pre inspection started",
+        "Pre inspection started",
+      ],
+      true
+    );
+
+    setFirstExistingDate(
+      page,
+      props,
+      [
+        "Pre Inspection Started At",
+        "Pre-Inspection Started At",
+        "Pre Inspection Start At",
+        "pre inspection started at",
+      ],
+      now
+    );
+
+    if (!startedProperty) {
+      throw new Error(
+        'No encontré en Notion una propiedad checkbox llamada "Pre Inspection Started"'
+      );
+    }
   }
 
   if (action === "PRE_INSPECTION_COMPLETE") {
-    setCheckboxIfExists(page, props, "Pre Inspection", true);
-    setCheckboxIfExists(page, props, "Pre Inspection Started", false);
-    setDateIfExists(page, props, "Pre Inspection Completed At", now);
+    const completedProperty = setFirstExistingCheckbox(
+      page,
+      props,
+      [
+        "Pre Inspection",
+        "Pre-Inspection",
+        "Pre Inspected",
+        "pre inspection",
+        "Pre inspection",
+      ],
+      true
+    );
+
+    setFirstExistingCheckbox(
+      page,
+      props,
+      [
+        "Pre Inspection Started",
+        "Pre-Inspection Started",
+        "pre inspection started",
+        "Pre inspection started",
+      ],
+      false
+    );
+
+    setFirstExistingDate(
+      page,
+      props,
+      [
+        "Pre Inspection Completed At",
+        "Pre-Inspection Completed At",
+        "Pre Inspection At",
+        "pre inspection completed at",
+      ],
+      now
+    );
+
+    if (!completedProperty) {
+      throw new Error(
+        'No encontré en Notion una propiedad checkbox llamada "Pre Inspection"'
+      );
+    }
   }
 
   const autoCloseCleaning =
@@ -2364,6 +2468,20 @@ for (const page of matches) {
   });
 
   clearRoomCache(todayISO());
+  clearAssignmentCaches(todayISO());
+
+  // Actualiza el snapshot local para evitar que el watcher vuelva a publicar
+  // temporalmente una versión anterior de la misma habitación.
+  try {
+    const freshPages = await queryTodayRooms(true);
+    notionWatcherSnapshot = buildAssignmentSnapshot(freshPages);
+  } catch (snapshotError) {
+    console.log(
+      "⚠️ No se pudo refrescar snapshot después de la acción:",
+      snapshotError.message
+    );
+  }
+
   broadcastAssignmentUpdate("server-room-update", {
     pageId: page.id,
     unit: fullUnitTitle,
@@ -3366,7 +3484,7 @@ app.get("/operations-reports", async (req, res) => {
       reports,
     };
 
-    setCache(cacheKey, payload, 5000);
+    setCache(cacheKey, payload, 1500);
     res.json(payload);
   } catch (error) {
     console.error("Error en /operations-reports:", error.message);
