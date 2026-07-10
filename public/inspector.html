@@ -94,7 +94,80 @@ let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selecte
 function normalizeRole(role){return String(role||"").trim().toLowerCase()}function canInspect(role){return["inspector","cleaner / inspector","inspector / cleaner","dispatch / inspector","admin","manager","owner","company owner"].includes(normalizeRole(role))}
 function setupDate(){const now=new Date(),day=String(now.getDate()).padStart(2,"0"),text=now.toLocaleDateString("es-US",{month:"short",day:"numeric",year:"numeric"});document.getElementById("dateDay").innerText=day;document.getElementById("dateText").innerText=text}
 async function waitForOSUser(){return new Promise(resolve=>{let tries=0;const timer=setInterval(()=>{tries++;if(window.OS&&OS.user){clearInterval(timer);resolve(OS.user);return}if(tries>30){clearInterval(timer);resolve(null)}},100)})}
-async function bootInspectorPanel(){setupDate();const user=await waitForOSUser();const savedCode=localStorage.getItem("employeeCode")||localStorage.getItem("inspectorCode")||"";if(!user&&!savedCode){location.href="/launch";return}const role=user?.role||localStorage.getItem("employeeRole")||"";if(user&&!canInspect(role)){location.href="/launch";return}const code=user?.code||savedCode;const name=user?.name||localStorage.getItem("employeeName")||"";if(code){document.getElementById("code").value=code;currentInspectorCode=code;localStorage.setItem("inspectorCode",code);localStorage.setItem("employeeCode",code)}if(name){currentInspectorName=name;document.getElementById("name").value=name;setInspectorDisplayName(name)}if(code)document.getElementById("accessCard").classList.add("hidden");if(code)loadInspectorAssignments(false)}
+async function bootInspectorPanel(){
+  setupDate();
+
+  const savedCode=String(
+    localStorage.getItem("employeeCode")||
+    localStorage.getItem("inspectorCode")||
+    ""
+  ).trim();
+
+  const savedName=String(
+    localStorage.getItem("employeeName")||
+    localStorage.getItem("inspectorName")||
+    ""
+  ).trim();
+
+  const savedRole=String(
+    localStorage.getItem("employeeRole")||
+    ""
+  ).trim();
+
+  if(savedCode){
+    document.getElementById("code").value=savedCode;
+    currentInspectorCode=savedCode;
+    localStorage.setItem("employeeCode",savedCode);
+    localStorage.setItem("inspectorCode",savedCode);
+
+    if(savedName){
+      currentInspectorName=savedName;
+      document.getElementById("name").value=savedName;
+      setInspectorDisplayName(savedName);
+    }
+
+    document.getElementById("accessCard").classList.add("hidden");
+    await loadInspectorAssignments(false);
+    return;
+  }
+
+  const user=await waitForOSUser();
+
+  if(!user){
+    location.href="/launch";
+    return;
+  }
+
+  const role=user.role||savedRole;
+
+  if(!canInspect(role)){
+    location.href="/launch";
+    return;
+  }
+
+  const code=String(user.code||"").trim();
+  const name=String(user.name||savedName||"").trim();
+
+  if(!code){
+    location.href="/launch";
+    return;
+  }
+
+  document.getElementById("code").value=code;
+  currentInspectorCode=code;
+  localStorage.setItem("employeeCode",code);
+  localStorage.setItem("inspectorCode",code);
+
+  if(name){
+    currentInspectorName=name;
+    document.getElementById("name").value=name;
+    localStorage.setItem("employeeName",name);
+    setInspectorDisplayName(name);
+  }
+
+  document.getElementById("accessCard").classList.add("hidden");
+  await loadInspectorAssignments(false);
+}
 function setInspectorDisplayName(name){const safe=name||"Inspector";document.getElementById("heroInspectorName").innerText=safe;document.getElementById("inspectorName").innerText=`Inspector: ${safe}`}
 function escapeHtml(v){return String(v||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}function safeJsString(v){return String(v||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}function truthy(v){if(v===true)return true;return["true","yes","si","sí","done","complete","completed","checked","out"].includes(String(v||"").trim().toLowerCase())}function getItemValue(item,names){for(const n of names){if(item&&item[n]!==undefined&&item[n]!==null)return item[n]}return""}function isGuestOut(item){return truthy(getItemValue(item,["guestOut","Guest Out","guest_out","guestout","isGuestOut"]))}function isPreInspected(item){return truthy(getItemValue(item,["preInspection","Pre Inspection","preInspected","Pre Inspected","pre_inspection","preInspectionComplete","preInspectionCompleted"]))}function isPreInspectionStarted(item){return truthy(getItemValue(item,["preInspectionStarted","Pre Inspection Started","pre_inspection_started"]))}function cleanStatus(item){return String(item?.status||"").toLowerCase()}
 function classifyInspectionUnit(item){
@@ -201,9 +274,36 @@ function updateStats(units){
   document.getElementById("statReady").innerText=visibleTotal;
   document.getElementById("todayProgressText").innerText=`${ready} completadas · ${visibleTotal} visibles`;
   document.getElementById("todayProgressFill").style.width=`${percent}%`;
-} completadas · ${visibleTotal} visibles`;document.getElementById("todayProgressFill").style.width=`${percent}%`}
+}
 function setActiveTab(tab){activeTab=tab;document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));const btn=document.getElementById(`tab-${tab}`);if(btn)btn.classList.add("active");renderAssignments()}
-async function loadInspectorAssignments(silent=false){if(loadInspectorAssignments._running)return;loadInspectorAssignments._running=true;const y=scrollY,code=document.getElementById("code").value.trim();currentInspectorCode=code;if(code){localStorage.setItem("inspectorCode",code);localStorage.setItem("employeeCode",code)}if(!code){alert("Escribe tu código");loadInspectorAssignments._running=false;return}if(!silent)document.getElementById("assignments").innerHTML="<div class='empty'>Cargando inspecciones...</div>";try{const res=await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`),data=await res.json();if(!data.ok){if(!silent){document.getElementById("assignments").innerHTML="";alert(data.message||"No se pudieron cargar las inspecciones")}return}currentInspectorName=data.inspector||currentInspectorName||"";document.getElementById("name").value=currentInspectorName;setInspectorDisplayName(currentInspectorName);lastUnits=data.units||[];updateStats(lastUnits);renderAssignments();startInspectorAutoRefresh();if(!silent)loadMyHistory(false);if(silent)requestAnimationFrame(()=>scrollTo(0,y))}catch(e){if(!silent){document.getElementById("assignments").innerHTML="";alert("Error cargando inspecciones: "+e.message)}}finally{loadInspectorAssignments._running=false}}
+async function loadInspectorAssignments(silent=false){
+  if(loadInspectorAssignments._running)return;
+
+  loadInspectorAssignments._running=true;
+
+  const y=scrollY;
+  const inputCode=String(document.getElementById("code").value||"").trim();
+  const savedCode=String(
+    localStorage.getItem("employeeCode")||
+    localStorage.getItem("inspectorCode")||
+    ""
+  ).trim();
+  const code=inputCode||currentInspectorCode||savedCode;
+
+  currentInspectorCode=code;
+
+  if(code){
+    document.getElementById("code").value=code;
+    localStorage.setItem("inspectorCode",code);
+    localStorage.setItem("employeeCode",code);
+    document.getElementById("accessCard").classList.add("hidden");
+  }
+
+  if(!code){
+    loadInspectorAssignments._running=false;
+    location.href="/launch";
+    return;
+  }if(!silent)document.getElementById("assignments").innerHTML="<div class='empty'>Cargando inspecciones...</div>";try{const res=await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`),data=await res.json();if(!data.ok){if(!silent){document.getElementById("assignments").innerHTML="";alert(data.message||"No se pudieron cargar las inspecciones")}return}currentInspectorName=data.inspector||currentInspectorName||"";document.getElementById("name").value=currentInspectorName;setInspectorDisplayName(currentInspectorName);lastUnits=data.units||[];updateStats(lastUnits);renderAssignments();startInspectorAutoRefresh();if(!silent)loadMyHistory(false);if(silent)requestAnimationFrame(()=>scrollTo(0,y))}catch(e){if(!silent){document.getElementById("assignments").innerHTML="";alert("Error cargando inspecciones: "+e.message)}}finally{loadInspectorAssignments._running=false}}
 function renderAssignments(){const c=document.getElementById("assignments");if(!lastUnits.length){c.innerHTML="<div class='empty'>No tienes unidades asignadas hoy.</div>";return}const visible=lastUnits.filter(i=>{
   const group=classifyInspectionUnit(i);
   if(activeTab==="ready") return group!=="ready";
