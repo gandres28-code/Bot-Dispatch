@@ -165,6 +165,45 @@ function clearRoomCache(date = todayISO()){
     ServerCache.clear("assignments");
   }
 }
+
+// =========================================================
+// CACHE DE ASIGNACIONES EN TIEMPO REAL
+// =========================================================
+function clearAssignmentCaches(date = todayISO()) {
+  for (const key of Array.from(cacheStore.keys())) {
+    const cacheKey = String(key);
+
+    if (
+      cacheKey.startsWith("cleaner-assignments:") ||
+      cacheKey.startsWith("inspector-assignments:") ||
+      cacheKey === `todayRooms:${date}` ||
+      cacheKey === `roomsByDate:${date}`
+    ) {
+      cacheStore.delete(key);
+    }
+  }
+
+  if (typeof ServerCache !== "undefined") {
+    ServerCache.clear("rooms", date);
+    ServerCache.clear("assignments");
+    ServerCache.clear("dashboard");
+  }
+}
+
+function broadcastAssignmentUpdate(reason = "notion-change", extra = {}) {
+  const date = todayISO();
+  clearAssignmentCaches(date);
+
+  const payload = {
+    reason,
+    date,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+
+  io.emit("assignments-updated", payload);
+  io.emit("rooms-updated", payload);
+}
 function broadcastOpsUpdate(payload = {}) {
   clearOpsCache();
 
@@ -2325,6 +2364,11 @@ for (const page of matches) {
   });
 
   clearRoomCache(todayISO());
+  broadcastAssignmentUpdate("server-room-update", {
+    pageId: page.id,
+    unit: fullUnitTitle,
+    action,
+  });
 
   await saveDailyLog({
     action,
@@ -5117,6 +5161,153 @@ app.get("/master-unit-detail", async (req, res) => {
     });
   }
 });
+
+// =========================================================
+// NOTION REALTIME WATCHER
+// Revisa una sola vez para todos los teléfonos y avisa por Socket.IO.
+// Los cambios hechos desde este servidor se emiten inmediatamente arriba.
+// Los cambios hechos directamente en Notion se detectan aquí.
+// =========================================================
+const NOTION_WATCH_INTERVAL_MS = Math.max(
+  3000,
+  Number(process.env.NOTION_WATCH_INTERVAL_MS || 5000)
+);
+
+let notionWatcherRunning = false;
+let notionWatcherSnapshot = "";
+
+function readNotionPropertyValue(property) {
+  if (!property) return "";
+
+  if (Array.isArray(property.title)) {
+    return property.title.map((item) => item.plain_text || "").join("").trim();
+  }
+
+  if (Array.isArray(property.rich_text)) {
+    return property.rich_text.map((item) => item.plain_text || "").join("").trim();
+  }
+
+  if (property.select) return property.select.name || "";
+  if (property.status) return property.status.name || "";
+
+  if (Array.isArray(property.multi_select)) {
+    return property.multi_select
+      .map((item) => item.name || "")
+      .filter(Boolean)
+      .sort()
+      .join(", ");
+  }
+
+  if (Array.isArray(property.people)) {
+    return property.people
+      .map((person) => person.name || person.id || "")
+      .filter(Boolean)
+      .sort()
+      .join(", ");
+  }
+
+  if (typeof property.checkbox === "boolean") return property.checkbox;
+  if (property.date) return property.date.start || "";
+  if (property.number !== null && property.number !== undefined) return property.number;
+  if (property.url) return property.url;
+
+  return "";
+}
+
+function getFirstExistingProperty(props, names) {
+  for (const name of names) {
+    if (props?.[name]) return readNotionPropertyValue(props[name]);
+  }
+
+  return "";
+}
+
+function buildAssignmentSnapshot(pages = []) {
+  const snapshot = pages.map((page) => {
+    const props = page.properties || {};
+    const flags = getRoomOpsFlags(page);
+
+    return {
+      id: page.id,
+      archived: page.archived === true,
+      unit: getFirstExistingProperty(props, ["Room Number", "Unit", "Room"]),
+      cleaner: getFirstExistingProperty(props, [
+        "Assigned Cleaner",
+        "assigned cleaner",
+        "Cleaner",
+      ]),
+      inspector: getFirstExistingProperty(props, [
+        "Assigned Inspector",
+        "assigned inspector",
+        "Inspector",
+      ]),
+      status: getFirstExistingProperty(props, [
+        "Cleaning Status",
+        "Status",
+      ]),
+      priority: getFirstExistingProperty(props, ["Priority"]),
+      arrival: getFirstExistingProperty(props, ["Arrival"]),
+      guestOut: flags.guestOut,
+      guestOutAt: flags.guestOutAt,
+      preInspection: flags.preInspection,
+      preInspectionStarted: flags.preInspectionStarted,
+      preInspectionStartedAt: flags.preInspectionStartedAt,
+      preInspectionCompletedAt: flags.preInspectionCompletedAt,
+      lastEditedTime: page.last_edited_time || "",
+    };
+  });
+
+  snapshot.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return JSON.stringify(snapshot);
+}
+
+async function checkNotionAssignmentChanges() {
+  if (notionWatcherRunning || !NOTION_DATABASE_ID || !NOTION_API_KEY) return;
+
+  notionWatcherRunning = true;
+
+  try {
+    const pages = await queryTodayRooms(true);
+    const nextSnapshot = buildAssignmentSnapshot(pages);
+
+    if (!notionWatcherSnapshot) {
+      notionWatcherSnapshot = nextSnapshot;
+      console.log(
+        `👁️ Notion watcher activo: ${pages.length} habitaciones, revisión cada ${NOTION_WATCH_INTERVAL_MS}ms`
+      );
+      return;
+    }
+
+    if (nextSnapshot === notionWatcherSnapshot) return;
+
+    notionWatcherSnapshot = nextSnapshot;
+    broadcastAssignmentUpdate("direct-notion-change", {
+      roomCount: pages.length,
+    });
+
+    console.log("🔔 Cambio en Notion detectado y enviado a los paneles");
+  } catch (error) {
+    console.error("⚠️ Error en Notion watcher:", error.message);
+  } finally {
+    notionWatcherRunning = false;
+  }
+}
+
+function startNotionAssignmentWatcher() {
+  setTimeout(checkNotionAssignmentChanges, 2500);
+
+  const watcherTimer = setInterval(
+    checkNotionAssignmentChanges,
+    NOTION_WATCH_INTERVAL_MS
+  );
+
+  if (typeof watcherTimer.unref === "function") {
+    watcherTimer.unref();
+  }
+}
+
+startNotionAssignmentWatcher();
+
 server.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
