@@ -1432,6 +1432,83 @@
       outline:none;
     }
 
+  
+    /* SVG progress ring for cleaner cards */
+    .state-panel .action-circle{
+      width:48px!important;
+      height:48px!important;
+      min-width:48px!important;
+      flex:0 0 48px!important;
+      display:grid!important;
+      place-items:center!important;
+      margin:0 auto!important;
+      padding:0!important;
+      border:0!important;
+      outline:0!important;
+      box-shadow:none!important;
+      background:transparent!important;
+      border-radius:50%!important;
+      overflow:visible!important;
+      line-height:0!important;
+    }
+
+    .state-panel .action-circle::before,
+    .state-panel .action-circle::after{
+      content:none!important;
+      display:none!important;
+    }
+
+    .state-panel .action-circle svg{
+      width:48px!important;
+      height:48px!important;
+      display:block!important;
+      transform:rotate(-90deg);
+      transform-origin:24px 24px!important;
+      overflow:visible!important;
+    }
+
+    .state-panel .ring-track{
+      fill:none;
+      stroke:rgba(148,163,184,.25);
+      stroke-width:5;
+    }
+
+    .state-panel .ring-value{
+      fill:none;
+      stroke:currentColor;
+      stroke-width:5;
+      stroke-linecap:round;
+      stroke-dasharray:100;
+      stroke-dashoffset:100;
+      transition:stroke-dashoffset .35s ease;
+      vector-effect:non-scaling-stroke;
+    }
+
+    .state-panel .action-circle.empty .ring-value{stroke-dashoffset:100}
+    .state-panel .action-circle.half .ring-value{stroke-dashoffset:50}
+    .state-panel .action-circle.full .ring-value{stroke-dashoffset:0}
+
+    .state-panel .action-circle.loading svg{
+      animation:cleanerRingSpin .72s linear infinite!important;
+      transform-origin:24px 24px!important;
+    }
+
+    .state-panel .action-circle.loading .ring-value{
+      stroke-dasharray:28 72;
+      stroke-dashoffset:0;
+      transition:none;
+    }
+
+    @keyframes cleanerRingSpin{
+      from{transform:rotate(-90deg)}
+      to{transform:rotate(270deg)}
+    }
+
+    .assignment-card.card-loading{
+      pointer-events:none;
+      opacity:.78;
+    }
+
   </style>
 </head>
 
@@ -1844,7 +1921,8 @@ function getCleanerState(item){
       key:"done",
       title:"Finished",
       detail:"Cleaning complete",
-      cardClass:"done"
+      cardClass:"done",
+      circle:"full"
     };
   }
 
@@ -1853,7 +1931,8 @@ function getCleanerState(item){
       key:"started",
       title:"In Progress",
       detail:"Started cleaning",
-      cardClass:"started"
+      cardClass:"started",
+      circle:"half"
     };
   }
 
@@ -1863,7 +1942,8 @@ function getCleanerState(item){
         key:"pre-inspected",
         title:"Ready to Start",
         detail:"Guest out • Pre-inspection complete",
-        cardClass:"guest-out pre-inspected"
+        cardClass:"guest-out pre-inspected",
+        circle:"empty"
       };
     }
 
@@ -1871,7 +1951,8 @@ function getCleanerState(item){
       key:"guest-out",
       title:"Ready to Start",
       detail:"Guest out",
-      cardClass:"guest-out"
+      cardClass:"guest-out",
+      circle:"empty"
     };
   }
 
@@ -1879,7 +1960,8 @@ function getCleanerState(item){
     key:"not-started",
     title:item?.arrival ? "Waiting Guest" : "Not Started",
     detail:item?.arrival ? "Arrival room" : "Assigned room",
-    cardClass:item?.arrival ? "not-started arrival" : "not-started"
+    cardClass:item?.arrival ? "not-started arrival" : "not-started",
+    circle:"empty"
   };
 }
 
@@ -2013,8 +2095,11 @@ async function loadCleanerAssignments(showLoading){
               class="state-panel"
               onclick="${state.key === "done" ? "" : (state.key === "not-started" || state.key === "guest-out" || state.key === "pre-inspected" ? `quickStartUnit(event, '${safeJsString(item.unit)}')` : `quickFinishUnit(event, '${safeJsString(item.unit)}')`)}"
             >
-              <span class="action-circle">
-                ${state.key === "done" ? "✓" : (state.key === "started" ? "✓" : "›")}
+              <span class="action-circle ${state.circle}">
+                <svg viewBox="0 0 48 48" aria-hidden="true">
+                  <circle class="ring-track" cx="24" cy="24" r="18" pathLength="100"></circle>
+                  <circle class="ring-value" cx="24" cy="24" r="18" pathLength="100"></circle>
+                </svg>
               </span>
               <span class="tap-label">
                 ${state.key === "done" ? "Finished" : (state.key === "started" ? "Tap to Finish" : "Tap to Start")}
@@ -2068,6 +2153,75 @@ function startCleanerAutoRefresh(){
   }, 30000);
 }
 
+
+function setCleanerCardLoading(unit,loading){
+  const cardId="card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,"");
+  const card=document.getElementById(cardId);
+  if(!card)return;
+
+  card.classList.toggle("card-loading",!!loading);
+  const circle=card.querySelector(".action-circle");
+  if(!circle)return;
+
+  if(loading){
+    circle.dataset.previousState=
+      circle.classList.contains("full") ? "full" :
+      circle.classList.contains("half") ? "half" :
+      "empty";
+
+    circle.classList.remove("empty","half","full");
+    circle.classList.add("loading");
+  }else{
+    const previousState=circle.dataset.previousState||"empty";
+    circle.classList.remove("loading","empty","half","full");
+    circle.classList.add(previousState);
+    delete circle.dataset.previousState;
+  }
+}
+
+function updateCleanerCardState(unit,state,label){
+  const cardId="card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,"");
+  const card=document.getElementById(cardId);
+  if(!card)return;
+
+  const circle=card.querySelector(".action-circle");
+  const tapLabel=card.querySelector(".tap-label");
+
+  if(circle){
+    circle.classList.remove("loading","empty","half","full");
+    void circle.offsetWidth;
+    circle.classList.add(state);
+    delete circle.dataset.previousState;
+  }
+
+  if(tapLabel && label){
+    tapLabel.innerText=label;
+  }
+}
+
+function mergeCleanerRoomUpdate(update){
+  if(!update || !update.unit)return false;
+
+  const cardId="card-"+String(update.unit||"").replace(/[^a-zA-Z0-9]/g,"");
+  const card=document.getElementById(cardId);
+  if(!card)return false;
+
+  const status=String(update.status||"").toLowerCase();
+
+  if(status.includes("progress")){
+    card.classList.remove("not-started","guest-out","pre-inspected","done");
+    card.classList.add("started");
+    updateCleanerCardState(update.unit,"half","Tap to Finish");
+  }
+
+  if(status.includes("cleaned") || status.includes("awaiting") || status.includes("ready")){
+    card.classList.remove("not-started","guest-out","pre-inspected","started");
+    card.classList.add("done");
+    updateCleanerCardState(update.unit,"full","Finished");
+  }
+
+  return true;
+}
 
 async function quickStartUnit(event, unit){
   if(event){
@@ -2215,6 +2369,8 @@ async function uploadPhotosWithReport({ unit, name, action, note, role }){
 }
 
 async function sendAction(action){
+  let actionSucceeded=false;
+
   if(isSending){
     return;
   }
@@ -2245,6 +2401,7 @@ async function sendAction(action){
   }
 
   isSending = true;
+  setCleanerCardLoading(unit,true);
   lastSendKey = sendKey;
   lastSendTime = now;
   setButtonsDisabled(true);
@@ -2267,17 +2424,23 @@ async function sendAction(action){
     const data = await response.json();
 
     if(data.success){
+      actionSucceeded=true;
       setStatus(data.message || "Enviado");
       showBigStatus(data.message || "Enviado correctamente", "success");
       playBeep("success");
       vibratePhone("success");
 
+      if(action === "START"){
+        updateCleanerCardState(unit,"half","Tap to Finish");
+      }
+
       if(action === "DONE"){
+        updateCleanerCardState(unit,"full","Finished");
         document.getElementById("note").value = "";
       }
 
+      // Solo actualizamos historial; la tarjeta ya cambió localmente.
       await loadMyReports();
-      await loadCleanerAssignments(false);
     }else{
       throw new Error(data.message || "Error");
     }
@@ -2288,6 +2451,22 @@ async function sendAction(action){
     playBeep("error");
     vibratePhone("error");
   }finally{
+    if(!actionSucceeded){
+      setCleanerCardLoading(unit,false);
+    }else{
+      const cardId="card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,"");
+      const card=document.getElementById(cardId);
+
+      if(card){
+        card.classList.remove("card-loading");
+        const circle=card.querySelector(".action-circle");
+        if(circle){
+          circle.classList.remove("loading");
+          delete circle.dataset.previousState;
+        }
+      }
+    }
+
     isSending = false;
     setButtonsDisabled(false);
   }
@@ -2517,7 +2696,6 @@ async function refreshCleanerRealtime(){
 
   try{
     await loadCleanerAssignments(false);
-    await loadMyReports();
   }catch(error){
     console.error("Error actualizando panel en tiempo real:", error);
   }finally{
@@ -2551,16 +2729,41 @@ try{
 
   socket.on("assignments-updated", payload => {
     console.log("🔔 Asignaciones actualizadas:", payload);
+
+    if(payload?.lightweight || payload?.reason==="server-room-update"){
+      return;
+    }
+
     scheduleCleanerRealtimeRefresh();
+  });
+
+  socket.on("room-updated", update => {
+    console.log("⚡ Unidad actualizada:", update);
+
+    const merged=mergeCleanerRoomUpdate(update);
+
+    if(!merged && currentCleanerName){
+      scheduleCleanerRealtimeRefresh();
+    }
   });
 
   socket.on("rooms-updated", payload => {
     console.log("🔔 Habitaciones actualizadas:", payload);
+
+    if(payload?.lightweight || payload?.reason==="server-room-update"){
+      return;
+    }
+
     scheduleCleanerRealtimeRefresh();
   });
 
   socket.on("ops-update", payload => {
     console.log("🔔 Operaciones actualizadas:", payload);
+
+    if(payload?.unit && payload?.action){
+      return;
+    }
+
     scheduleCleanerRealtimeRefresh();
   });
 
