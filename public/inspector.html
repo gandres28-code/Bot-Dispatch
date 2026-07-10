@@ -24,17 +24,21 @@
     .action-circle{
       width:50px;
       height:50px;
-      display:block;
+      display:grid;
+      place-items:center;
       position:relative;
-      flex:0 0 auto;
+      flex:0 0 50px;
       color:currentColor;
+      margin:0 auto;
+      line-height:0;
     }
 
     .action-circle svg{
-      width:100%;
-      height:100%;
+      width:46px;
+      height:46px;
       display:block;
       transform:rotate(-90deg);
+      transform-origin:50% 50%;
       overflow:visible;
     }
 
@@ -77,6 +81,7 @@
     }
 
     @keyframes ringSpin{
+      from{transform:rotate(-90deg)}
       to{transform:rotate(270deg)}
     }
 
@@ -372,7 +377,23 @@ async function loadInspectorAssignments(silent=false){
     loadInspectorAssignments._running=false;
     location.href="/launch";
     return;
-  }if(!silent)document.getElementById("assignments").innerHTML="<div class='empty'>Cargando inspecciones...</div>";try{const res=await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`),data=await res.json();if(!data.ok){if(!silent){document.getElementById("assignments").innerHTML="";alert(data.message||"No se pudieron cargar las inspecciones")}return}currentInspectorName=data.inspector||currentInspectorName||"";document.getElementById("name").value=currentInspectorName;setInspectorDisplayName(currentInspectorName);lastUnits=data.units||[];
+  }if(!silent)document.getElementById("assignments").innerHTML="<div class='empty'>Cargando inspecciones...</div>";try{const res=await fetch(`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`),data=await res.json();if(!data.ok){if(!silent){document.getElementById("assignments").innerHTML="";alert(data.message||"No se pudieron cargar las inspecciones")}return}currentInspectorName=data.inspector||currentInspectorName||"";document.getElementById("name").value=currentInspectorName;setInspectorDisplayName(currentInspectorName);const incomingUnits=data.units||[];
+
+incomingUnits.forEach(incoming=>{
+  const local=lastUnits.find(existing=>String(existing.id||existing.unit)===String(incoming.id||incoming.unit));
+
+  if(local?.preInspectionStarted && !incoming.preInspectionStarted && !incoming.preInspection){
+    incoming.preInspectionStarted=true;
+  }
+
+  if(String(local?.status||"").toLowerCase().includes("inspection started") &&
+     !String(incoming.status||"").toLowerCase().includes("inspection started") &&
+     !String(incoming.status||"").toLowerCase().includes("ready")){
+    incoming.status="Inspection Started";
+  }
+});
+
+lastUnits=incomingUnits;
 if(activeTab==="general"){
   collapsedBuildings={};
   lastUnits.forEach(item=>{
@@ -491,12 +512,12 @@ async function sendInspectionAction(action){if(isSending)return;let actionSuccee
 
   if(isStart){
     updateCircleVisual(unit,"half","Terminar");
+    applyLocalInspectorAction(action,unit);
 
     setTimeout(()=>{
-      applyLocalInspectorAction(action,unit);
       loadInspectorAssignments(true);
       loadMyHistory(true);
-    },300);
+    },1800);
   }
 
   if(isFinish){
@@ -504,9 +525,12 @@ async function sendInspectionAction(action){if(isSending)return;let actionSuccee
 
     setTimeout(()=>{
       applyLocalInspectorAction(action,unit);
+    },650);
+
+    setTimeout(()=>{
       loadInspectorAssignments(true);
       loadMyHistory(true);
-    },850);
+    },1900);
   }
 }else{document.getElementById("status").innerText=data.message||"Error";showBigStatus(data.message||"Error","error");playBeep("error");vibratePhone("error")}}catch(e){document.getElementById("status").innerText="Error: "+e.message;showBigStatus("Error: "+e.message,"error");playBeep("error");vibratePhone("error")}finally{
   if(!actionSucceeded){
