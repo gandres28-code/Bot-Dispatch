@@ -92,6 +92,63 @@
 
     .inspection-card.general:before{background:#64748b}
     .inspection-card.general .action-panel{background:#f8fafc;color:#475569}
+  
+    /* Final SVG ring alignment override */
+    .action-panel{
+      overflow:hidden;
+    }
+
+    .action-circle{
+      width:48px!important;
+      height:48px!important;
+      min-width:48px!important;
+      flex:0 0 48px!important;
+      display:grid!important;
+      place-items:center!important;
+      margin:0 auto!important;
+      padding:0!important;
+      border:0!important;
+      outline:0!important;
+      box-shadow:none!important;
+      background:transparent!important;
+      border-radius:50%!important;
+      overflow:visible!important;
+      line-height:0!important;
+    }
+
+    .action-circle::before,
+    .action-circle::after{
+      content:none!important;
+      display:none!important;
+    }
+
+    .action-circle svg{
+      width:48px!important;
+      height:48px!important;
+      display:block!important;
+      margin:0!important;
+      padding:0!important;
+      position:static!important;
+      transform:rotate(-90deg);
+      transform-origin:24px 24px!important;
+      overflow:visible!important;
+    }
+
+    .action-circle .ring-track,
+    .action-circle .ring-value{
+      vector-effect:non-scaling-stroke;
+    }
+
+    .action-circle.loading svg{
+      animation:ringSpin .72s linear infinite!important;
+      transform-origin:24px 24px!important;
+    }
+
+    @keyframes ringSpin{
+      from{transform:rotate(-90deg)}
+      to{transform:rotate(270deg)}
+    }
+
   </style>
 </head>
 <body>
@@ -412,9 +469,9 @@ function renderAssignments(){const c=document.getElementById("assignments");if(!
   return group===activeTab;
 });
 if(!visible.length){c.innerHTML="<div class='empty'>No hay unidades en esta sección.</div>";return}const groups={};visible.forEach(i=>{const b=getBuildingName(i.unit);if(!groups[b])groups[b]=[];groups[b].push(i)});let html="";Object.keys(groups).sort().forEach(building=>{const closed=collapsedBuildings[building]===true,units=groups[building];html+=`<div class="building-group ${closed?"closed":""}"><div class="building-header" onclick="toggleBuilding('${safeJsString(building)}')"><strong>${escapeHtml(building)}</strong><span>${units.length} units</span></div><div class="building-body">`;units.forEach(item=>{const st=getUnitState(item),id=String(item.unit||"").replace(/[^a-zA-Z0-9]/g,""),guest=isGuestOut(item),pre=isPreInspected(item),urgent=String(item.priority||"").toLowerCase()==="urgent",cls=`${st.cardClass} ${urgent?"urgent":""}`;html+=`<div class="inspection-card ${cls}" id="card-${id}" onclick="selectAssignment('${safeJsString(item.unit)}')"><div class="inspection-layout"><div class="inspection-content"><div class="room-title">${escapeHtml(item.unit)}</div><div class="meta-row">${guest?`<span class="meta-pill guest">Guest Out</span>`:""}${pre?`<span class="meta-pill pre">Pre-Inspected</span>`:""}${st.cardClass==="ready"?`<span class="meta-pill ready">Ready</span>`:""}${urgent?`<span class="meta-pill" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">Urgent</span>`:""}</div></div><div class="action-panel" onclick="quickInspectionAction(event,'${st.actionType||""}','${safeJsString(item.unit)}')"><span class="action-circle ${st.circle}">
-  <svg viewBox="0 0 40 40" aria-hidden="true">
-    <circle class="ring-track" cx="20" cy="20" r="15.9155"></circle>
-    <circle class="ring-value" cx="20" cy="20" r="15.9155"></circle>
+  <svg viewBox="0 0 48 48" aria-hidden="true">
+    <circle class="ring-track" cx="24" cy="24" r="18" pathLength="100"></circle>
+    <circle class="ring-value" cx="24" cy="24" r="18" pathLength="100"></circle>
   </svg>
 </span><span class="tap-label">${escapeHtml(st.action)}</span></div></div><div class="inspection-footer"><span>${escapeHtml(st.footer)}</span><div class="footer-right"><strong class="status-tag">${escapeHtml(st.title)}</strong><button class="inline-report" title="Reporte" onclick="openReportForUnit(event,'${safeJsString(item.unit)}')">✎</button></div></div></div>`});html+=`</div></div>`});c.innerHTML=html;if(selectedUnit)markSelectedCard(selectedUnit)}
 function toggleBuilding(b){collapsedBuildings[b]=!collapsedBuildings[b];renderAssignments()}function markSelectedCard(unit){document.querySelectorAll(".inspection-card").forEach(c=>c.classList.remove("selected"));const card=document.getElementById("card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,""));if(card)card.classList.add("selected")}function selectAssignment(unit){selectedUnit=unit;document.getElementById("unit").value=unit;document.getElementById("selectedUnitLabel").innerText=unit;markSelectedCard(unit);loadMyHistory(true)}
