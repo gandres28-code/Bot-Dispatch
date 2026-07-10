@@ -146,18 +146,32 @@ function setCache(key, data, ttlMs = 5000){
 }
 
 function clearOpsCache(){
-  // NO borrar todo el cache aquí. Antes esto borraba habitaciones, empleados y schemas
-  // cada vez que llegaba una acción, causando una tormenta de llamadas a Notion.
+  // Borra sólo datos operativos que deben reflejarse inmediatamente.
+  // Los schemas y empleados permanecen en cache para proteger a Notion.
   for (const key of Array.from(cacheStore.keys())) {
-    if (String(key).startsWith("ops:") || String(key).startsWith("notifications:")) {
+    const cacheKey = String(key);
+    if (
+      cacheKey.startsWith("ops:") ||
+      cacheKey.startsWith("notifications:") ||
+      cacheKey.startsWith("dashboard:data:") ||
+      cacheKey.startsWith("dashboard:reports:") ||
+      cacheKey.startsWith("dashboard:payroll:") ||
+      cacheKey.startsWith("dashboard:timeclock:")
+    ) {
       cacheStore.delete(key);
     }
+  }
+
+  if (typeof ServerCache !== "undefined") {
+    ServerCache.clear("dashboard");
   }
 }
 
 function clearRoomCache(date = todayISO()){
   cacheStore.delete(`todayRooms:${date}`);
   cacheStore.delete(`roomsByDate:${date}`);
+  cacheStore.delete(`dashboard:data:${date}`);
+  cacheStore.delete("master-units");
 
   if (typeof ServerCache !== "undefined") {
     ServerCache.clear("rooms", date);
@@ -4858,156 +4872,463 @@ app.post("/upload-photo", upload.single("photo"), async (req, res) => {
     });
   }
 });
-app.get("/admin-dashboard-data", async (req, res) => {
-  try {
-    const [masterResponse, reportsResponse] = await Promise.all([
-      fetch(`http://localhost:${PORT}/master-units`).then(r => r.json()),
-      fetch(`http://localhost:${PORT}/operations-reports`).then(r => r.json()),
-    ]);
 
-    const units = masterResponse.units || [];
-    const reports = reportsResponse.reports || [];
+// =========================================================
+// DASHBOARD EJECUTIVO 417 MAID OS
+// Una sola fuente de datos para dashboard, app y estadísticas.
+// =========================================================
+function readRoomTextProperty(props, names = []) {
+  for (const name of names) {
+    const prop = props?.[name];
+    if (!prop) continue;
 
-    const inProgress = units.filter(u =>
-      String(u.status || "").toLowerCase().includes("progress")
-    ).length;
+    const value =
+      prop.title?.map((t) => t.plain_text).join("") ||
+      prop.rich_text?.map((t) => t.plain_text).join("") ||
+      prop.select?.name ||
+      prop.status?.name ||
+      prop.multi_select?.map((item) => item.name).join(", ") ||
+      prop.people?.map((person) => person.name).join(", ") ||
+      "";
 
-    const awaitingInspection = units.filter(u =>
-      String(u.status || "").toLowerCase().includes("awaiting")
-    ).length;
-
-    const ready = units.filter(u =>
-      String(u.status || "").toLowerCase().includes("ready")
-    ).length;
-
-    const arrivals = units.filter(u => !!u.arrival).length;
-
-    const urgent = units.filter(u =>
-      String(u.priority || "").toLowerCase() === "urgent"
-    ).length;
-
-    const problems = reports.filter(r =>
-      String(r.aiPriority || r.priority || "").toLowerCase().includes("urgent") ||
-      String(r.aiCategory || r.category || "").toLowerCase().includes("maintenance") ||
-      String(r.aiCategory || r.category || "").toLowerCase().includes("damage") ||
-      String(r.aiCategory || r.category || "").toLowerCase().includes("lost")
-    ).length;
-
-    res.json({
-      ok: true,
-      date: todayISO(),
-      stats: {
-        totalUnits: units.length,
-        inProgress,
-        awaitingInspection,
-        ready,
-        arrivals,
-        urgent,
-        reports: reports.length,
-        problems,
-      },
-      recentReports: reports.slice(0, 5),
-    });
-
-  } catch (error) {
-    console.error("Error en /admin-dashboard-data:", error.message);
-    res.status(500).json({
-      ok: false,
-      message: error.message,
-    });
+    if (String(value).trim()) return String(value).trim();
   }
-});
-app.get("/master-units", async (req, res) => {
-  try {
-    const pages = await queryTodayRooms();
-    const cacheKey = "master-units";
-const cached = getCache(cacheKey);
 
-if(cached){
-  return res.json(cached);
+  return "";
 }
 
-    const units = pages.map((page) => {
-      const props = page.properties;
+function dashboardStatusKey(status) {
+  const value = cleanEmployeeText(status);
 
+  if (value.includes("ready")) return "ready";
+  if (value.includes("inspection started")) return "inspectionStarted";
+  if (value.includes("awaiting inspection") || value.includes("cleaned")) {
+    return "awaitingInspection";
+  }
+  if (value.includes("progress") || value.includes("cleaning started")) {
+    return "inProgress";
+  }
+
+  return "pending";
+}
+
+function dashboardBuildingFromUnit(unit) {
+  const text = String(unit || "").trim().toUpperCase();
+  const explicitBuilding = text.match(/(?:-|–)\s*([A-Z])\s*$/);
+  if (explicitBuilding) return explicitBuilding[1];
+
+  const finalLetter = text.match(/\b([A-Z])\s*$/);
+  return finalLetter ? finalLetter[1] : "OTHER";
+}
+
+function pageToDashboardUnit(page) {
+  const props = page?.properties || {};
+  const flags = getRoomOpsFlags(page);
+
+  return {
+    id: page.id,
+    unit: readRoomTextProperty(props, ["Room Number", "Unit", "Room"]),
+    date: props.Date?.date?.start || "",
+    cleaner: readRoomTextProperty(props, ["Assigned Cleaner", "Cleaner"]),
+    inspector: readRoomTextProperty(props, ["Assigned Inspector", "Inspector"]),
+    status: readRoomTextProperty(props, ["Cleaning Status", "Status"]),
+    arrival: readCheckboxProp(page, ["Arrival", "arrival"]),
+    stayover: readCheckboxProp(page, ["Stayover", "Stay Over", "stayover"]),
+    urgent:
+      cleanEmployeeText(readRoomTextProperty(props, ["Priority"])) === "urgent" ||
+      readCheckboxProp(page, ["Urgent", "urgent"]),
+    priority: readRoomTextProperty(props, ["Priority"]) || "Normal",
+    startedAt: readDateProp(page, ["Started At", "Cleaning Started At"]),
+    finishedAt: readDateProp(page, ["Finished At", "Cleaning Finished At"]),
+    inspectionStartedAt: readDateProp(page, [
+      "Inspection Started At",
+      "Inspection Start At",
+    ]),
+    readyAt: readDateProp(page, ["Ready At", "Ready for Guest At"]),
+    guestOut: flags.guestOut,
+    preInspection: flags.preInspection,
+    preInspectionStarted: flags.preInspectionStarted,
+    building: dashboardBuildingFromUnit(
+      readRoomTextProperty(props, ["Room Number", "Unit", "Room"])
+    ),
+  };
+}
+
+async function getDashboardReports(date, forceRefresh = false) {
+  if (!NOTION_REPORTS_DATABASE_ID) return [];
+
+  const cacheKey = `dashboard:reports:${date}`;
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
+  if (cached) return cached;
+
+  let results = [];
+  let cursor;
+
+  do {
+    const query = {
+      database_id: NOTION_REPORTS_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: { equals: date },
+      },
+    };
+
+    if (cursor) query.start_cursor = cursor;
+
+    const response = await notion.databases.query(query);
+    results = results.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  const reports = results.map(reportPageToObject);
+  setCache(cacheKey, reports, date === todayISO() ? 15000 : 120000);
+  return reports;
+}
+
+async function getDashboardTimeClock(date, forceRefresh = false) {
+  if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
+
+  const cacheKey = `dashboard:timeclock:${date}`;
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
+  if (cached) return cached;
+
+  let results = [];
+  let cursor;
+
+  do {
+    const query = {
+      database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+      page_size: 100,
+    };
+
+    if (cursor) query.start_cursor = cursor;
+
+    const response = await notion.databases.query(query);
+    results = results.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  const records = results
+    .map((page) => {
+      const props = page.properties || {};
       return {
         id: page.id,
-        unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
-        date: props.Date?.date?.start || "",
-        cleaner:
-          props["Assigned Cleaner"]?.select?.name ||
-          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
-          "",
-        inspector:
-  props["Assigned Inspector"]?.multi_select
-    ?.map(i => i.name)
-    .join(", ") || "",
-        status: props["Cleaning Status"]?.status?.name || "",
-        arrival: !!props.Arrival?.checkbox,
-        priority: props.Priority?.select?.name || "Normal",
-        startedAt: props["Started At"]?.date?.start || "",
-        finishedAt: props["Finished At"]?.date?.start || "",
+        employee: readRoomTextProperty(props, ["Employee", "Name"]),
+        role: readRoomTextProperty(props, ["Role"]),
+        clockIn: props["Clock In"]?.date?.start || "",
+        clockOut: props["Clock Out"]?.date?.start || "",
+        status: readRoomTextProperty(props, ["Status"]),
+        hours: Number(props.Hours?.number || 0),
+        total: Number(props.Total?.number || 0),
       };
-    });
+    })
+    .filter((record) => record.clockIn && record.clockIn.slice(0, 10) === date);
 
-   const payload = {
-  ok: true,
-  date: todayISO(),
-  count: units.length,
-  units,
-};
+  setCache(cacheKey, records, date === todayISO() ? 15000 : 120000);
+  return records;
+}
 
-setCache(cacheKey, payload, 1500);
+async function getDashboardPayroll(date, forceRefresh = false) {
+  if (!NOTION_PAYROLL_DATABASE_ID) {
+    return { unitPay: 0, hourlyPay: 0, total: 0, unitRecords: 0 };
+  }
 
-res.json(payload);
+  const cacheKey = `dashboard:payroll:${date}`;
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
+  if (cached) return cached;
 
+  let records = [];
+  let cursor;
+
+  do {
+    const query = {
+      database_id: NOTION_PAYROLL_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: { equals: date },
+      },
+    };
+
+    if (cursor) query.start_cursor = cursor;
+
+    const response = await notion.databases.query(query);
+    records = records.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  const unitPay = records.reduce(
+    (sum, page) => sum + Number(page.properties?.Amount?.number || 0),
+    0
+  );
+
+  const result = {
+    unitPay: Number(unitPay.toFixed(2)),
+    hourlyPay: 0,
+    total: Number(unitPay.toFixed(2)),
+    unitRecords: records.length,
+  };
+
+  setCache(cacheKey, result, date === todayISO() ? 15000 : 120000);
+  return result;
+}
+
+function buildDashboardBuildings(units) {
+  const buildings = new Map();
+
+  for (const unit of units) {
+    const name = unit.building || "OTHER";
+
+    if (!buildings.has(name)) {
+      buildings.set(name, {
+        building: name,
+        total: 0,
+        pending: 0,
+        inProgress: 0,
+        awaitingInspection: 0,
+        inspectionStarted: 0,
+        ready: 0,
+        urgent: 0,
+        units: [],
+      });
+    }
+
+    const group = buildings.get(name);
+    const key = dashboardStatusKey(unit.status);
+    group.total += 1;
+    group[key] += 1;
+    if (unit.urgent) group.urgent += 1;
+    group.units.push(unit);
+  }
+
+  return Array.from(buildings.values()).sort((a, b) => {
+    if (a.building === "OTHER") return 1;
+    if (b.building === "OTHER") return -1;
+    return a.building.localeCompare(b.building);
+  });
+}
+
+function buildDashboardAlerts(units, reports) {
+  const alerts = [];
+
+  for (const unit of units) {
+    const status = dashboardStatusKey(unit.status);
+
+    if (unit.urgent && status === "pending") {
+      alerts.push({
+        type: "urgent_room",
+        severity: "high",
+        unit: unit.unit,
+        message: "Habitación urgente todavía sin comenzar.",
+      });
+    }
+
+    if (!unit.cleaner && status !== "ready") {
+      alerts.push({
+        type: "missing_cleaner",
+        severity: "high",
+        unit: unit.unit,
+        message: "Habitación sin limpiador asignado.",
+      });
+    }
+
+    if (
+      ["awaitingInspection", "inspectionStarted"].includes(status) &&
+      !unit.inspector
+    ) {
+      alerts.push({
+        type: "missing_inspector",
+        severity: "medium",
+        unit: unit.unit,
+        message: "Habitación terminada sin inspector asignado.",
+      });
+    }
+  }
+
+  for (const report of reports.slice(0, 25)) {
+    const category = cleanEmployeeText(report.aiCategory || report.category);
+    const priority = cleanEmployeeText(report.aiPriority || report.priority);
+
+    if (
+      priority.includes("urgent") ||
+      category.includes("maintenance") ||
+      category.includes("damage") ||
+      category.includes("lost")
+    ) {
+      alerts.push({
+        type: "operations_report",
+        severity: priority.includes("urgent") ? "high" : "medium",
+        unit: report.unit || "",
+        message: report.message || report.note || "Reporte operativo pendiente.",
+      });
+    }
+  }
+
+  return alerts.slice(0, 50);
+}
+
+function calculateDashboardAverages(units) {
+  const cleaningMinutes = [];
+
+  for (const unit of units) {
+    if (!unit.startedAt || !unit.finishedAt) continue;
+    const start = new Date(unit.startedAt).getTime();
+    const finish = new Date(unit.finishedAt).getTime();
+    const minutes = (finish - start) / 60000;
+
+    if (Number.isFinite(minutes) && minutes >= 0 && minutes <= 720) {
+      cleaningMinutes.push(minutes);
+    }
+  }
+
+  const averageCleaningMinutes = cleaningMinutes.length
+    ? cleaningMinutes.reduce((sum, value) => sum + value, 0) / cleaningMinutes.length
+    : 0;
+
+  return {
+    averageCleaningMinutes: Number(averageCleaningMinutes.toFixed(1)),
+    averageInspectionMinutes: 0,
+    completedWithTime: cleaningMinutes.length,
+  };
+}
+
+async function buildDashboardData(date = todayISO(), forceRefresh = false) {
+  const cacheKey = `dashboard:data:${date}`;
+  const memoryCached = !forceRefresh ? ServerCache.get("dashboard", date) : null;
+  if (memoryCached) return memoryCached.value;
+
+  const ttlCached = !forceRefresh ? getCache(cacheKey) : null;
+  if (ttlCached) {
+    ServerCache.set("dashboard", date, ttlCached);
+    return ttlCached;
+  }
+
+  const pages = await queryRoomsByDate(date, forceRefresh);
+  const units = pages.map(pageToDashboardUnit);
+
+  // Las consultas secundarias se hacen en paralelo y usan su propio cache.
+  const [reports, timeClock, payroll] = await Promise.all([
+    getDashboardReports(date, forceRefresh).catch((error) => {
+      console.error("Dashboard reports:", error.message);
+      return [];
+    }),
+    getDashboardTimeClock(date, forceRefresh).catch((error) => {
+      console.error("Dashboard time clock:", error.message);
+      return [];
+    }),
+    getDashboardPayroll(date, forceRefresh).catch((error) => {
+      console.error("Dashboard payroll:", error.message);
+      return { unitPay: 0, hourlyPay: 0, total: 0, unitRecords: 0 };
+    }),
+  ]);
+
+  const stats = {
+    totalUnits: units.length,
+    pending: 0,
+    inProgress: 0,
+    awaitingInspection: 0,
+    inspectionStarted: 0,
+    ready: 0,
+    arrivals: units.filter((unit) => unit.arrival).length,
+    stayovers: units.filter((unit) => unit.stayover).length,
+    urgent: units.filter((unit) => unit.urgent).length,
+    unassignedCleaner: units.filter((unit) => !unit.cleaner).length,
+    unassignedInspector: units.filter(
+      (unit) =>
+        ["awaitingInspection", "inspectionStarted"].includes(
+          dashboardStatusKey(unit.status)
+        ) && !unit.inspector
+    ).length,
+    reports: reports.length,
+    problems: 0,
+  };
+
+  for (const unit of units) stats[dashboardStatusKey(unit.status)] += 1;
+
+  const alerts = buildDashboardAlerts(units, reports);
+  stats.problems = alerts.filter((alert) => alert.type === "operations_report").length;
+
+  const activeEmployees = timeClock.filter(
+    (record) => record.clockIn && !record.clockOut && cleanEmployeeText(record.status) !== "completed"
+  );
+
+  const hourlyPay = timeClock.reduce(
+    (sum, record) => sum + Number(record.total || 0),
+    0
+  );
+
+  payroll.hourlyPay = Number(hourlyPay.toFixed(2));
+  payroll.total = Number((payroll.unitPay + payroll.hourlyPay).toFixed(2));
+
+  const payload = {
+    ok: true,
+    date,
+    generatedAt: new Date().toISOString(),
+    stats,
+    averages: calculateDashboardAverages(units),
+    employees: {
+      active: activeEmployees.length,
+      clockedIn: activeEmployees,
+      recordsToday: timeClock.length,
+    },
+    payroll,
+    buildings: buildDashboardBuildings(units),
+    alerts,
+    units,
+    recentReports: reports.slice(0, 10),
+    timeline: systemTimeline.slice(0, 100),
+  };
+
+  setCache(cacheKey, payload, date === todayISO() ? 10000 : 120000);
+  ServerCache.set("dashboard", date, payload);
+  return payload;
+}
+
+app.get("/dashboard-data", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const payload = await buildDashboardData(date, forceRefresh);
+    res.json(payload);
   } catch (error) {
-    console.error("Error en /master-units:", error.message);
-
+    console.error("Error en /dashboard-data:", error.message);
     res.status(500).json({
       ok: false,
       message: error.message,
-      units: [],
+      date: String(req.query.date || todayISO()),
     });
   }
 });
+
+// Compatibilidad con el dashboard anterior.
+app.get("/admin-dashboard-data", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const payload = await buildDashboardData(date, forceRefresh);
+    res.json(payload);
+  } catch (error) {
+    console.error("Error en /admin-dashboard-data:", error.message);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 app.get("/master-units", async (req, res) => {
   try {
-    const pages = await queryTodayRooms();
-
-    const units = pages.map((page) => {
-      const props = page.properties;
-
-      return {
-        id: page.id,
-        unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
-        date: props.Date?.date?.start || "",
-        cleaner:
-          props["Assigned Cleaner"]?.select?.name ||
-          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
-          "",
-      inspector:
-  props["Assigned Inspector"]?.multi_select
-    ?.map(i => i.name)
-    .join(", ") || "",
-        status: props["Cleaning Status"]?.status?.name || "",
-        arrival: !!props.Arrival?.checkbox,
-        priority: props.Priority?.select?.name || "Normal",
-        startedAt: props["Started At"]?.date?.start || "",
-        finishedAt: props["Finished At"]?.date?.start || "",
-      };
-    });
+    const date = String(req.query.date || todayISO()).trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const pages = await queryRoomsByDate(date, forceRefresh);
+    const units = pages.map(pageToDashboardUnit);
 
     res.json({
       ok: true,
-      date: todayISO(),
+      date,
       count: units.length,
       units,
     });
-
   } catch (error) {
     console.error("Error en /master-units:", error.message);
-
     res.status(500).json({
       ok: false,
       message: error.message,
@@ -5015,6 +5336,7 @@ app.get("/master-units", async (req, res) => {
     });
   }
 });
+
 app.post("/master-action", async (req, res) => {
   try {
     const { action, unit, name, note, role } = req.body;
