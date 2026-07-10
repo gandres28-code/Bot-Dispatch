@@ -631,6 +631,26 @@ document.addEventListener("keydown",e=>{
   }
 });
 
+function mergeInspectorRoomUpdate(update){
+  if(!update || !update.unit)return false;
+
+  const itemIndex=lastUnits.findIndex(item=>{
+    return String(item.id||"")===String(update.id||update.pageId||"") ||
+           String(item.unit||"")===String(update.unit||"");
+  });
+
+  if(itemIndex<0)return false;
+
+  lastUnits[itemIndex]={
+    ...lastUnits[itemIndex],
+    ...update,
+  };
+
+  updateStats(lastUnits);
+  renderAssignments();
+  return true;
+}
+
 let inspectorSocket=null;
 let inspectorRealtimeTimer=null;
 let inspectorRealtimeRunning=false;
@@ -644,10 +664,6 @@ async function refreshInspectorRealtime(){
 
   try{
     await loadInspectorAssignments(true);
-
-    if(currentInspectorName){
-      await loadMyHistory(true);
-    }
   }catch(error){
     console.error("Error actualizando inspecciones en tiempo real:",error);
   }finally{
@@ -681,16 +697,41 @@ try{
 
   inspectorSocket.on("assignments-updated",payload=>{
     console.log("🔔 Asignaciones de inspección actualizadas:",payload);
+
+    if(payload?.lightweight || payload?.reason==="server-room-update"){
+      return;
+    }
+
     scheduleInspectorRealtimeRefresh();
+  });
+
+  inspectorSocket.on("room-updated",update=>{
+    console.log("⚡ Unidad actualizada:",update);
+
+    const merged=mergeInspectorRoomUpdate(update);
+
+    if(!merged && currentInspectorCode){
+      scheduleInspectorRealtimeRefresh();
+    }
   });
 
   inspectorSocket.on("rooms-updated",payload=>{
     console.log("🔔 Habitaciones actualizadas:",payload);
+
+    if(payload?.lightweight || payload?.reason==="server-room-update"){
+      return;
+    }
+
     scheduleInspectorRealtimeRefresh();
   });
 
   inspectorSocket.on("ops-update",payload=>{
     console.log("🔔 Operaciones actualizadas:",payload);
+
+    if(payload?.unit && payload?.action){
+      return;
+    }
+
     scheduleInspectorRealtimeRefresh();
   });
 
