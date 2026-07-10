@@ -2065,7 +2065,7 @@ function startCleanerAutoRefresh(){
     if(currentCleanerName){
       loadCleanerAssignments(false);
     }
-  }, 15000);
+  }, 30000);
 }
 
 
@@ -2505,17 +2505,75 @@ window.addEventListener("focus", () => {
 });
 
 let socket = null;
+let realtimeRefreshTimer = null;
+let realtimeRefreshRunning = false;
+
+async function refreshCleanerRealtime(){
+  if(!currentCleanerName || realtimeRefreshRunning){
+    return;
+  }
+
+  realtimeRefreshRunning = true;
+
+  try{
+    await loadCleanerAssignments(false);
+    await loadMyReports();
+  }catch(error){
+    console.error("Error actualizando panel en tiempo real:", error);
+  }finally{
+    realtimeRefreshRunning = false;
+  }
+}
+
+function scheduleCleanerRealtimeRefresh(){
+  clearTimeout(realtimeRefreshTimer);
+
+  realtimeRefreshTimer = setTimeout(() => {
+    refreshCleanerRealtime();
+  }, 250);
+}
 
 try{
-  socket = io();
+  socket = io({
+    transports:["websocket","polling"],
+    reconnection:true,
+    reconnectionAttempts:Infinity,
+    reconnectionDelay:1000
+  });
 
-  socket.on("ops-update", () => {
+  socket.on("connect", () => {
+    console.log("📡 Panel de limpieza conectado en tiempo real");
+
     if(currentCleanerName){
-      loadCleanerAssignments(false);
-      loadMyReports();
+      scheduleCleanerRealtimeRefresh();
     }
   });
-}catch(error){}
+
+  socket.on("assignments-updated", payload => {
+    console.log("🔔 Asignaciones actualizadas:", payload);
+    scheduleCleanerRealtimeRefresh();
+  });
+
+  socket.on("rooms-updated", payload => {
+    console.log("🔔 Habitaciones actualizadas:", payload);
+    scheduleCleanerRealtimeRefresh();
+  });
+
+  socket.on("ops-update", payload => {
+    console.log("🔔 Operaciones actualizadas:", payload);
+    scheduleCleanerRealtimeRefresh();
+  });
+
+  socket.on("disconnect", reason => {
+    console.log("📴 Tiempo real desconectado:", reason);
+  });
+
+  socket.on("connect_error", error => {
+    console.warn("⚠️ Error de conexión Socket.IO:", error.message);
+  });
+}catch(error){
+  console.warn("⚠️ No se pudo iniciar Socket.IO:", error);
+}
 </script>
 </body>
 </html>
