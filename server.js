@@ -2484,22 +2484,51 @@ for (const page of matches) {
   clearRoomCache(todayISO());
   clearAssignmentCaches(todayISO());
 
-  // Actualiza el snapshot local para evitar que el watcher vuelva a publicar
-  // temporalmente una versión anterior de la misma habitación.
-  try {
-    const freshPages = await queryTodayRooms(true);
-    notionWatcherSnapshot = buildAssignmentSnapshot(freshPages);
-  } catch (snapshotError) {
-    console.log(
-      "⚠️ No se pudo refrescar snapshot después de la acción:",
-      snapshotError.message
-    );
-  }
+  const existingFlags = getRoomOpsFlags(page);
 
+  const roomUpdatePayload = {
+    id: page.id,
+    pageId: page.id,
+    unit: fullUnitTitle,
+    action,
+    status:
+      status ||
+      page.properties?.["Cleaning Status"]?.status?.name ||
+      "",
+    guestOut:
+      action === "GUEST_OUT"
+        ? true
+        : existingFlags.guestOut,
+    preInspectionStarted:
+      action === "PRE_INSPECTION_START"
+        ? true
+        : action === "PRE_INSPECTION_COMPLETE"
+          ? false
+          : existingFlags.preInspectionStarted,
+    preInspection:
+      action === "PRE_INSPECTION_COMPLETE"
+        ? true
+        : existingFlags.preInspection,
+    startedAt:
+      action === "START"
+        ? now
+        : page.properties?.["Started At"]?.date?.start || "",
+    finishedAt:
+      action === "DONE"
+        ? now
+        : page.properties?.["Finished At"]?.date?.start || "",
+    updatedAt: now,
+  };
+
+  // Evento ligero para actualizar solo una tarjeta en todos los teléfonos.
+  io.emit("room-updated", roomUpdatePayload);
+
+  // Evento general como respaldo para cambios de asignación o cambios externos.
   broadcastAssignmentUpdate("server-room-update", {
     pageId: page.id,
     unit: fullUnitTitle,
     action,
+    lightweight: true,
   });
 
   await saveDailyLog({
@@ -4227,7 +4256,7 @@ app.get("/inspector-assignments", async (req, res) => {
       units,
     };
 
-    setCache(cacheKey, payload, 5000);
+    setCache(cacheKey, payload, 1500);
 
     res.json(payload);
   } catch (error) {
@@ -4309,7 +4338,7 @@ if(cached){
       units,
     };
     
-    setCache(cacheKey, payload, 5000);
+    setCache(cacheKey, payload, 1500);
     
     res.json(payload);
 
@@ -4928,7 +4957,7 @@ if(cached){
   units,
 };
 
-setCache(cacheKey, payload, 5000);
+setCache(cacheKey, payload, 1500);
 
 res.json(payload);
 
