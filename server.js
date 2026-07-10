@@ -1160,6 +1160,28 @@ function hasProp(page, name) {
 }
 
 function getRoomOpsFlags(page) {
+  const preInspection = readCheckboxProp(page, [
+    "Pre Inspection",
+    "Pre-Inspection",
+    "Pre Inspected",
+    "pre inspection",
+    "Pre inspection",
+  ]);
+
+  const preInspectionStartedAt = readDateProp(page, [
+    "Pre Inspection Started At",
+    "Pre-Inspection Started At",
+    "Pre Inspection Start At",
+    "pre inspection started at",
+  ]);
+
+  const preInspectionStartedCheckbox = readCheckboxProp(page, [
+    "Pre Inspection Started",
+    "Pre-Inspection Started",
+    "pre inspection started",
+    "Pre inspection started",
+  ]);
+
   return {
     guestOut: readCheckboxProp(page, [
       "Guest Out",
@@ -1175,30 +1197,21 @@ function getRoomOpsFlags(page) {
       "Guest Out Time",
     ]),
 
-    preInspection: readCheckboxProp(page, [
-      "Pre Inspection",
-      "Pre-Inspection",
-      "Pre Inspected",
-      "pre inspection",
-      "Pre inspection",
-    ]),
+    preInspection,
 
-    preInspectionStarted: readCheckboxProp(page, [
-      "Pre Inspection Started",
-      "Pre-Inspection Started",
-      "pre inspection started",
-    ]),
+    // Si no existe el checkbox, la fecha de inicio funciona como respaldo.
+    // Cuando la pre inspección ya está completada, deja de considerarse iniciada.
+    preInspectionStarted:
+      !preInspection &&
+      (preInspectionStartedCheckbox || !!preInspectionStartedAt),
 
-    preInspectionStartedAt: readDateProp(page, [
-      "Pre Inspection Started At",
-      "Pre-Inspection Started At",
-      "Pre Inspection Start At",
-    ]),
+    preInspectionStartedAt,
 
     preInspectionCompletedAt: readDateProp(page, [
       "Pre Inspection Completed At",
       "Pre-Inspection Completed At",
       "Pre Inspection At",
+      "pre inspection completed at",
     ]),
   };
 }
@@ -2349,7 +2362,8 @@ for (const page of matches) {
   }
 
   if (action === "PRE_INSPECTION_START") {
-    const startedProperty = setFirstExistingCheckbox(
+    // El checkbox es opcional. Si no existe, usamos la fecha como estado.
+    setFirstExistingCheckbox(
       page,
       props,
       [
@@ -2361,7 +2375,7 @@ for (const page of matches) {
       true
     );
 
-    setFirstExistingDate(
+    const startedAtProperty = setFirstExistingDate(
       page,
       props,
       [
@@ -2373,9 +2387,9 @@ for (const page of matches) {
       now
     );
 
-    if (!startedProperty) {
+    if (!startedAtProperty) {
       throw new Error(
-        'No encontré en Notion una propiedad checkbox llamada "Pre Inspection Started"'
+        'No encontré en Notion una propiedad de fecha llamada "Pre Inspection Started At"'
       );
     }
   }
