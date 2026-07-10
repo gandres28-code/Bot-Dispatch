@@ -90,8 +90,98 @@ function openReportForUnit(event,unit){if(event){event.stopPropagation();event.p
 function addSelectedPhotos(){const input=document.getElementById("photoInput"),files=Array.from(input.files||[]);files.forEach(file=>{const key=`${file.name}-${file.size}-${file.lastModified}`;if(!selectedReportFiles.some(e=>`${e.name}-${e.size}-${e.lastModified}`===key))selectedReportFiles.push(file)});input.value="";previewPhotos()}function previewPhotos(){const p=document.getElementById("photoPreview");p.innerHTML="";selectedReportFiles.slice(0,12).forEach((file,i)=>{const url=URL.createObjectURL(file);p.innerHTML+=`<div style="position:relative;"><img src="${url}"><button type="button" onclick="removeSelectedPhoto(${i})" style="position:absolute;right:3px;top:3px;width:24px;height:24px;padding:0;border-radius:999px;background:#dc2626;font-size:12px;line-height:1;margin:0;">×</button></div>`});if(selectedReportFiles.length>12)p.innerHTML+=`<div class="muted">+${selectedReportFiles.length-12} fotos más</div>`}function removeSelectedPhoto(i){selectedReportFiles.splice(i,1);previewPhotos()}
 async function sendSmartReport(action){if(isSending)return;const name=document.getElementById("name").value.trim()||currentInspectorName,unit=selectedUnit||document.getElementById("unit").value.trim().toUpperCase(),message=document.getElementById("note").value.trim();if(!name){alert("Sesión no válida.");location.href="/launch";return}if(!unit){alert("Selecciona una unidad");return}if(!message&&!selectedReportFiles.length){alert("Escribe el mensaje del reporte o agrega fotos");return}const key=`${action}-${unit}-${name}-${message}-${selectedReportFiles.length}`,now=Date.now();if(key===lastSendKey&&now-lastSendTime<30000){showBigStatus("Ya fue enviado. Espera unos segundos.","error");playBeep("error");vibratePhone("error");return}isSending=true;lastSendKey=key;lastSendTime=now;setButtonsDisabled(true);showBigStatus("Subiendo reporte y fotos...","loading");try{const fd=new FormData();fd.append("unit",unit);fd.append("employee",name);fd.append("name",name);fd.append("role","Inspector");fd.append("action",action);fd.append("message",message);fd.append("note",message);fd.append("sourcePanel","Inspector Panel");selectedReportFiles.forEach(f=>fd.append("photos",f));const res=await fetch("/submit-report",{method:"POST",body:fd}),data=await res.json();if(data.success||data.ok){showBigStatus(data.message||"Reporte enviado correctamente","success");playBeep("success");vibratePhone("success");document.getElementById("note").value="";selectedReportFiles=[];document.getElementById("photoInput").value="";document.getElementById("photoPreview").innerHTML="";closeReportPanel();setTimeout(()=>loadMyHistory(true),500)}else{showBigStatus(data.message||data.error||"Error","error");playBeep("error");vibratePhone("error")}}catch(e){showBigStatus("Error: "+e.message,"error");playBeep("error");vibratePhone("error")}finally{isSending=false;setButtonsDisabled(false)}}
 async function loadMyHistory(silent=false){const name=document.getElementById("name").value.trim()||currentInspectorName,card=document.getElementById("historyCard"),list=document.getElementById("historyList");if(!name){card.classList.add("hidden");return}card.classList.remove("hidden");if(!silent)list.innerHTML="<div class='empty'>Cargando historial...</div>";try{const params=new URLSearchParams({employee:name,role:"Inspector"});if(selectedUnit)params.append("unit",selectedUnit);const res=await fetch(`/my-reports?${params.toString()}&t=${Date.now()}`),data=await res.json(),reports=data.reports||data.events||[];if(!reports.length){list.innerHTML="<div class='empty'>Todavía no hay reportes enviados hoy.</div>";return}let html="";reports.slice(0,20).forEach(item=>{const time=item.timeDisplay||item.time||item.displayTime||"",unit=item.unit||"",action=item.aiCategory||item.category||item.action||"Reporte",msg=item.message||item.originalMessage||item.note||item.aiSummary||item.summary||"",sent=item.hotsosSent?"HotSOS enviado":(item.needsHotSOS?"Pendiente HotSOS":"Recibido"),photos=item.photos||[];html+=`<div class="history-item"><div class="history-top"><span>${escapeHtml(time)} · ${escapeHtml(unit)}</span><span>${escapeHtml(sent)}</span></div><div class="muted">${escapeHtml(action)}</div>${msg?`<div class="history-note">${escapeHtml(msg)}</div>`:""}${photos.length?`<div class="photo-preview" style="margin-top:10px;">${photos.map(photo=>{const url=photo.url||photo.photoUrl||"";return url?`<a href="${url}" target="_blank"><img src="${url}"></a>`:""}).join("")}</div>`:""}</div>`});list.innerHTML=html}catch(e){list.innerHTML="<div class='empty'>No se pudo cargar el historial.</div>"}}
-function startInspectorAutoRefresh(){if(autoRefreshTimer)return;autoRefreshTimer=setInterval(()=>{if(currentInspectorCode&&!isSending&&!selectedUnit)loadInspectorAssignments(true)},60000)}function openSettingsMenu(){document.getElementById("settingsSheet").classList.remove("hidden")}function closeSettingsMenu(){document.getElementById("settingsSheet").classList.add("hidden")}
-document.addEventListener("DOMContentLoaded",bootInspectorPanel);document.addEventListener("visibilitychange",()=>{if(!document.hidden&&currentInspectorCode)loadInspectorAssignments(true)});window.addEventListener("focus",()=>{if(currentInspectorCode)loadInspectorAssignments(true)});document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeReportPanel();closeSettingsMenu()}});try{const socket=io();socket.on("ops-update",()=>{if(currentInspectorCode&&!isSending&&!selectedUnit)loadInspectorAssignments(true);if(currentInspectorName&&!isSending&&!selectedUnit)loadMyHistory(true)})}catch(e){}
+function startInspectorAutoRefresh(){if(autoRefreshTimer)return;autoRefreshTimer=setInterval(()=>{if(currentInspectorCode&&!isSending)loadInspectorAssignments(true)},30000)}function openSettingsMenu(){document.getElementById("settingsSheet").classList.remove("hidden")}function closeSettingsMenu(){document.getElementById("settingsSheet").classList.add("hidden")}
+document.addEventListener("DOMContentLoaded",bootInspectorPanel);
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden&&currentInspectorCode){
+    scheduleInspectorRealtimeRefresh();
+  }
+});
+window.addEventListener("focus",()=>{
+  if(currentInspectorCode){
+    scheduleInspectorRealtimeRefresh();
+  }
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){
+    closeReportPanel();
+    closeSettingsMenu();
+  }
+});
+
+let inspectorSocket=null;
+let inspectorRealtimeTimer=null;
+let inspectorRealtimeRunning=false;
+
+async function refreshInspectorRealtime(){
+  if(!currentInspectorCode||isSending||inspectorRealtimeRunning){
+    return;
+  }
+
+  inspectorRealtimeRunning=true;
+
+  try{
+    await loadInspectorAssignments(true);
+
+    if(currentInspectorName){
+      await loadMyHistory(true);
+    }
+  }catch(error){
+    console.error("Error actualizando inspecciones en tiempo real:",error);
+  }finally{
+    inspectorRealtimeRunning=false;
+  }
+}
+
+function scheduleInspectorRealtimeRefresh(){
+  clearTimeout(inspectorRealtimeTimer);
+
+  inspectorRealtimeTimer=setTimeout(()=>{
+    refreshInspectorRealtime();
+  },250);
+}
+
+try{
+  inspectorSocket=io({
+    transports:["websocket","polling"],
+    reconnection:true,
+    reconnectionAttempts:Infinity,
+    reconnectionDelay:1000
+  });
+
+  inspectorSocket.on("connect",()=>{
+    console.log("📡 Panel de inspectores conectado en tiempo real");
+
+    if(currentInspectorCode){
+      scheduleInspectorRealtimeRefresh();
+    }
+  });
+
+  inspectorSocket.on("assignments-updated",payload=>{
+    console.log("🔔 Asignaciones de inspección actualizadas:",payload);
+    scheduleInspectorRealtimeRefresh();
+  });
+
+  inspectorSocket.on("rooms-updated",payload=>{
+    console.log("🔔 Habitaciones actualizadas:",payload);
+    scheduleInspectorRealtimeRefresh();
+  });
+
+  inspectorSocket.on("ops-update",payload=>{
+    console.log("🔔 Operaciones actualizadas:",payload);
+    scheduleInspectorRealtimeRefresh();
+  });
+
+  inspectorSocket.on("disconnect",reason=>{
+    console.log("📴 Tiempo real desconectado:",reason);
+  });
+
+  inspectorSocket.on("connect_error",error=>{
+    console.warn("⚠️ Error de conexión Socket.IO:",error.message);
+  });
+}catch(error){
+  console.warn("⚠️ No se pudo iniciar Socket.IO:",error);
+}
 </script>
 </body>
 </html>
