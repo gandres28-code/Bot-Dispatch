@@ -6824,6 +6824,27 @@ function cleanerProfilePayrollObject(page) {
   };
 }
 
+function cleanerProfilePhotoObject(page) {
+  const props = page?.properties || {};
+
+  return {
+    id: page.id,
+    date: readPlainTextFromProp(props.Date || props.date),
+    reportId: readPlainTextFromProp(props["Report ID"] || props.Report),
+    unit: readPlainTextFromProp(props.Unit || props.unit),
+    employee: readPlainTextFromProp(
+      props.Employee || props["Employee Name"] || props.Name
+    ),
+    url: (props["Photo URL"] || props.URL || props["Image URL"] || {})?.url || "",
+  };
+}
+
+function cleanerProfileReportId(value) {
+  let reportId = String(value || "").trim().split(" - ")[0];
+  if (reportId && !reportId.startsWith("RPT-")) reportId = `RPT-${reportId}`;
+  return reportId;
+}
+
 async function buildCleanerProfileData({ name, start, end, forceRefresh = false }) {
   const cleanName = statisticsNormalizePerson(name);
 
@@ -6832,15 +6853,16 @@ async function buildCleanerProfileData({ name, start, end, forceRefresh = false 
   }
 
   const dates = statisticsDateRange(start, end, 31);
-  const cacheKey = `cleaner-profile:v1:${cleanEmployeeText(cleanName)}:${start}:${end}`;
+  const cacheKey = `cleaner-profile:v2:${cleanEmployeeText(cleanName)}:${start}:${end}`;
   const cached = forceRefresh ? null : getCache(cacheKey);
   if (cached) return cached;
 
-  const [roomPages, payrollPages, logPages, reportPages] = await Promise.all([
+  const [roomPages, payrollPages, logPages, reportPages, photoPages] = await Promise.all([
     queryPagesByDateRange(NOTION_DATABASE_ID, start, end, { forceRefresh }),
     queryPagesByDateRange(NOTION_PAYROLL_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
     queryPagesByDateRange(NOTION_LOG_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
     queryPagesByDateRange(NOTION_REPORTS_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+    queryPagesByDateRange(NOTION_REPORT_PHOTOS_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
   ]);
 
   const allUnits = roomPages.map(pageToDashboardUnit);
@@ -6875,6 +6897,36 @@ async function buildCleanerProfileData({ name, start, end, forceRefresh = false 
   const reports = reportPages
     .map(reportPageToObject)
     .filter((report) => cleanerProfileNameMatches(report.employee, cleanName));
+
+  const photos = photoPages
+    .map(cleanerProfilePhotoObject)
+    .filter((photo) =>
+      cleanerProfileNameMatches(photo.employee, cleanName) ||
+      reports.some((report) =>
+        cleanerProfileReportId(report.reportId) === cleanerProfileReportId(photo.reportId)
+      )
+    )
+    .filter((photo) => !!photo.url);
+
+  const photosByReportId = new Map();
+  for (const photo of photos) {
+    const reportId = cleanerProfileReportId(photo.reportId);
+    if (!photosByReportId.has(reportId)) photosByReportId.set(reportId, []);
+    photosByReportId.get(reportId).push(photo);
+  }
+
+  const reportsByUnitDate = new Map();
+  for (const report of reports) {
+    const key = `${String(report.date).slice(0, 10)}|${normalizeRoom(report.unit)}`;
+    const reportId = cleanerProfileReportId(report.reportId);
+
+    if (!reportsByUnitDate.has(key)) reportsByUnitDate.set(key, []);
+    reportsByUnitDate.get(key).push({
+      ...report,
+      reportId,
+      photos: photosByReportId.get(reportId) || [],
+    });
+  }
 
   const payrollByUnitDate = new Map();
   for (const record of payroll) {
@@ -6934,6 +6986,18 @@ async function buildCleanerProfileData({ name, start, end, forceRefresh = false 
     const qualityScore = completed
       ? Math.max(0, Number((((1 - inspectionErrors) / 1) * 100).toFixed(1)))
       : null;
+    const unitReports = reportsByUnitDate.get(key) || [];
+    const unitPhotos = unitReports.flatMap((report) => report.photos || []);
+    const actionHistory = unitLogs
+      .map((log) => ({
+        action: log.action || "",
+        time: log.time || "",
+        note: log.note || "",
+        category: log.category || "",
+        priority: log.priority || "",
+        inspector: log.inspector || "",
+      }))
+      .sort((a, b) => String(a.time).localeCompare(String(b.time)));
 
     if (day) {
       day.assigned += 1;
@@ -6967,6 +7031,23 @@ async function buildCleanerProfileData({ name, start, end, forceRefresh = false 
       issues,
       supplies,
       qualityScore,
+      reportsCount: unitReports.length,
+      photosCount: unitPhotos.length,
+      reports: unitReports.map((report) => ({
+        reportId: report.reportId,
+        action: report.action,
+        message: report.message,
+        aiCategory: report.aiCategory,
+        aiPriority: report.aiPriority,
+        aiSummary: report.aiSummary,
+        status: report.status,
+        time: report.time,
+        photos: (report.photos || []).map((photo) => ({
+          id: photo.id,
+          url: photo.url,
+        })),
+      })),
+      actions: actionHistory,
     };
   });
 
