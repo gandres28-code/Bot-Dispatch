@@ -30,7 +30,7 @@
     .panel{background:white;border:1px solid var(--line);border-radius:21px;box-shadow:var(--shadow);overflow:hidden}
     .panel-head{padding:18px 19px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}.panel-head h2{font-size:16px;margin:0}.panel-head p{font-size:11px;color:var(--muted);margin:4px 0 0}.pill{padding:6px 9px;border-radius:999px;background:#f3f5f9;color:var(--muted);font-size:11px;font-weight:800}
     .table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;min-width:760px}.table th{text-align:left;padding:11px 14px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:#fbfcfe;border-bottom:1px solid var(--line)}.table td{padding:13px 14px;border-bottom:1px solid var(--line);font-size:12px}.table tr:last-child td{border-bottom:0}
-    .person{font-weight:850}.sub{display:block;color:var(--muted);font-size:10px;margin-top:3px}.metric-good{color:var(--green);font-weight:850}.metric-warn{color:var(--orange);font-weight:850}.metric-bad{color:var(--red);font-weight:850}
+    .person{font-weight:850}.person-link{border:0;background:none;padding:0;color:var(--blue);font-weight:850;cursor:pointer;text-align:left}.person-link:hover{text-decoration:underline}.sub{display:block;color:var(--muted);font-size:10px;margin-top:3px}.metric-good{color:var(--green);font-weight:850}.metric-warn{color:var(--orange);font-weight:850}.metric-bad{color:var(--red);font-weight:850}
     .bar{height:7px;border-radius:999px;background:#edf0f5;overflow:hidden;margin-top:6px;min-width:90px}.fill{height:100%;background:var(--blue);border-radius:inherit}
     .rankings{padding:13px 16px 16px}.rank{display:flex;gap:11px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.rank:last-child{border:0}.rank-icon{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;background:#f2f4f9}.rank-copy{min-width:0;flex:1}.rank-copy b{font-size:12px;display:block}.rank-copy span{font-size:11px;color:var(--muted);display:block;margin-top:3px}.rank-value{font-size:12px;font-weight:850;text-align:right}
     .building-list{padding:14px 16px}.building{padding:12px 0;border-bottom:1px solid var(--line)}.building:last-child{border:0}.building-top{display:flex;justify-content:space-between;gap:8px}.building-name{font-size:12px;font-weight:850}.building-meta{font-size:10px;color:var(--muted)}.building .bar{margin-top:9px}.building-details{display:flex;gap:14px;margin-top:7px;color:var(--muted);font-size:10px}
@@ -185,11 +185,33 @@
     return value>=good?"metric-good":value>=warn?"metric-warn":"metric-bad";
   }
 
+
+  function openCleanerProfile(name){
+    const end=$("dateInput").value||localToday();
+    const start=$("historyStart").value||dateOffsetISO(end,-6);
+    const url=`/cleaner-profile?name=${encodeURIComponent(name)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+
+    try{
+      if(window.parent&&window.parent!==window){
+        window.parent.postMessage({
+          type:"417-open-module",
+          title:`Perfil · ${name}`,
+          url,
+          returnTitle:"Estadísticas",
+          returnUrl:"/statistics"
+        },"*");
+        return;
+      }
+    }catch(error){}
+
+    window.location.href=url;
+  }
+
   function renderCleaners(cleaners){
     set("cleanerCount",`${cleaners.length} cleaners`);
     $("cleanerRows").innerHTML=cleaners.length?cleaners.map(c=>`
       <tr>
-        <td><span class="person">${esc(c.name)}</span><span class="sub">${c.assigned} asignadas · ${c.arrivals} arrivals</span></td>
+        <td><button class="person-link" onclick="openCleanerProfile('${esc(c.name)}')">${esc(c.name)}</button><span class="sub">${c.assigned} asignadas · ${c.arrivals} arrivals</span></td>
         <td><b>${c.completed}</b><span class="sub">${c.completionRate}% completado</span></td>
         <td>${c.averageMinutes?`${c.averageMinutes} min`:"Sin dato"}<span class="sub">${c.roomsPerHour?`${c.roomsPerHour}/hora`:""}</span></td>
         <td><b>${money(c.payroll)}</b></td>
