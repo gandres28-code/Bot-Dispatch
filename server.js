@@ -5839,6 +5839,669 @@ function startNotionAssignmentWatcher() {
 
 startNotionAssignmentWatcher();
 
+
+// =========================================================
+// ESTADÍSTICAS 417 MAID OS v1
+// Rendimiento, calidad y rankings usando datos reales.
+// =========================================================
+function statisticsMinutesBetween(startValue, endValue, options = {}) {
+  if (!startValue || !endValue) {
+    return { valid: false, minutes: 0, reason: "missing_time" };
+  }
+
+  const start = new Date(startValue).getTime();
+  const end = new Date(endValue).getTime();
+  const minutes = (end - start) / 60000;
+  const minMinutes = Number(options.minMinutes ?? 5);
+  const maxMinutes = Number(options.maxMinutes ?? 720);
+
+  if (!Number.isFinite(minutes)) {
+    return { valid: false, minutes: 0, reason: "invalid_time" };
+  }
+
+  if (minutes < 0) {
+    return { valid: false, minutes, reason: "negative_time" };
+  }
+
+  if (minutes < minMinutes) {
+    return { valid: false, minutes, reason: "too_short" };
+  }
+
+  if (minutes > maxMinutes) {
+    return { valid: false, minutes, reason: "too_long" };
+  }
+
+  return {
+    valid: true,
+    minutes: Number(minutes.toFixed(1)),
+    reason: "",
+  };
+}
+
+function statisticsAverage(values) {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (!valid.length) return 0;
+
+  return Number(
+    (valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1)
+  );
+}
+
+function statisticsNormalizePerson(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function statisticsSplitPeople(value) {
+  return String(value || "")
+    .split(/[,|]+/)
+    .map(statisticsNormalizePerson)
+    .filter(Boolean);
+}
+
+function statisticsReadLogPage(page) {
+  const props = page?.properties || {};
+
+  return {
+    id: page.id,
+    date:
+      props.Date?.date?.start ||
+      props.date?.date?.start ||
+      "",
+    time:
+      props.Time?.date?.start ||
+      props.time?.date?.start ||
+      page.created_time ||
+      "",
+    unit: readRoomTextProperty(props, ["Unit", "unit", "Room"]),
+    cleaner: readRoomTextProperty(props, ["Cleaner", "cleaner"]),
+    inspector: readRoomTextProperty(props, ["Inspector", "inspector"]),
+    cleanerError: readRoomTextProperty(props, ["Cleaner Error", "cleaner error"]),
+    action: readRoomTextProperty(props, ["Action", "action"]),
+    note: readRoomTextProperty(props, ["Note", "note"]),
+    category: readRoomTextProperty(props, ["Category", "category"]),
+    priority: readRoomTextProperty(props, ["Priority", "priority"]),
+    status: readRoomTextProperty(props, ["Status", "status"]),
+  };
+}
+
+async function getStatisticsLogs(date, forceRefresh = false) {
+  if (!NOTION_LOG_DATABASE_ID) return [];
+
+  const cacheKey = `statistics:logs:${date}`;
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
+  if (cached) return cached;
+
+  let results = [];
+  let cursor;
+
+  do {
+    const query = {
+      database_id: NOTION_LOG_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: {
+          equals: date,
+        },
+      },
+      sorts: [
+        {
+          property: "Time",
+          direction: "ascending",
+        },
+      ],
+    };
+
+    if (cursor) query.start_cursor = cursor;
+
+    const response = await notion.databases.query(query);
+    results = results.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  const logs = results.map(statisticsReadLogPage);
+  setCache(cacheKey, logs, date === todayISO() ? 15000 : 120000);
+  return logs;
+}
+
+function statisticsPayrollByCleaner(units) {
+  const result = {};
+
+  for (const unit of units) {
+    const cleaner = statisticsNormalizePerson(unit.cleaner);
+    if (!cleaner || dashboardStatusKey(unit.status) !== "ready") continue;
+
+    const pay = getUnitPay(unit.unit);
+    if (!result[cleaner]) result[cleaner] = 0;
+    result[cleaner] += Number(pay.amount || 0);
+  }
+
+  for (const name of Object.keys(result)) {
+    result[name] = Number(result[name].toFixed(2));
+  }
+
+  return result;
+}
+
+function buildCleanerStatistics(units, logs) {
+  const cleaners = new Map();
+  const payrollByCleaner = statisticsPayrollByCleaner(units);
+
+  const ensureCleaner = (name) => {
+    const cleanName = statisticsNormalizePerson(name);
+    if (!cleanName) return null;
+
+    if (!cleaners.has(cleanName)) {
+      cleaners.set(cleanName, {
+        name: cleanName,
+        assigned: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        arrivals: 0,
+        urgent: 0,
+        payroll: payrollByCleaner[cleanName] || 0,
+        validTimes: [],
+        unreliableTimes: 0,
+        issues: 0,
+        inspectionReports: 0,
+        supplyRequests: 0,
+        qualityScore: 100,
+        completionRate: 0,
+        fastestUnit: null,
+        slowestUnit: null,
+        units: [],
+      });
+    }
+
+    return cleaners.get(cleanName);
+  };
+
+  for (const unit of units) {
+    const cleaner = ensureCleaner(unit.cleaner);
+    if (!cleaner) continue;
+
+    cleaner.assigned += 1;
+    if (unit.arrival) cleaner.arrivals += 1;
+    if (unit.urgent) cleaner.urgent += 1;
+
+    const status = dashboardStatusKey(unit.status);
+    if (status === "ready") cleaner.completed += 1;
+    else if (status === "inProgress") cleaner.inProgress += 1;
+    else cleaner.pending += 1;
+
+    const duration = statisticsMinutesBetween(
+      unit.startedAt,
+      unit.finishedAt,
+      { minMinutes: 5, maxMinutes: 720 }
+    );
+
+    if (unit.startedAt || unit.finishedAt) {
+      if (duration.valid) {
+        cleaner.validTimes.push(duration.minutes);
+
+        const unitTime = {
+          unit: unit.unit,
+          minutes: duration.minutes,
+        };
+
+        if (
+          !cleaner.fastestUnit ||
+          unitTime.minutes < cleaner.fastestUnit.minutes
+        ) {
+          cleaner.fastestUnit = unitTime;
+        }
+
+        if (
+          !cleaner.slowestUnit ||
+          unitTime.minutes > cleaner.slowestUnit.minutes
+        ) {
+          cleaner.slowestUnit = unitTime;
+        }
+      } else {
+        cleaner.unreliableTimes += 1;
+      }
+    }
+
+    cleaner.units.push({
+      unit: unit.unit,
+      status: unit.status,
+      building: unit.building,
+      arrival: unit.arrival,
+      urgent: unit.urgent,
+      minutes: duration.valid ? duration.minutes : null,
+      reliableTime: duration.valid,
+    });
+  }
+
+  for (const log of logs) {
+    const action = String(log.action || "").toUpperCase();
+
+    const errorCleaner =
+      statisticsNormalizePerson(log.cleanerError) ||
+      statisticsNormalizePerson(log.cleaner);
+
+    if (["ISSUE", "LOST_FOUND"].includes(action)) {
+      const cleaner = ensureCleaner(log.cleaner);
+      if (cleaner) cleaner.issues += 1;
+    }
+
+    if (action === "SUPPLIES") {
+      const cleaner = ensureCleaner(log.cleaner);
+      if (cleaner) cleaner.supplyRequests += 1;
+    }
+
+    if (action === "INSPECTION_REPORT") {
+      const cleaner = ensureCleaner(errorCleaner);
+      if (cleaner) cleaner.inspectionReports += 1;
+    }
+  }
+
+  return Array.from(cleaners.values())
+    .map((cleaner) => {
+      const averageMinutes = statisticsAverage(cleaner.validTimes);
+      const completionRate = cleaner.assigned
+        ? Number(((cleaner.completed / cleaner.assigned) * 100).toFixed(1))
+        : 0;
+
+      const qualityBase = cleaner.completed || cleaner.assigned;
+      const qualityScore = qualityBase
+        ? Math.max(
+            0,
+            Number(
+              (
+                ((qualityBase - cleaner.inspectionReports) / qualityBase) *
+                100
+              ).toFixed(1)
+            )
+          )
+        : 100;
+
+      return {
+        ...cleaner,
+        averageMinutes,
+        completionRate,
+        qualityScore,
+        roomsPerHour:
+          averageMinutes > 0
+            ? Number((60 / averageMinutes).toFixed(2))
+            : 0,
+        validTimeCount: cleaner.validTimes.length,
+        validTimes: undefined,
+      };
+    })
+    .sort((a, b) => {
+      if (b.completed !== a.completed) return b.completed - a.completed;
+      return a.averageMinutes - b.averageMinutes;
+    });
+}
+
+function buildInspectorStatistics(units, logs, reports) {
+  const inspectors = new Map();
+
+  const ensureInspector = (name) => {
+    const cleanName = statisticsNormalizePerson(name);
+    if (!cleanName) return null;
+
+    if (!inspectors.has(cleanName)) {
+      inspectors.set(cleanName, {
+        name: cleanName,
+        assigned: 0,
+        inspectionsStarted: 0,
+        readyCompleted: 0,
+        inspectionReports: 0,
+        supplyRequests: 0,
+        reportsCreated: 0,
+        validTimes: [],
+        unreliableTimes: 0,
+        averageMinutes: 0,
+        qualityFindRate: 0,
+      });
+    }
+
+    return inspectors.get(cleanName);
+  };
+
+  // Assigned muestra carga planificada, no se usa como "completadas".
+  for (const unit of units) {
+    for (const person of statisticsSplitPeople(unit.inspector)) {
+      const inspector = ensureInspector(person);
+      if (inspector) inspector.assigned += 1;
+    }
+
+    const duration = statisticsMinutesBetween(
+      unit.inspectionStartedAt,
+      unit.readyAt,
+      { minMinutes: 1, maxMinutes: 240 }
+    );
+
+    if (duration.valid) {
+      // Sólo se puede atribuir con certeza si hay un único inspector asignado.
+      const people = statisticsSplitPeople(unit.inspector);
+      if (people.length === 1) {
+        ensureInspector(people[0]).validTimes.push(duration.minutes);
+      }
+    }
+  }
+
+  for (const log of logs) {
+    const inspectorName = statisticsNormalizePerson(log.inspector);
+    const inspector = ensureInspector(inspectorName);
+    if (!inspector) continue;
+
+    const action = String(log.action || "").toUpperCase();
+
+    if (action === "INSPECTION_START") inspector.inspectionsStarted += 1;
+    if (action === "READY_GUEST") inspector.readyCompleted += 1;
+    if (action === "INSPECTION_REPORT") inspector.inspectionReports += 1;
+    if (action === "INSPECTION_SUPPLIES") inspector.supplyRequests += 1;
+  }
+
+  for (const report of reports) {
+    const role = cleanEmployeeText(report.role);
+    if (!role.includes("inspect")) continue;
+
+    const inspector = ensureInspector(report.employee);
+    if (inspector) inspector.reportsCreated += 1;
+  }
+
+  return Array.from(inspectors.values())
+    .map((inspector) => {
+      const totalInspectionActions =
+        inspector.readyCompleted + inspector.inspectionReports;
+
+      return {
+        ...inspector,
+        averageMinutes: statisticsAverage(inspector.validTimes),
+        validTimeCount: inspector.validTimes.length,
+        qualityFindRate: totalInspectionActions
+          ? Number(
+              (
+                (inspector.inspectionReports / totalInspectionActions) *
+                100
+              ).toFixed(1)
+            )
+          : 0,
+        validTimes: undefined,
+      };
+    })
+    .sort((a, b) => {
+      if (b.readyCompleted !== a.readyCompleted) {
+        return b.readyCompleted - a.readyCompleted;
+      }
+
+      return b.inspectionsStarted - a.inspectionsStarted;
+    });
+}
+
+function buildBuildingStatistics(buildings) {
+  return buildings
+    .map((building) => {
+      const validTimes = [];
+      let unreliableTimes = 0;
+
+      for (const unit of building.units || []) {
+        const duration = statisticsMinutesBetween(
+          unit.startedAt,
+          unit.finishedAt,
+          { minMinutes: 5, maxMinutes: 720 }
+        );
+
+        if (duration.valid) validTimes.push(duration.minutes);
+        else if (unit.startedAt || unit.finishedAt) unreliableTimes += 1;
+      }
+
+      return {
+        building: building.building,
+        total: building.total,
+        ready: building.ready,
+        pending:
+          building.pending +
+          building.inProgress +
+          building.awaitingInspection +
+          building.inspectionStarted,
+        urgent: building.urgent,
+        completionRate: building.total
+          ? Number(((building.ready / building.total) * 100).toFixed(1))
+          : 0,
+        averageCleaningMinutes: statisticsAverage(validTimes),
+        validTimeCount: validTimes.length,
+        unreliableTimes,
+      };
+    })
+    .sort((a, b) => {
+      if (b.completionRate !== a.completionRate) {
+        return b.completionRate - a.completionRate;
+      }
+
+      return a.averageCleaningMinutes - b.averageCleaningMinutes;
+    });
+}
+
+function buildStatisticsRankings(cleaners, inspectors, buildings) {
+  const withReliableTime = cleaners.filter(
+    (cleaner) => cleaner.validTimeCount > 0
+  );
+
+  const fastestCleaner = [...withReliableTime].sort(
+    (a, b) => a.averageMinutes - b.averageMinutes
+  )[0] || null;
+
+  const mostRoomsCleaner = [...cleaners].sort(
+    (a, b) => b.completed - a.completed
+  )[0] || null;
+
+  const bestQualityCleaner = [...cleaners]
+    .filter((cleaner) => cleaner.completed > 0)
+    .sort((a, b) => {
+      if (b.qualityScore !== a.qualityScore) {
+        return b.qualityScore - a.qualityScore;
+      }
+
+      return b.completed - a.completed;
+    })[0] || null;
+
+  const topInspector = [...inspectors].sort((a, b) => {
+    if (b.readyCompleted !== a.readyCompleted) {
+      return b.readyCompleted - a.readyCompleted;
+    }
+
+    return b.inspectionsStarted - a.inspectionsStarted;
+  })[0] || null;
+
+  const mostEfficientBuilding = [...buildings]
+    .filter((building) => building.validTimeCount > 0)
+    .sort((a, b) => {
+      if (b.completionRate !== a.completionRate) {
+        return b.completionRate - a.completionRate;
+      }
+
+      return a.averageCleaningMinutes - b.averageCleaningMinutes;
+    })[0] || null;
+
+  const mostDelayedBuilding = [...buildings].sort((a, b) => {
+    if (b.pending !== a.pending) return b.pending - a.pending;
+    return b.urgent - a.urgent;
+  })[0] || null;
+
+  return {
+    fastestCleaner: fastestCleaner
+      ? {
+          name: fastestCleaner.name,
+          averageMinutes: fastestCleaner.averageMinutes,
+          completed: fastestCleaner.completed,
+        }
+      : null,
+    mostRoomsCleaner: mostRoomsCleaner
+      ? {
+          name: mostRoomsCleaner.name,
+          completed: mostRoomsCleaner.completed,
+          assigned: mostRoomsCleaner.assigned,
+        }
+      : null,
+    bestQualityCleaner: bestQualityCleaner
+      ? {
+          name: bestQualityCleaner.name,
+          qualityScore: bestQualityCleaner.qualityScore,
+          completed: bestQualityCleaner.completed,
+        }
+      : null,
+    topInspector: topInspector
+      ? {
+          name: topInspector.name,
+          readyCompleted: topInspector.readyCompleted,
+          inspectionsStarted: topInspector.inspectionsStarted,
+        }
+      : null,
+    mostEfficientBuilding: mostEfficientBuilding
+      ? {
+          building: mostEfficientBuilding.building,
+          completionRate: mostEfficientBuilding.completionRate,
+          averageCleaningMinutes:
+            mostEfficientBuilding.averageCleaningMinutes,
+        }
+      : null,
+    mostDelayedBuilding:
+      mostDelayedBuilding && mostDelayedBuilding.pending > 0
+        ? {
+            building: mostDelayedBuilding.building,
+            pending: mostDelayedBuilding.pending,
+            urgent: mostDelayedBuilding.urgent,
+          }
+        : null,
+  };
+}
+
+async function buildStatisticsData(date = todayISO(), forceRefresh = false) {
+  const cacheKey = `statistics:data:${date}`;
+  const cached = !forceRefresh ? getCache(cacheKey) : null;
+  if (cached) return cached;
+
+  const [dashboard, logs] = await Promise.all([
+    buildDashboardData(date, forceRefresh),
+    getStatisticsLogs(date, forceRefresh).catch((error) => {
+      console.error("Statistics logs:", error.message);
+      return [];
+    }),
+  ]);
+
+  const cleaners = buildCleanerStatistics(dashboard.units || [], logs);
+  const inspectors = buildInspectorStatistics(
+    dashboard.units || [],
+    logs,
+    dashboard.recentReports || []
+  );
+  const buildings = buildBuildingStatistics(dashboard.buildings || []);
+  const rankings = buildStatisticsRankings(
+    cleaners,
+    inspectors,
+    buildings
+  );
+
+  const completedRooms = cleaners.reduce(
+    (sum, cleaner) => sum + cleaner.completed,
+    0
+  );
+  const inspectionErrors = cleaners.reduce(
+    (sum, cleaner) => sum + cleaner.inspectionReports,
+    0
+  );
+  const reliableCleaningTimes = cleaners.reduce(
+    (sum, cleaner) => sum + cleaner.validTimeCount,
+    0
+  );
+  const unreliableCleaningTimes = cleaners.reduce(
+    (sum, cleaner) => sum + cleaner.unreliableTimes,
+    0
+  );
+
+  const payload = {
+    ok: true,
+    date,
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalUnits: dashboard.stats?.totalUnits || 0,
+      ready: dashboard.stats?.ready || 0,
+      completionRate: dashboard.stats?.totalUnits
+        ? Number(
+            (
+              ((dashboard.stats?.ready || 0) /
+                dashboard.stats.totalUnits) *
+              100
+            ).toFixed(1)
+          )
+        : 0,
+      averageCleaningMinutes:
+        dashboard.averages?.averageCleaningMinutes || 0,
+      averageInspectionMinutes:
+        dashboard.averages?.averageInspectionMinutes || 0,
+      payroll: dashboard.payroll?.total || 0,
+      activeEmployees: dashboard.employees?.active || 0,
+      reports: dashboard.stats?.reports || 0,
+      problems: dashboard.stats?.problems || 0,
+      completedRooms,
+      inspectionErrors,
+      reliableCleaningTimes,
+      unreliableCleaningTimes,
+    },
+    quality: {
+      inspectionErrors,
+      estimatedPassRate: completedRooms
+        ? Math.max(
+            0,
+            Number(
+              (
+                ((completedRooms - inspectionErrors) /
+                  completedRooms) *
+                100
+              ).toFixed(1)
+            )
+          )
+        : 100,
+      reports: dashboard.stats?.reports || 0,
+      openProblems: dashboard.stats?.problems || 0,
+    },
+    rankings,
+    cleaners,
+    inspectors,
+    buildings,
+    timeRules: {
+      cleaningMinimumMinutes: 5,
+      cleaningMaximumMinutes: 720,
+      inspectionMinimumMinutes: 1,
+      inspectionMaximumMinutes: 240,
+      note:
+        "Los tiempos fuera de estos rangos se marcan como no confiables y no afectan los promedios.",
+    },
+  };
+
+  setCache(cacheKey, payload, date === todayISO() ? 15000 : 120000);
+  return payload;
+}
+
+app.get("/statistics-data", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const payload = await buildStatisticsData(date, forceRefresh);
+    res.json(payload);
+  } catch (error) {
+    console.error("Error en /statistics-data:", error.message);
+    res.status(500).json({
+      ok: false,
+      date: String(req.query.date || todayISO()),
+      message: error.message,
+    });
+  }
+});
+
+app.get("/statistics", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "statistics.html"));
+});
+
+
 server.listen(PORT, () => {
   console.log(`Panel web activo en puerto ${PORT}`);
 });
