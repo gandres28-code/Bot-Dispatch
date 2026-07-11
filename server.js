@@ -6497,6 +6497,143 @@ app.get("/statistics-data", async (req, res) => {
   }
 });
 
+
+function statisticsDateRange(startDate, endDate, maxDays = 31) {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    start > end
+  ) {
+    throw new Error("Rango de fechas inválido");
+  }
+
+  const dates = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end && dates.length < maxDays) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (cursor <= end) {
+    throw new Error(`El rango máximo permitido es de ${maxDays} días`);
+  }
+
+  return dates;
+}
+
+app.get("/statistics-history", async (req, res) => {
+  try {
+    const end = String(req.query.end || todayISO()).trim();
+    const defaultStartDate = new Date(`${end}T12:00:00`);
+    defaultStartDate.setDate(defaultStartDate.getDate() - 6);
+    const start = String(
+      req.query.start || defaultStartDate.toISOString().slice(0, 10)
+    ).trim();
+
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const cacheKey = `statistics:history:${start}:${end}`;
+    const cached = !forceRefresh ? getCache(cacheKey) : null;
+
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const dates = statisticsDateRange(start, end, 31);
+    const days = [];
+
+    // Secuencial a propósito: protege la cola de Notion y reutiliza caches diarios.
+    for (const date of dates) {
+      try {
+        const day = await buildStatisticsData(date, forceRefresh);
+
+        days.push({
+          date,
+          totalUnits: day.summary?.totalUnits || 0,
+          ready: day.summary?.ready || 0,
+          completionRate: day.summary?.completionRate || 0,
+          averageCleaningMinutes:
+            day.summary?.averageCleaningMinutes || 0,
+          averageInspectionMinutes:
+            day.summary?.averageInspectionMinutes || 0,
+          payroll: day.summary?.payroll || 0,
+          problems: day.summary?.problems || 0,
+          qualityScore:
+            day.quality?.estimatedPassRate ?? 100,
+          inspectionErrors:
+            day.quality?.inspectionErrors || 0,
+          reliableCleaningTimes:
+            day.summary?.reliableCleaningTimes || 0,
+          unreliableCleaningTimes:
+            day.summary?.unreliableCleaningTimes || 0,
+        });
+      } catch (error) {
+        console.error(`Statistics history ${date}:`, error.message);
+        days.push({
+          date,
+          totalUnits: 0,
+          ready: 0,
+          completionRate: 0,
+          averageCleaningMinutes: 0,
+          averageInspectionMinutes: 0,
+          payroll: 0,
+          problems: 0,
+          qualityScore: 100,
+          inspectionErrors: 0,
+          reliableCleaningTimes: 0,
+          unreliableCleaningTimes: 0,
+          error: error.message,
+        });
+      }
+    }
+
+    const totalUnits = days.reduce((sum, day) => sum + day.totalUnits, 0);
+    const totalReady = days.reduce((sum, day) => sum + day.ready, 0);
+    const totalPayroll = days.reduce((sum, day) => sum + day.payroll, 0);
+    const totalProblems = days.reduce((sum, day) => sum + day.problems, 0);
+
+    const cleaningValues = days
+      .filter((day) => day.averageCleaningMinutes > 0)
+      .map((day) => day.averageCleaningMinutes);
+
+    const qualityValues = days
+      .filter((day) => Number.isFinite(day.qualityScore))
+      .map((day) => day.qualityScore);
+
+    const payload = {
+      ok: true,
+      start,
+      end,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        days: days.length,
+        totalUnits,
+        totalReady,
+        completionRate: totalUnits
+          ? Number(((totalReady / totalUnits) * 100).toFixed(1))
+          : 0,
+        totalPayroll: Number(totalPayroll.toFixed(2)),
+        totalProblems,
+        averageCleaningMinutes: statisticsAverage(cleaningValues),
+        averageQualityScore: statisticsAverage(qualityValues),
+      },
+      days,
+    };
+
+    setCache(cacheKey, payload, end === todayISO() ? 30000 : 5 * 60 * 1000);
+    res.json(payload);
+  } catch (error) {
+    console.error("Error en /statistics-history:", error.message);
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
 app.get("/statistics", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "statistics.html"));
 });
