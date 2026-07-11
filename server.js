@@ -6662,11 +6662,134 @@ app.get("/statistics-history", async (req, res) => {
       days,
     };
 
-    setCache(cacheKey, payload, end === todayISO() ? 30000 : 5 * 60 * 1000);
+    setCache(cacheKey, payload, end === todayISO() ? 10 * 60 * 1000 : 30 * 60 * 1000);
     res.json(payload);
   } catch (error) {
     console.error("Error en /statistics-history:", error.message);
     res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+
+app.post("/statistics-preload", async (req, res) => {
+  try {
+    const end = String(req.body?.end || todayISO()).trim();
+    const ranges = [7, 14, 30];
+
+    res.json({
+      ok: true,
+      end,
+      ranges,
+      message: "Precarga iniciada",
+    });
+
+    setImmediate(async () => {
+      for (const rangeDays of ranges) {
+        try {
+          const endDate = new Date(`${end}T12:00:00`);
+          const startDate = new Date(endDate);
+          startDate.setDate(startDate.getDate() - (rangeDays - 1));
+
+          const start = startDate.toISOString().slice(0, 10);
+          const cacheKey = `statistics:history:${start}:${end}`;
+
+          if (getCache(cacheKey)) continue;
+
+          const dates = statisticsDateRange(start, end, 31);
+          const days = [];
+
+          for (const date of dates) {
+            try {
+              const day = await buildStatisticsData(date, false);
+
+              days.push({
+                date,
+                totalUnits: day.summary?.totalUnits || 0,
+                ready: day.summary?.ready || 0,
+                completionRate: day.summary?.completionRate || 0,
+                averageCleaningMinutes:
+                  day.summary?.averageCleaningMinutes || 0,
+                averageInspectionMinutes:
+                  day.summary?.averageInspectionMinutes || 0,
+                payroll: day.summary?.payroll || 0,
+                problems: day.summary?.problems || 0,
+                qualityScore:
+                  day.quality?.estimatedPassRate ?? 100,
+                inspectionErrors:
+                  day.quality?.inspectionErrors || 0,
+                reliableCleaningTimes:
+                  day.summary?.reliableCleaningTimes || 0,
+                unreliableCleaningTimes:
+                  day.summary?.unreliableCleaningTimes || 0,
+              });
+            } catch (error) {
+              days.push({
+                date,
+                totalUnits: 0,
+                ready: 0,
+                completionRate: 0,
+                averageCleaningMinutes: 0,
+                averageInspectionMinutes: 0,
+                payroll: 0,
+                problems: 0,
+                qualityScore: 100,
+                inspectionErrors: 0,
+                reliableCleaningTimes: 0,
+                unreliableCleaningTimes: 0,
+                error: error.message,
+              });
+            }
+          }
+
+          const totalUnits = days.reduce((sum, day) => sum + day.totalUnits, 0);
+          const totalReady = days.reduce((sum, day) => sum + day.ready, 0);
+          const totalPayroll = days.reduce((sum, day) => sum + day.payroll, 0);
+          const totalProblems = days.reduce((sum, day) => sum + day.problems, 0);
+
+          const payload = {
+            ok: true,
+            source: "preloaded-range-v3",
+            start,
+            end,
+            generatedAt: new Date().toISOString(),
+            summary: {
+              days: days.length,
+              totalUnits,
+              totalReady,
+              completionRate: totalUnits
+                ? Number(((totalReady / totalUnits) * 100).toFixed(1))
+                : 0,
+              totalPayroll: Number(totalPayroll.toFixed(2)),
+              totalProblems,
+              averageCleaningMinutes: statisticsAverage(
+                days
+                  .filter((day) => day.averageCleaningMinutes > 0)
+                  .map((day) => day.averageCleaningMinutes)
+              ),
+              averageQualityScore: statisticsAverage(
+                days
+                  .filter((day) => Number.isFinite(day.qualityScore))
+                  .map((day) => day.qualityScore)
+              ),
+            },
+            days,
+          };
+
+          setCache(
+            cacheKey,
+            payload,
+            end === todayISO() ? 10 * 60 * 1000 : 30 * 60 * 1000
+          );
+        } catch (error) {
+          console.error(`Statistics preload ${rangeDays}:`, error.message);
+        }
+      }
+    });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
   }
 });
 
