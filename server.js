@@ -6498,15 +6498,12 @@ app.get("/statistics-data", async (req, res) => {
 });
 
 
+
 function statisticsDateRange(startDate, endDate, maxDays = 31) {
   const start = new Date(`${startDate}T12:00:00`);
   const end = new Date(`${endDate}T12:00:00`);
 
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    start > end
-  ) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
     throw new Error("Rango de fechas inválido");
   }
 
@@ -6518,11 +6515,51 @@ function statisticsDateRange(startDate, endDate, maxDays = 31) {
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  if (cursor <= end) {
-    throw new Error(`El rango máximo permitido es de ${maxDays} días`);
-  }
-
+  if (cursor <= end) throw new Error(`El rango máximo permitido es de ${maxDays} días`);
   return dates;
+}
+
+async function queryPagesByDateRange(databaseId, start, end, options = {}) {
+  if (!databaseId) return [];
+
+  const cacheKey = `range:${idWithoutDashes(databaseId)}:${start}:${end}:${options.dateProperty || "Date"}`;
+  const cached = options.forceRefresh ? null : getCache(cacheKey);
+  if (cached) return cached;
+
+  const results = [];
+  let cursor;
+
+  do {
+    const query = {
+      database_id: databaseId,
+      page_size: 100,
+      filter: {
+        and: [
+          { property: options.dateProperty || "Date", date: { on_or_after: start } },
+          { property: options.dateProperty || "Date", date: { on_or_before: end } },
+        ],
+      },
+    };
+
+    if (cursor) query.start_cursor = cursor;
+    const response = await notion.databases.query(query);
+    results.push(...(response.results || []));
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  setCache(cacheKey, results, end === todayISO() ? 30000 : 5 * 60 * 1000);
+  return results;
+}
+
+function groupByDate(items, getDate) {
+  const grouped = new Map();
+  for (const item of items) {
+    const date = String(getDate(item) || "").slice(0, 10);
+    if (!date) continue;
+    if (!grouped.has(date)) grouped.set(date, []);
+    grouped.get(date).push(item);
+  }
+  return grouped;
 }
 
 app.get("/statistics-history", async (req, res) => {
@@ -6530,95 +6567,97 @@ app.get("/statistics-history", async (req, res) => {
     const end = String(req.query.end || todayISO()).trim();
     const defaultStartDate = new Date(`${end}T12:00:00`);
     defaultStartDate.setDate(defaultStartDate.getDate() - 6);
-    const start = String(
-      req.query.start || defaultStartDate.toISOString().slice(0, 10)
-    ).trim();
-
+    const start = String(req.query.start || defaultStartDate.toISOString().slice(0, 10)).trim();
     const forceRefresh = String(req.query.refresh || "") === "1";
-    const cacheKey = `statistics:history:${start}:${end}`;
-    const cached = !forceRefresh ? getCache(cacheKey) : null;
-
-    if (cached) {
-      return res.json(cached);
-    }
 
     const dates = statisticsDateRange(start, end, 31);
-    const days = [];
+    const cacheKey = `statistics:history:v2:${start}:${end}`;
+    const cached = forceRefresh ? null : getCache(cacheKey);
+    if (cached) return res.json(cached);
 
-    // Secuencial a propósito: protege la cola de Notion y reutiliza caches diarios.
-    for (const date of dates) {
-      try {
-        const day = await buildStatisticsData(date, forceRefresh);
+    const [roomPages, payrollPages, reportPages, logPages] = await Promise.all([
+      queryPagesByDateRange(NOTION_DATABASE_ID, start, end, { forceRefresh }),
+      queryPagesByDateRange(NOTION_PAYROLL_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+      queryPagesByDateRange(NOTION_REPORTS_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+      queryPagesByDateRange(NOTION_LOG_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+    ]);
 
-        days.push({
-          date,
-          totalUnits: day.summary?.totalUnits || 0,
-          ready: day.summary?.ready || 0,
-          completionRate: day.summary?.completionRate || 0,
-          averageCleaningMinutes:
-            day.summary?.averageCleaningMinutes || 0,
-          averageInspectionMinutes:
-            day.summary?.averageInspectionMinutes || 0,
-          payroll: day.summary?.payroll || 0,
-          problems: day.summary?.problems || 0,
-          qualityScore:
-            day.quality?.estimatedPassRate ?? 100,
-          inspectionErrors:
-            day.quality?.inspectionErrors || 0,
-          reliableCleaningTimes:
-            day.summary?.reliableCleaningTimes || 0,
-          unreliableCleaningTimes:
-            day.summary?.unreliableCleaningTimes || 0,
-        });
-      } catch (error) {
-        console.error(`Statistics history ${date}:`, error.message);
-        days.push({
-          date,
-          totalUnits: 0,
-          ready: 0,
-          completionRate: 0,
-          averageCleaningMinutes: 0,
-          averageInspectionMinutes: 0,
-          payroll: 0,
-          problems: 0,
-          qualityScore: 100,
-          inspectionErrors: 0,
-          reliableCleaningTimes: 0,
-          unreliableCleaningTimes: 0,
-          error: error.message,
-        });
+    const roomsByDate = groupByDate(roomPages, page => page.properties?.Date?.date?.start);
+    const payrollByDate = groupByDate(payrollPages, page => page.properties?.Date?.date?.start);
+    const reportsByDate = groupByDate(reportPages, page => page.properties?.Date?.date?.start);
+    const logsByDate = groupByDate(logPages, page => page.properties?.Date?.date?.start);
+
+    const days = dates.map(date => {
+      const units = (roomsByDate.get(date) || []).map(pageToDashboardUnit);
+      const payrollRecords = payrollByDate.get(date) || [];
+      const reports = (reportsByDate.get(date) || []).map(reportPageToObject);
+      const logs = (logsByDate.get(date) || []).map(statisticsReadLogPage);
+
+      const ready = units.filter(unit => dashboardStatusKey(unit.status) === "ready").length;
+      const totalUnits = units.length;
+
+      const reliableCleaning = [];
+      let unreliableCleaningTimes = 0;
+      for (const unit of units) {
+        const duration = statisticsMinutesBetween(unit.startedAt, unit.finishedAt, { minMinutes: 5, maxMinutes: 720 });
+        if (duration.valid) reliableCleaning.push(duration.minutes);
+        else if (unit.startedAt || unit.finishedAt) unreliableCleaningTimes += 1;
       }
-    }
+
+      const inspectionTimes = [];
+      for (const unit of units) {
+        const duration = statisticsMinutesBetween(unit.inspectionStartedAt, unit.readyAt, { minMinutes: 1, maxMinutes: 240 });
+        if (duration.valid) inspectionTimes.push(duration.minutes);
+      }
+
+      const payroll = payrollRecords.reduce(
+        (sum, page) => sum + Number(page.properties?.Amount?.number || 0),
+        0
+      );
+
+      const inspectionErrors = logs.filter(log => String(log.action || "").toUpperCase() === "INSPECTION_REPORT").length;
+      const problems = reports.filter(report => {
+        const category = cleanEmployeeText(report.aiCategory || report.category);
+        const priority = cleanEmployeeText(report.aiPriority || report.priority);
+        return priority.includes("urgent") || category.includes("maintenance") || category.includes("damage") || category.includes("lost");
+      }).length;
+
+      return {
+        date,
+        totalUnits,
+        ready,
+        completionRate: totalUnits ? Number(((ready / totalUnits) * 100).toFixed(1)) : 0,
+        averageCleaningMinutes: statisticsAverage(reliableCleaning),
+        averageInspectionMinutes: statisticsAverage(inspectionTimes),
+        payroll: Number(payroll.toFixed(2)),
+        problems,
+        qualityScore: ready ? Math.max(0, Number((((ready - inspectionErrors) / ready) * 100).toFixed(1))) : 100,
+        inspectionErrors,
+        reliableCleaningTimes: reliableCleaning.length,
+        unreliableCleaningTimes,
+      };
+    });
 
     const totalUnits = days.reduce((sum, day) => sum + day.totalUnits, 0);
     const totalReady = days.reduce((sum, day) => sum + day.ready, 0);
     const totalPayroll = days.reduce((sum, day) => sum + day.payroll, 0);
     const totalProblems = days.reduce((sum, day) => sum + day.problems, 0);
 
-    const cleaningValues = days
-      .filter((day) => day.averageCleaningMinutes > 0)
-      .map((day) => day.averageCleaningMinutes);
-
-    const qualityValues = days
-      .filter((day) => Number.isFinite(day.qualityScore))
-      .map((day) => day.qualityScore);
-
     const payload = {
       ok: true,
       start,
       end,
       generatedAt: new Date().toISOString(),
+      source: "range-query-v2",
       summary: {
         days: days.length,
         totalUnits,
         totalReady,
-        completionRate: totalUnits
-          ? Number(((totalReady / totalUnits) * 100).toFixed(1))
-          : 0,
+        completionRate: totalUnits ? Number(((totalReady / totalUnits) * 100).toFixed(1)) : 0,
         totalPayroll: Number(totalPayroll.toFixed(2)),
         totalProblems,
-        averageCleaningMinutes: statisticsAverage(cleaningValues),
-        averageQualityScore: statisticsAverage(qualityValues),
+        averageCleaningMinutes: statisticsAverage(days.filter(day => day.averageCleaningMinutes > 0).map(day => day.averageCleaningMinutes)),
+        averageQualityScore: statisticsAverage(days.map(day => day.qualityScore)),
       },
       days,
     };
@@ -6627,10 +6666,7 @@ app.get("/statistics-history", async (req, res) => {
     res.json(payload);
   } catch (error) {
     console.error("Error en /statistics-history:", error.message);
-    res.status(400).json({
-      ok: false,
-      message: error.message,
-    });
+    res.status(400).json({ ok: false, message: error.message });
   }
 });
 
