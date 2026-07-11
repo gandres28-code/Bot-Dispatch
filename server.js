@@ -676,6 +676,31 @@ app.get("/login-role", async (req, res) => {
     });
   }
 });
+app.post("/refresh-employees", async (req, res) => {
+  try {
+    clearEmployeesCache();
+    const employees = await getEmployeesCached(true);
+
+    const payload = {
+      ok: true,
+      count: employees.length,
+      updatedAt: new Date().toISOString(),
+      message: "Empleados actualizados",
+    };
+
+    io.emit("employees-updated", payload);
+    return res.json(payload);
+  } catch (error) {
+    console.error("Error en /refresh-employees:", error.message);
+
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudieron actualizar los empleados",
+      error: error.message,
+    });
+  }
+});
+
 app.get("/launch", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "launch.html"));
 });
@@ -1721,13 +1746,24 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
 }
 async function getEmployeesCached(forceRefresh = false) {
   const cacheKey = "employees:active";
+  const EMPLOYEES_CACHE_MS = Number(
+    process.env.EMPLOYEES_CACHE_MS || 3000
+  );
 
-  const employeeCache = !forceRefresh && typeof ServerCache !== "undefined"
-    ? ServerCache.get("employees", "active")
-    : null;
+  // ServerCache no tiene vencimiento automático, así que verificamos su edad.
+  const employeeCache =
+    !forceRefresh && typeof ServerCache !== "undefined"
+      ? ServerCache.get("employees", "active")
+      : null;
 
   if (employeeCache) {
-    return employeeCache.value;
+    const cacheAge = Date.now() - new Date(employeeCache.updatedAt).getTime();
+
+    if (Number.isFinite(cacheAge) && cacheAge < EMPLOYEES_CACHE_MS) {
+      return employeeCache.value;
+    }
+
+    ServerCache.clear("employees", "active");
   }
 
   const cached = !forceRefresh ? getCache(cacheKey) : null;
@@ -1758,13 +1794,22 @@ async function getEmployeesCached(forceRefresh = false) {
     cursor = response.has_more ? response.next_cursor : undefined;
   } while (cursor);
 
-  setCache(cacheKey, results, 5 * 60 * 1000);
+  // Los empleados se renuevan cada 3 segundos por defecto.
+  setCache(cacheKey, results, EMPLOYEES_CACHE_MS);
 
   if (typeof ServerCache !== "undefined") {
     ServerCache.set("employees", "active", results);
   }
 
   return results;
+}
+
+function clearEmployeesCache() {
+  cacheStore.delete("employees:active");
+
+  if (typeof ServerCache !== "undefined") {
+    ServerCache.clear("employees", "active");
+  }
 }
 
 
@@ -1919,28 +1964,52 @@ function userCan(user, permission) {
 
 async function findEmployeeByCode(code) {
   const cleanCode = String(code || "").trim();
-  const employees = await getEmployeesCached();
 
-  return employees.find((page) => {
-    const employeeCode = getEmployeeCodeFromPage(page);
-    return employeeCode === cleanCode;
-  });
+  const findMatch = (employees) =>
+    employees.find((page) => {
+      const employeeCode = getEmployeeCodeFromPage(page);
+      return employeeCode === cleanCode;
+    });
+
+  let employees = await getEmployeesCached();
+  let employee = findMatch(employees);
+
+  // Reintento fresco para códigos recién creados en Notion.
+  if (!employee) {
+    clearEmployeesCache();
+    employees = await getEmployeesCached(true);
+    employee = findMatch(employees);
+  }
+
+  return employee;
 }
 
 async function findEmployeeByLogin(login) {
   const cleanLogin = String(login || "").trim();
   const cleanLoginText = cleanEmployeeText(cleanLogin);
-  const employees = await getEmployeesCached();
 
-  return employees.find((page) => {
-    const name = getEmployeeNameFromPage(page);
-    const code = getEmployeeCodeFromPage(page);
+  const findMatch = (employees) =>
+    employees.find((page) => {
+      const name = getEmployeeNameFromPage(page);
+      const code = getEmployeeCodeFromPage(page);
 
-    const nameMatch = cleanEmployeeText(name) === cleanLoginText;
-    const codeMatch = code && code === cleanLogin;
+      const nameMatch = cleanEmployeeText(name) === cleanLoginText;
+      const codeMatch = code && code === cleanLogin;
 
-    return nameMatch || codeMatch;
-  });
+      return nameMatch || codeMatch;
+    });
+
+  let employees = await getEmployeesCached();
+  let employee = findMatch(employees);
+
+  // Si el empleado acaba de agregarse en Notion, fuerza una lectura nueva.
+  if (!employee) {
+    clearEmployeesCache();
+    employees = await getEmployeesCached(true);
+    employee = findMatch(employees);
+  }
+
+  return employee;
 }
 
 function mobileHomeFromRole(role) {
