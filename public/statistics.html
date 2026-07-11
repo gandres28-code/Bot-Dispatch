@@ -71,7 +71,7 @@
       <div class="brand"><div class="logo">417</div><div><strong>Estadísticas</strong><span>Rendimiento, calidad y costos</span></div></div>
       <div class="actions">
         <input id="dateInput" class="date" type="date">
-        <button id="refreshBtn" class="button" onclick="loadStatistics(true)">↻ Actualizar</button>
+        <button id="refreshBtn" class="button" onclick="refreshAllStatistics()">↻ Actualizar</button>
       </div>
     </header>
 
@@ -174,6 +174,8 @@
   const set=(id,value)=>{const el=$(id);if(el)el.textContent=value};
   let activeHistoryRangeDays=7;
   let customHistoryRange=false;
+  const historyClientCache=new Map();
+  const HISTORY_CLIENT_TTL=10*60*1000;
 
   function localToday(){
     return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
@@ -310,7 +312,7 @@
       }
     }
 
-    loadHistory(true);
+    loadHistory(false);
   }
 
   async function loadHistory(force=false){
@@ -318,42 +320,87 @@
     const end=$("historyEnd").value;
     if(!start||!end)return;
 
+    const cacheKey=`${start}:${end}`;
+    const cached=historyClientCache.get(cacheKey);
+
+    if(!force&&cached&&Date.now()-cached.savedAt<HISTORY_CLIENT_TTL){
+      renderHistoryPayload(cached.data);
+      return;
+    }
+
     try{
-      const response=await fetch(`/statistics-history?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${force?"&refresh=1":""}`,{cache:"no-store"});
+      const response=await fetch(
+        `/statistics-history?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${force?"&refresh=1":""}`,
+        {cache:"no-store"}
+      );
+
       const data=await response.json();
-      if(!response.ok||!data.ok)throw new Error(data.message||"No se pudo cargar el historial");
 
-      const s=data.summary||{},days=data.days||[];
-      set("historyRangeLabel",`${s.days||days.length} días · ${compactDay(data.start)}–${compactDay(data.end)}`);
-      set("historyRooms",s.totalUnits||0);
-      set("historyCompletion",`${s.completionRate||0}%`);
-      set("historyPayroll",money(s.totalPayroll||0));
-      set("historyCleaning",`${s.averageCleaningMinutes||0}m`);
-      set("historyQuality",`${s.averageQualityScore||0}%`);
-      set("historyProblems",`${s.totalProblems||0} problemas`);
-
-      const daysWithData=days.filter(day=>(day.totalUnits||0)>0).length;
-      const emptyDays=Math.max(0,days.length-daysWithData);
-      const dataNote=$("historyDataNote");
-
-      if(emptyDays>0){
-        dataNote.textContent=`${daysWithData} de ${days.length} días tienen unidades registradas. Los otros ${emptyDays} días aparecen como “sin datos”.`;
-        dataNote.classList.add("show");
-      }else{
-        dataNote.classList.remove("show");
+      if(!response.ok||!data.ok){
+        throw new Error(data.message||"No se pudo cargar el historial");
       }
 
-      const best=[...days].sort((a,b)=>(b.ready||0)-(a.ready||0))[0];
-      set("historyBestDay",best?`Mejor día: ${compactDay(best.date)} · ${best.ready} ready`:"Mejor día: —");
+      historyClientCache.set(cacheKey,{
+        data,
+        savedAt:Date.now()
+      });
 
-      renderBarChart("roomsChart",days,"ready",value=>String(Math.round(value)));
-      renderBarChart("payrollChart",days,"payroll",value=>money(value));
+      renderHistoryPayload(data);
     }catch(error){
       $("notice").textContent=`Historial: ${error.message}`;
       $("notice").classList.add("show");
     }
   }
 
+  function renderHistoryPayload(data){
+    const s=data.summary||{},days=data.days||[];
+
+    set("historyRangeLabel",`${s.days||days.length} días · ${compactDay(data.start)}–${compactDay(data.end)}`);
+    set("historyRooms",s.totalUnits||0);
+    set("historyCompletion",`${s.completionRate||0}%`);
+    set("historyPayroll",money(s.totalPayroll||0));
+    set("historyCleaning",`${s.averageCleaningMinutes||0}m`);
+    set("historyQuality",`${s.averageQualityScore||0}%`);
+    set("historyProblems",`${s.totalProblems||0} problemas`);
+
+    const daysWithData=days.filter(day=>(day.totalUnits||0)>0).length;
+    const emptyDays=Math.max(0,days.length-daysWithData);
+    const dataNote=$("historyDataNote");
+
+    if(emptyDays>0){
+      dataNote.textContent=`${daysWithData} de ${days.length} días tienen unidades registradas. Los otros ${emptyDays} días aparecen como “sin datos”.`;
+      dataNote.classList.add("show");
+    }else{
+      dataNote.classList.remove("show");
+    }
+
+    const best=[...days].sort((a,b)=>(b.ready||0)-(a.ready||0))[0];
+    set("historyBestDay",best?`Mejor día: ${compactDay(best.date)} · ${best.ready} ready`:"Mejor día: —");
+
+    renderBarChart("roomsChart",days,"ready",value=>String(Math.round(value)));
+    renderBarChart("payrollChart",days,"payroll",value=>money(value));
+  }
+
+  async function preloadStatisticsRanges(){
+    try{
+      const end=$("dateInput").value||localToday();
+
+      await fetch("/statistics-preload",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({end})
+      });
+    }catch(error){
+      console.log("Precarga no disponible:",error.message);
+    }
+  }
+
+  async function refreshAllStatistics(){
+    historyClientCache.clear();
+    await loadStatistics(true);
+    await loadHistory(true);
+    preloadStatisticsRanges();
+  }
 
   async function loadStatistics(force=false){
     const button=$("refreshBtn");button.classList.add("loading");
@@ -384,6 +431,7 @@
       }
 
       await loadHistory(false);
+      preloadStatisticsRanges();
 
       if((s.unreliableCleaningTimes||0)>0){
         $("notice").textContent=`${s.unreliableCleaningTimes} tiempos fueron marcados como no confiables y quedaron fuera de los promedios.`;
