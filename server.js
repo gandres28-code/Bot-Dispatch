@@ -2370,6 +2370,24 @@ for (const page of matches) {
     };
   }
 
+  if (action === "INSPECTION_START") {
+    setFirstExistingDate(
+      page,
+      props,
+      ["Inspection Started At", "Inspection Start At"],
+      now
+    );
+  }
+
+  if (action === "READY_GUEST") {
+    setFirstExistingDate(
+      page,
+      props,
+      ["Ready At", "Ready for Guest At"],
+      now
+    );
+  }
+
   if (action === "GUEST_OUT") {
     setCheckboxIfExists(page, props, "Guest Out", true);
     setDateIfExists(page, props, "Guest Out At", now);
@@ -2531,6 +2549,14 @@ for (const page of matches) {
       action === "DONE"
         ? now
         : page.properties?.["Finished At"]?.date?.start || "",
+    inspectionStartedAt:
+      action === "INSPECTION_START"
+        ? now
+        : readDateProp(page, ["Inspection Started At", "Inspection Start At"]),
+    readyAt:
+      action === "READY_GUEST"
+        ? now
+        : readDateProp(page, ["Ready At", "Ready for Guest At"]),
     updatedAt: now,
   };
 
@@ -4914,10 +4940,12 @@ function dashboardStatusKey(status) {
 
 function dashboardBuildingFromUnit(unit) {
   const text = String(unit || "").trim().toUpperCase();
-  const explicitBuilding = text.match(/(?:-|–)\s*([A-Z])\s*$/);
+
+  // Acepta formatos como "430 A (2) - G" y "430 A (2) - G URGENTE".
+  const explicitBuilding = text.match(/(?:-|–)\s*([A-Z])(?:\s+URGENTE)?\s*$/);
   if (explicitBuilding) return explicitBuilding[1];
 
-  const finalLetter = text.match(/\b([A-Z])\s*$/);
+  const finalLetter = text.match(/\b([A-Z])(?:\s+URGENTE)?\s*$/);
   return finalLetter ? finalLetter[1] : "OTHER";
 }
 
@@ -4935,8 +4963,10 @@ function pageToDashboardUnit(page) {
     arrival: readCheckboxProp(page, ["Arrival", "arrival"]),
     stayover: readCheckboxProp(page, ["Stayover", "Stay Over", "stayover"]),
     urgent:
-      cleanEmployeeText(readRoomTextProperty(props, ["Priority"])) === "urgent" ||
-      readCheckboxProp(page, ["Urgent", "urgent"]),
+      cleanEmployeeText(readRoomTextProperty(props, ["Priority"])).includes("urgent") ||
+      readCheckboxProp(page, ["Urgent", "urgent"]) ||
+      cleanEmployeeText(readRoomTextProperty(props, ["Room Number", "Unit", "Room"])).includes("urgente") ||
+      cleanEmployeeText(readRoomTextProperty(props, ["Room Number", "Unit", "Room"])).includes("urgent"),
     priority: readRoomTextProperty(props, ["Priority"]) || "Normal",
     startedAt: readDateProp(page, ["Started At", "Cleaning Started At"]),
     finishedAt: readDateProp(page, ["Finished At", "Cleaning Finished At"]),
@@ -5186,10 +5216,28 @@ function calculateDashboardAverages(units) {
     ? cleaningMinutes.reduce((sum, value) => sum + value, 0) / cleaningMinutes.length
     : 0;
 
+  const inspectionMinutes = [];
+
+  for (const unit of units) {
+    if (!unit.inspectionStartedAt || !unit.readyAt) continue;
+    const start = new Date(unit.inspectionStartedAt).getTime();
+    const finish = new Date(unit.readyAt).getTime();
+    const minutes = (finish - start) / 60000;
+
+    if (Number.isFinite(minutes) && minutes >= 0 && minutes <= 240) {
+      inspectionMinutes.push(minutes);
+    }
+  }
+
+  const averageInspectionMinutes = inspectionMinutes.length
+    ? inspectionMinutes.reduce((sum, value) => sum + value, 0) / inspectionMinutes.length
+    : 0;
+
   return {
     averageCleaningMinutes: Number(averageCleaningMinutes.toFixed(1)),
-    averageInspectionMinutes: 0,
+    averageInspectionMinutes: Number(averageInspectionMinutes.toFixed(1)),
     completedWithTime: cleaningMinutes.length,
+    inspectionsWithTime: inspectionMinutes.length,
   };
 }
 
