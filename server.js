@@ -6793,6 +6793,338 @@ app.post("/statistics-preload", async (req, res) => {
   }
 });
 
+
+// =========================================================
+// PERFIL INDIVIDUAL DE LIMPIADOR v1
+// Una consulta por rango, caché y máximo 31 días.
+// =========================================================
+function cleanerProfileNameMatches(value, targetName) {
+  const target = cleanEmployeeText(targetName);
+  const raw = String(value || "");
+
+  if (!target || !raw.trim()) return false;
+  if (cleanEmployeeText(raw) === target) return true;
+
+  return raw
+    .split(/[,|]+/)
+    .map((name) => cleanEmployeeText(name))
+    .filter(Boolean)
+    .includes(target);
+}
+
+function cleanerProfilePayrollObject(page) {
+  const props = page?.properties || {};
+
+  return {
+    date: props.Date?.date?.start || "",
+    cleaner: readRoomTextProperty(props, ["Cleaner", "cleaner"]),
+    unit: readRoomTextProperty(props, ["Unit", "unit"]),
+    amount: Number(props.Amount?.number || 0),
+    roomType: readRoomTextProperty(props, ["Room Type", "room type"]),
+  };
+}
+
+async function buildCleanerProfileData({ name, start, end, forceRefresh = false }) {
+  const cleanName = statisticsNormalizePerson(name);
+
+  if (!cleanName) {
+    throw new Error("Nombre del limpiador requerido");
+  }
+
+  const dates = statisticsDateRange(start, end, 31);
+  const cacheKey = `cleaner-profile:v1:${cleanEmployeeText(cleanName)}:${start}:${end}`;
+  const cached = forceRefresh ? null : getCache(cacheKey);
+  if (cached) return cached;
+
+  const [roomPages, payrollPages, logPages, reportPages] = await Promise.all([
+    queryPagesByDateRange(NOTION_DATABASE_ID, start, end, { forceRefresh }),
+    queryPagesByDateRange(NOTION_PAYROLL_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+    queryPagesByDateRange(NOTION_LOG_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+    queryPagesByDateRange(NOTION_REPORTS_DATABASE_ID, start, end, { forceRefresh }).catch(() => []),
+  ]);
+
+  const allUnits = roomPages.map(pageToDashboardUnit);
+  const units = allUnits.filter((unit) => cleanerProfileNameMatches(unit.cleaner, cleanName));
+
+  if (!units.length) {
+    const knownFromPayroll = payrollPages.some((page) =>
+      cleanerProfileNameMatches(
+        readRoomTextProperty(page.properties || {}, ["Cleaner", "cleaner"]),
+        cleanName
+      )
+    );
+
+    if (!knownFromPayroll) {
+      const error = new Error(`No encontré actividad para ${cleanName} en este rango`);
+      error.status = 404;
+      throw error;
+    }
+  }
+
+  const payroll = payrollPages
+    .map(cleanerProfilePayrollObject)
+    .filter((record) => cleanerProfileNameMatches(record.cleaner, cleanName));
+
+  const logs = logPages
+    .map(statisticsReadLogPage)
+    .filter((log) =>
+      cleanerProfileNameMatches(log.cleaner, cleanName) ||
+      cleanerProfileNameMatches(log.cleanerError, cleanName)
+    );
+
+  const reports = reportPages
+    .map(reportPageToObject)
+    .filter((report) => cleanerProfileNameMatches(report.employee, cleanName));
+
+  const payrollByUnitDate = new Map();
+  for (const record of payroll) {
+    payrollByUnitDate.set(
+      `${String(record.date).slice(0, 10)}|${normalizeRoom(record.unit)}`,
+      record.amount
+    );
+  }
+
+  const logsByUnitDate = new Map();
+  for (const log of logs) {
+    const key = `${String(log.date).slice(0, 10)}|${normalizeRoom(log.unit)}`;
+    if (!logsByUnitDate.has(key)) logsByUnitDate.set(key, []);
+    logsByUnitDate.get(key).push(log);
+  }
+
+  const dailyMap = new Map(
+    dates.map((date) => [
+      date,
+      {
+        date,
+        assigned: 0,
+        completed: 0,
+        arrivals: 0,
+        urgent: 0,
+        payroll: 0,
+        validTimes: [],
+        unreliableTimes: 0,
+        inspectionErrors: 0,
+        issues: 0,
+        supplies: 0,
+      },
+    ])
+  );
+
+  const unitRows = units.map((unit) => {
+    const date = String(unit.date || "").slice(0, 10);
+    const day = dailyMap.get(date);
+    const statusKey = dashboardStatusKey(unit.status);
+    const completed = statusKey === "ready";
+    const duration = statisticsMinutesBetween(unit.startedAt, unit.finishedAt, {
+      minMinutes: 5,
+      maxMinutes: 720,
+    });
+    const key = `${date}|${normalizeRoom(unit.unit)}`;
+    const unitLogs = logsByUnitDate.get(key) || [];
+    const inspectionErrors = unitLogs.filter(
+      (log) => String(log.action || "").toUpperCase() === "INSPECTION_REPORT"
+    ).length;
+    const issues = unitLogs.filter((log) =>
+      ["ISSUE", "LOST_FOUND"].includes(String(log.action || "").toUpperCase())
+    ).length;
+    const supplies = unitLogs.filter(
+      (log) => String(log.action || "").toUpperCase() === "SUPPLIES"
+    ).length;
+    const amount = payrollByUnitDate.get(key) ?? (completed ? Number(getUnitPay(unit.unit).amount || 0) : 0);
+    const qualityScore = completed
+      ? Math.max(0, Number((((1 - inspectionErrors) / 1) * 100).toFixed(1)))
+      : null;
+
+    if (day) {
+      day.assigned += 1;
+      if (completed) day.completed += 1;
+      if (unit.arrival) day.arrivals += 1;
+      if (unit.urgent) day.urgent += 1;
+      day.payroll += amount;
+      day.inspectionErrors += inspectionErrors;
+      day.issues += issues;
+      day.supplies += supplies;
+
+      if (duration.valid) day.validTimes.push(duration.minutes);
+      else if (unit.startedAt || unit.finishedAt) day.unreliableTimes += 1;
+    }
+
+    return {
+      id: unit.id,
+      date,
+      unit: unit.unit,
+      building: unit.building,
+      status: unit.status,
+      arrival: !!unit.arrival,
+      urgent: !!unit.urgent,
+      startedAt: unit.startedAt,
+      finishedAt: unit.finishedAt,
+      minutes: duration.valid ? duration.minutes : null,
+      reliableTime: duration.valid,
+      timeReason: duration.reason || "",
+      payroll: Number(amount.toFixed(2)),
+      inspectionErrors,
+      issues,
+      supplies,
+      qualityScore,
+    };
+  });
+
+  for (const log of logs) {
+    const date = String(log.date || "").slice(0, 10);
+    const day = dailyMap.get(date);
+    if (!day) continue;
+
+    const action = String(log.action || "").toUpperCase();
+    if (action === "INSPECTION_REPORT") day.inspectionErrors += 1;
+    if (["ISSUE", "LOST_FOUND"].includes(action)) day.issues += 1;
+    if (action === "SUPPLIES") day.supplies += 1;
+  }
+
+  const daily = Array.from(dailyMap.values()).map((day) => {
+    const averageMinutes = statisticsAverage(day.validTimes);
+    const qualityBase = day.completed || day.assigned;
+
+    return {
+      date: day.date,
+      assigned: day.assigned,
+      completed: day.completed,
+      completionRate: day.assigned
+        ? Number(((day.completed / day.assigned) * 100).toFixed(1))
+        : 0,
+      arrivals: day.arrivals,
+      urgent: day.urgent,
+      payroll: Number(day.payroll.toFixed(2)),
+      averageMinutes,
+      validTimeCount: day.validTimes.length,
+      unreliableTimes: day.unreliableTimes,
+      inspectionErrors: day.inspectionErrors,
+      issues: day.issues,
+      supplies: day.supplies,
+      qualityScore: qualityBase
+        ? Math.max(
+            0,
+            Number(
+              (((qualityBase - day.inspectionErrors) / qualityBase) * 100).toFixed(1)
+            )
+          )
+        : 100,
+    };
+  });
+
+  const assigned = unitRows.length;
+  const completed = unitRows.filter((unit) => dashboardStatusKey(unit.status) === "ready").length;
+  const validTimes = unitRows.filter((unit) => unit.reliableTime).map((unit) => unit.minutes);
+  const unreliableTimes = unitRows.filter(
+    (unit) => !unit.reliableTime && (unit.startedAt || unit.finishedAt)
+  ).length;
+  const totalPayroll = payroll.length
+    ? payroll.reduce((sum, record) => sum + record.amount, 0)
+    : unitRows.reduce((sum, unit) => sum + unit.payroll, 0);
+  const inspectionErrors = logs.filter(
+    (log) => String(log.action || "").toUpperCase() === "INSPECTION_REPORT"
+  ).length;
+  const issues = logs.filter((log) =>
+    ["ISSUE", "LOST_FOUND"].includes(String(log.action || "").toUpperCase())
+  ).length;
+  const supplies = logs.filter(
+    (log) => String(log.action || "").toUpperCase() === "SUPPLIES"
+  ).length;
+  const qualityBase = completed || assigned;
+
+  const daysWithWork = daily.filter((day) => day.assigned > 0);
+  const bestDay = [...daysWithWork].sort((a, b) => {
+    if (b.completed !== a.completed) return b.completed - a.completed;
+    return a.averageMinutes - b.averageMinutes;
+  })[0] || null;
+  const fastestDay = [...daysWithWork]
+    .filter((day) => day.validTimeCount > 0)
+    .sort((a, b) => a.averageMinutes - b.averageMinutes)[0] || null;
+  const highestPayrollDay = [...daysWithWork].sort((a, b) => b.payroll - a.payroll)[0] || null;
+  const mostErrorsDay = [...daysWithWork].sort((a, b) => b.inspectionErrors - a.inspectionErrors)[0] || null;
+
+  const payload = {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    start,
+    end,
+    cleaner: {
+      name: cleanName,
+      role: "Cleaner",
+    },
+    summary: {
+      assigned,
+      completed,
+      completionRate: assigned
+        ? Number(((completed / assigned) * 100).toFixed(1))
+        : 0,
+      arrivals: unitRows.filter((unit) => unit.arrival).length,
+      urgent: unitRows.filter((unit) => unit.urgent).length,
+      averageMinutes: statisticsAverage(validTimes),
+      roomsPerHour: statisticsAverage(validTimes) > 0
+        ? Number((60 / statisticsAverage(validTimes)).toFixed(2))
+        : 0,
+      payroll: Number(totalPayroll.toFixed(2)),
+      qualityScore: qualityBase
+        ? Math.max(
+            0,
+            Number((((qualityBase - inspectionErrors) / qualityBase) * 100).toFixed(1))
+          )
+        : 100,
+      inspectionErrors,
+      issues,
+      supplies,
+      reports: reports.length,
+      validTimeCount: validTimes.length,
+      unreliableTimes,
+    },
+    highlights: {
+      bestDay,
+      fastestDay,
+      highestPayrollDay,
+      mostErrorsDay: mostErrorsDay?.inspectionErrors > 0 ? mostErrorsDay : null,
+    },
+    daily,
+    units: unitRows.sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      return a.unit.localeCompare(b.unit);
+    }),
+  };
+
+  setCache(cacheKey, payload, end === todayISO() ? 10 * 60 * 1000 : 30 * 60 * 1000);
+  return payload;
+}
+
+app.get("/cleaner-profile-data", async (req, res) => {
+  try {
+    const name = String(req.query.name || "").trim();
+    const end = String(req.query.end || todayISO()).trim();
+    const defaultStart = new Date(`${end}T12:00:00`);
+    defaultStart.setDate(defaultStart.getDate() - 6);
+    const start = String(req.query.start || defaultStart.toISOString().slice(0, 10)).trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+
+    const payload = await buildCleanerProfileData({
+      name,
+      start,
+      end,
+      forceRefresh,
+    });
+
+    res.json(payload);
+  } catch (error) {
+    console.error("Error en /cleaner-profile-data:", error.message);
+    res.status(error.status || 400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/cleaner-profile", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "cleaner-profile.html"));
+});
+
 app.get("/statistics", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "statistics.html"));
 });
