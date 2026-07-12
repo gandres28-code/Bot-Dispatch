@@ -1539,7 +1539,7 @@
           <div class="hero-subtitle">Tu lista de trabajo en vivo para el día de hoy.</div>
         </div>
 
-        <button class="refresh-button" onclick="loadCleanerAssignments(false)">
+        <button class="refresh-button" onclick="loadCleanerAssignments(true)">
           <span class="refresh-symbol">↻</span>
           Actualizar
         </button>
@@ -1652,7 +1652,7 @@
     <button onclick="closeSettingsMenu()">Cerrar</button>
   </div>
 
-  <button class="settings-option" onclick="localStorage.clear(); window.location.href='/launch';">
+  <button class="settings-option" onclick="window.OS?.clearSession ? OS.clearSession() : localStorage.clear(); window.location.replace('/launch');">
     Cambiar usuario
   </button>
 </section>
@@ -1662,7 +1662,11 @@
 
 <script>
 let currentCleanerName = "";
-let cleanerRefreshTimer = null;
+let assignmentsRequest = null;
+let reportsRequest = null;
+let lastAssignmentsLoadedAt = 0;
+let lastReportsLoadedAt = 0;
+let cachedCleanerUnits = [];
 let isSending = false;
 let lastSendKey = "";
 let lastSendTime = 0;
@@ -1766,7 +1770,7 @@ async function bootCleanerPanel(){
   }
 
   if(name){
-    loadCleanerAssignments(true);
+    loadCleanerAssignments(false);
   }
 }
 
@@ -2011,8 +2015,11 @@ function restoreCleanerName(){
   }
 }
 
-async function loadCleanerAssignments(showLoading){
-  const name = document.getElementById("name").value.trim();
+async function loadCleanerAssignments(forceRefresh = false){
+  const input = document.getElementById("name");
+  const assignmentsBox = document.getElementById("assignments");
+  const name = String(input?.value || "").trim();
+
   currentCleanerName = name;
 
   if(name){
@@ -2021,136 +2028,166 @@ async function loadCleanerAssignments(showLoading){
   }
 
   if(!name){
-    alert("No se encontró tu sesión. Vuelve a entrar desde Launch.");
-    window.location.href = "/launch";
-    return;
+    showBigStatus("No se encontró tu sesión. Vuelve a entrar desde Launch.", "error");
+    setTimeout(() => window.location.replace("/launch"), 700);
+    return null;
   }
 
-  if(showLoading){
-    document.getElementById("assignments").innerHTML = "<div class='empty'>Cargando tus unidades...</div>";
+  // Evita que focus, visibilitychange y Socket.IO creen la misma solicitud a la vez.
+  if(assignmentsRequest){
+    return assignmentsRequest;
   }
 
-  try{
-    const response = await fetch(`/cleaner-assignments?name=${encodeURIComponent(name)}&t=${Date.now()}`);
-    const data = await response.json();
+  // Durante unos segundos reutilizamos las unidades ya pintadas.
+  // El botón Actualizar y los eventos reales de Socket.IO pueden forzar la lectura.
+  const cacheAge = Date.now() - lastAssignmentsLoadedAt;
+  if(!forceRefresh && cachedCleanerUnits.length && cacheAge < 12000){
+    return {
+      ok:true,
+      cleaner:name,
+      units:cachedCleanerUnits,
+      cached:true
+    };
+  }
 
-    if(!data.ok){
-      document.getElementById("assignments").innerHTML = "";
-      alert(data.message || "No se pudieron cargar tus unidades");
-      return;
+  if(forceRefresh || !cachedCleanerUnits.length){
+    assignmentsBox.innerHTML = "<div class='empty'>Cargando tus unidades...</div>";
+  }
+
+  assignmentsRequest = (async () => {
+    try{
+      const url = `/cleaner-assignments?name=${encodeURIComponent(name)}`;
+      const data = window.OS?.api
+        ? await OS.api.get(url)
+        : await fetch(url).then(response => response.json());
+
+      if(!data.ok){
+        throw new Error(data.message || "No se pudieron cargar tus unidades");
+      }
+
+      const units = Array.isArray(data.units) ? data.units : [];
+      cachedCleanerUnits = units;
+      lastAssignmentsLoadedAt = Date.now();
+
+      setCleanerDisplayName(data.cleaner || name);
+      updateCleanerDashboard(units);
+      renderCleanerAssignments(units);
+
+      // El historial se carga una vez al entrar. No se vuelve a pedir por cada refresco.
+      if(!lastReportsLoadedAt){
+        loadMyReports(false);
+      }
+
+      return data;
+    }catch(error){
+      console.error("Error cargando unidades:", error);
+
+      if(!cachedCleanerUnits.length){
+        assignmentsBox.innerHTML =
+          "<div class='empty'>No se pudieron cargar tus unidades. Toca Actualizar para intentar otra vez.</div>";
+      }
+
+      showBigStatus(error.message || "Error cargando unidades", "error");
+      return null;
+    }finally{
+      assignmentsRequest = null;
     }
+  })();
 
-    setCleanerDisplayName(data.cleaner || name);
-    updateCleanerDashboard(data.units || []);
-
-    if(!data.units || data.units.length === 0){
-      document.getElementById("assignments").innerHTML =
-        "<div class='empty'>No tienes unidades asignadas hoy.</div>";
-      startCleanerAutoRefresh();
-      loadMyReports();
-      return;
-    }
-
-    let html = `<div class="assignment-list">`;
-
-    data.units.forEach(item => {
-      const state = getCleanerState(item);
-      const selectedClass = item.unit === selectedUnit ? "selected" : "";
-      const cardId = "card-" + item.unit.replace(/[^a-zA-Z0-9]/g, "");
-      const guestOut = isGuestOut(item);
-      const preInspected = isPreInspected(item);
-
-      const guestText = guestOut ? "Guest Out" : "Guest In";
-      const preText = preInspected ? "Pre-Inspected" : "";
-      const footerRight = preInspected ? "Pre-Inspected" : (item.arrival ? "Arrival" : "");
-
-      html += `
-        <div
-          class="assignment-card ${state.cardClass} ${selectedClass}"
-          onclick="selectCleanerAssignment('${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
-          id="${cardId}"
-        >
-          <div class="room-layout">
-            <div class="room-content">
-              <div class="room-title">${escapeHtml(item.unit)}</div>
-
-              <div class="room-meta-grid">
-                <div class="meta-block">
-                  <label>Guest Status</label>
-                  <span class="meta-value ${guestOut ? "guest-out" : ""}">
-                    ${escapeHtml(guestText)}
-                  </span>
-                </div>
-
-                <div class="meta-block">
-                  <label>Pre Inspection</label>
-                  <span class="meta-value ${preInspected ? "pre-inspected" : "pending-pre"}">
-                    ${escapeHtml(preText)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div
-              class="state-panel"
-              onclick="${state.key === "done" ? "" : (state.key === "not-started" || state.key === "guest-out" || state.key === "pre-inspected" ? `quickStartUnit(event, '${safeJsString(item.unit)}')` : `quickFinishUnit(event, '${safeJsString(item.unit)}')`)}"
-            >
-              <span class="action-circle ${state.circle}">
-                <svg viewBox="0 0 48 48" aria-hidden="true">
-                  <circle class="ring-track" cx="24" cy="24" r="18" pathLength="100"></circle>
-                  <circle class="ring-value" cx="24" cy="24" r="18" pathLength="100"></circle>
-                </svg>
-              </span>
-              <span class="tap-label">
-                ${state.key === "done" ? "Finished" : (state.key === "started" ? "Tap to Finish" : "Tap to Start")}
-              </span>
-            </div>
-          </div>
-
-          <div class="room-footer">
-            <span>${escapeHtml(state.detail)}</span>
-
-            <div class="footer-right">
-              <strong class="${preInspected ? "easy-tag" : (item.arrival ? "arrival-tag" : "")}">
-                ${escapeHtml(footerRight)}
-              </strong>
-
-              <button
-                class="inline-report"
-                title="Reporte"
-                onclick="openReportForUnit(event, '${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
-              >
-                ✎
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    });
-
-    html += `</div>`;
-
-    document.getElementById("assignments").innerHTML = html;
-
-    startCleanerAutoRefresh();
-    loadMyReports();
-
-  }catch(error){
-    document.getElementById("assignments").innerHTML = "";
-    alert("Error cargando unidades");
-  }
+  return assignmentsRequest;
 }
 
-function startCleanerAutoRefresh(){
-  if(cleanerRefreshTimer){
+function renderCleanerAssignments(units){
+  const assignmentsBox = document.getElementById("assignments");
+
+  if(!units || units.length === 0){
+    assignmentsBox.innerHTML =
+      "<div class='empty'>No tienes unidades asignadas hoy.</div>";
     return;
   }
 
-  cleanerRefreshTimer = setInterval(() => {
-    if(currentCleanerName){
-      loadCleanerAssignments(false);
-    }
-  }, 30000);
+  let html = `<div class="assignment-list">`;
+
+  units.forEach(item => {
+    const state = getCleanerState(item);
+    const selectedClass = item.unit === selectedUnit ? "selected" : "";
+    const cardId = "card-" + String(item.unit || "").replace(/[^a-zA-Z0-9]/g, "");
+    const guestOut = isGuestOut(item);
+    const preInspected = isPreInspected(item);
+
+    const guestText = guestOut ? "Guest Out" : "Guest In";
+    const preText = preInspected ? "Pre-Inspected" : "";
+    const footerRight = preInspected ? "Pre-Inspected" : (item.arrival ? "Arrival" : "");
+
+    const panelAction = state.key === "done"
+      ? ""
+      : (state.key === "not-started" || state.key === "guest-out" || state.key === "pre-inspected")
+        ? `quickStartUnit(event, '${safeJsString(item.unit)}')`
+        : `quickFinishUnit(event, '${safeJsString(item.unit)}')`;
+
+    html += `
+      <div
+        class="assignment-card ${state.cardClass} ${selectedClass}"
+        onclick="selectCleanerAssignment('${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
+        id="${cardId}"
+      >
+        <div class="room-layout">
+          <div class="room-content">
+            <div class="room-title">${escapeHtml(item.unit)}</div>
+
+            <div class="room-meta-grid">
+              <div class="meta-block">
+                <label>Guest Status</label>
+                <span class="meta-value ${guestOut ? "guest-out" : ""}">
+                  ${escapeHtml(guestText)}
+                </span>
+              </div>
+
+              <div class="meta-block">
+                <label>Pre Inspection</label>
+                <span class="meta-value ${preInspected ? "pre-inspected" : "pending-pre"}">
+                  ${escapeHtml(preText)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="state-panel" onclick="${panelAction}">
+            <span class="action-circle ${state.circle}">
+              <svg viewBox="0 0 48 48" aria-hidden="true">
+                <circle class="ring-track" cx="24" cy="24" r="18" pathLength="100"></circle>
+                <circle class="ring-value" cx="24" cy="24" r="18" pathLength="100"></circle>
+              </svg>
+            </span>
+            <span class="tap-label">
+              ${state.key === "done" ? "Finished" : (state.key === "started" ? "Tap to Finish" : "Tap to Start")}
+            </span>
+          </div>
+        </div>
+
+        <div class="room-footer">
+          <span>${escapeHtml(state.detail)}</span>
+
+          <div class="footer-right">
+            <strong class="${preInspected ? "easy-tag" : (item.arrival ? "arrival-tag" : "")}">
+              ${escapeHtml(footerRight)}
+            </strong>
+
+            <button
+              class="inline-report"
+              title="Reporte"
+              onclick="openReportForUnit(event, '${safeJsString(item.unit)}','${safeJsString(item.status)}',${item.arrival ? "true" : "false"})"
+            >
+              ✎
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  assignmentsBox.innerHTML = html;
 }
 
 
@@ -2199,6 +2236,21 @@ function updateCleanerCardState(unit,state,label){
   }
 }
 
+function updateCachedCleanerUnit(unit, changes = {}){
+  const target = String(unit || "").trim().toUpperCase();
+  const index = cachedCleanerUnits.findIndex(item =>
+    String(item?.unit || "").trim().toUpperCase() === target
+  );
+
+  if(index >= 0){
+    cachedCleanerUnits[index] = {
+      ...cachedCleanerUnits[index],
+      ...changes
+    };
+    updateCleanerDashboard(cachedCleanerUnits);
+  }
+}
+
 function mergeCleanerRoomUpdate(update){
   if(!update || !update.unit)return false;
 
@@ -2212,12 +2264,14 @@ function mergeCleanerRoomUpdate(update){
     card.classList.remove("not-started","guest-out","pre-inspected","done");
     card.classList.add("started");
     updateCleanerCardState(update.unit,"half","Tap to Finish");
+    updateCachedCleanerUnit(update.unit, { status:update.status || "In Progress" });
   }
 
   if(status.includes("cleaned") || status.includes("awaiting") || status.includes("ready")){
     card.classList.remove("not-started","guest-out","pre-inspected","started");
     card.classList.add("done");
     updateCleanerCardState(update.unit,"full","Finished");
+    updateCachedCleanerUnit(update.unit, { status:update.status || "Cleaned - Awaiting Inspection" });
   }
 
   return true;
@@ -2308,7 +2362,6 @@ function selectCleanerAssignment(unit, status, arrival){
     card.classList.add("selected");
   }
 
-  loadMyReports();
 }
 
 function addSelectedPhotos(){
@@ -2432,15 +2485,17 @@ async function sendAction(action){
 
       if(action === "START"){
         updateCleanerCardState(unit,"half","Tap to Finish");
+        updateCachedCleanerUnit(unit, { status:"In Progress" });
       }
 
       if(action === "DONE"){
         updateCleanerCardState(unit,"full","Finished");
+        updateCachedCleanerUnit(unit, { status:"Cleaned - Awaiting Inspection" });
         document.getElementById("note").value = "";
       }
 
       // Solo actualizamos historial; la tarjeta ya cambió localmente.
-      await loadMyReports();
+      await loadMyReports(true);
     }else{
       throw new Error(data.message || "Error");
     }
@@ -2539,8 +2594,7 @@ async function submitReportToAI(action){
     updatePhotoCount();
 
     closeReportPanel();
-    await loadMyReports();
-    await loadCleanerAssignments(false);
+    await loadMyReports(true);
 
   }catch(error){
     setStatus("Error: " + error.message);
@@ -2553,15 +2607,24 @@ async function submitReportToAI(action){
   }
 }
 
-async function loadMyReports(){
+async function loadMyReports(forceRefresh = false){
   const name = document.getElementById("name").value.trim();
 
   if(!name){
     document.getElementById("history").innerHTML =
       "<div class='empty'>Tu historial aparecerá aquí después de cargar tus unidades.</div>";
-    return;
+    return null;
   }
 
+  if(reportsRequest){
+    return reportsRequest;
+  }
+
+  if(!forceRefresh && lastReportsLoadedAt && Date.now() - lastReportsLoadedAt < 10000){
+    return null;
+  }
+
+  reportsRequest = (async () => {
   try{
     const params = new URLSearchParams({
       employee:name,
@@ -2572,8 +2635,12 @@ async function loadMyReports(){
       params.append("unit", selectedUnit);
     }
 
-    const response = await fetch(`/my-reports?${params.toString()}&t=${Date.now()}`);
-    const data = await response.json();
+    const url = `/my-reports?${params.toString()}`;
+    const data = window.OS?.api
+      ? await OS.api.get(url)
+      : await fetch(url).then(response => response.json());
+
+    lastReportsLoadedAt = Date.now();
 
     if(!data.ok || !data.reports || data.reports.length === 0){
       document.getElementById("history").innerHTML =
@@ -2641,9 +2708,16 @@ async function loadMyReports(){
     document.getElementById("history").innerHTML = html;
 
   }catch(error){
+    console.error("Error cargando historial:", error);
     document.getElementById("history").innerHTML =
       "<div class='empty'>No se pudo cargar el historial.</div>";
+    return null;
+  }finally{
+    reportsRequest = null;
   }
+  })();
+
+  return reportsRequest;
 }
 
 function openSettingsMenu(){
@@ -2672,18 +2746,11 @@ document.addEventListener("keydown", event => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if(!document.hidden && currentCleanerName){
+  if(!document.hidden && currentCleanerName && Date.now() - lastAssignmentsLoadedAt > 60000){
     loadCleanerAssignments(false);
   }
 });
 
-window.addEventListener("focus", () => {
-  if(currentCleanerName){
-    loadCleanerAssignments(false);
-  }
-});
-
-let socket = null;
 let realtimeRefreshTimer = null;
 let realtimeRefreshRunning = false;
 
@@ -2695,7 +2762,7 @@ async function refreshCleanerRealtime(){
   realtimeRefreshRunning = true;
 
   try{
-    await loadCleanerAssignments(false);
+    await loadCleanerAssignments(true);
   }catch(error){
     console.error("Error actualizando panel en tiempo real:", error);
   }finally{
@@ -2711,72 +2778,46 @@ function scheduleCleanerRealtimeRefresh(){
   }, 250);
 }
 
-try{
-  socket = io({
-    transports:["websocket","polling"],
-    reconnection:true,
-    reconnectionAttempts:Infinity,
-    reconnectionDelay:1000
-  });
+function connectCleanerRealtime(){
+  const sharedSocket = window.OS?.socket;
 
-  socket.on("connect", () => {
-    console.log("📡 Panel de limpieza conectado en tiempo real");
+  if(!sharedSocket){
+    window.addEventListener("os-ready", connectCleanerRealtime, { once:true });
+    return;
+  }
 
-    if(currentCleanerName){
-      scheduleCleanerRealtimeRefresh();
-    }
-  });
+  console.log("📡 Panel de limpieza usando Socket.IO compartido");
 
-  socket.on("assignments-updated", payload => {
-    console.log("🔔 Asignaciones actualizadas:", payload);
+  sharedSocket.off("assignments-updated", handleAssignmentsUpdated);
+  sharedSocket.off("rooms-updated", handleAssignmentsUpdated);
+  sharedSocket.off("room-updated", handleRoomUpdated);
 
-    if(payload?.lightweight || payload?.reason==="server-room-update"){
-      return;
-    }
-
-    scheduleCleanerRealtimeRefresh();
-  });
-
-  socket.on("room-updated", update => {
-    console.log("⚡ Unidad actualizada:", update);
-
-    const merged=mergeCleanerRoomUpdate(update);
-
-    if(!merged && currentCleanerName){
-      scheduleCleanerRealtimeRefresh();
-    }
-  });
-
-  socket.on("rooms-updated", payload => {
-    console.log("🔔 Habitaciones actualizadas:", payload);
-
-    if(payload?.lightweight || payload?.reason==="server-room-update"){
-      return;
-    }
-
-    scheduleCleanerRealtimeRefresh();
-  });
-
-  socket.on("ops-update", payload => {
-    console.log("🔔 Operaciones actualizadas:", payload);
-
-    if(payload?.unit && payload?.action){
-      return;
-    }
-
-    scheduleCleanerRealtimeRefresh();
-  });
-
-  socket.on("disconnect", reason => {
-    console.log("📴 Tiempo real desconectado:", reason);
-  });
-
-  socket.on("connect_error", error => {
-    console.warn("⚠️ Error de conexión Socket.IO:", error.message);
-  });
-}catch(error){
-  console.warn("⚠️ No se pudo iniciar Socket.IO:", error);
+  sharedSocket.on("assignments-updated", handleAssignmentsUpdated);
+  sharedSocket.on("rooms-updated", handleAssignmentsUpdated);
+  sharedSocket.on("room-updated", handleRoomUpdated);
 }
+
+function handleAssignmentsUpdated(payload){
+  console.log("🔔 Asignaciones actualizadas:", payload);
+
+  if(payload?.lightweight || payload?.reason === "server-room-update"){
+    return;
+  }
+
+  scheduleCleanerRealtimeRefresh();
+}
+
+function handleRoomUpdated(update){
+  console.log("⚡ Unidad actualizada:", update);
+
+  const merged = mergeCleanerRoomUpdate(update);
+
+  if(!merged && currentCleanerName){
+    scheduleCleanerRealtimeRefresh();
+  }
+}
+
+connectCleanerRealtime();
 </script>
 </body>
 </html>
