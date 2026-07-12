@@ -74,6 +74,23 @@ cloudinary.config({
 const recentActions = new Map();
 const cacheStore = new Map();
 
+// Evita que varias pantallas hagan la misma consulta a Notion al mismo tiempo.
+// Todos esperan la misma promesa en vez de formar una fila de llamadas duplicadas.
+const inFlightRequests = new Map();
+
+async function singleFlight(key, task) {
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key);
+  }
+
+  const promise = Promise.resolve()
+    .then(task)
+    .finally(() => inFlightRequests.delete(key));
+
+  inFlightRequests.set(key, promise);
+  return promise;
+}
+
 // =========================================================
 // SERVER CACHE ENGINE v1
 // =========================================================
@@ -1014,58 +1031,61 @@ async function queryTodayRooms(forceRefresh = false) {
 }
 // ■ Buscar unidades de cualquier fecha en la página central de Notion
 async function queryRoomsByDate(date, forceRefresh = false) {
-  const cacheKey = date === todayISO() ? `todayRooms:${date}` : `roomsByDate:${date}`;
+  const isToday = date === todayISO();
+  const cacheKey = isToday ? `todayRooms:${date}` : `roomsByDate:${date}`;
+  const ttlMs = isToday
+    ? Number(process.env.ROOMS_CACHE_MS || 30000)
+    : 120000;
 
-  // Primero usamos ServerCache en RAM. Es más rápido y reduce llamadas a Notion.
-  const roomCache = !forceRefresh && typeof ServerCache !== "undefined"
+  const roomCache = !forceRefresh
     ? ServerCache.get("rooms", date)
     : null;
 
   if (roomCache) {
-    return roomCache.value;
+    const age = Date.now() - new Date(roomCache.updatedAt).getTime();
+    if (Number.isFinite(age) && age < ttlMs) {
+      return roomCache.value;
+    }
+    ServerCache.clear("rooms", date);
   }
 
-  // Compatibilidad con el cache TTL anterior.
   const cached = !forceRefresh ? getCache(cacheKey) : null;
-
   if (cached) {
-    if (typeof ServerCache !== "undefined") {
-      ServerCache.set("rooms", date, cached);
-    }
-
+    ServerCache.set("rooms", date, cached);
     return cached;
   }
 
-  let pages = [];
-  let cursor = undefined;
+  return singleFlight(`rooms:${date}`, async () => {
+    // Otra solicitud pudo llenar el caché mientras esta esperaba.
+    if (!forceRefresh) {
+      const secondCheck = getCache(cacheKey);
+      if (secondCheck) return secondCheck;
+    }
 
-  do {
-    const body = {
-      database_id: NOTION_DATABASE_ID,
-      page_size: 100,
-      filter: {
-        property: "Date",
-        date: {
-          equals: date,
+    let pages = [];
+    let cursor;
+
+    do {
+      const body = {
+        database_id: NOTION_DATABASE_ID,
+        page_size: 100,
+        filter: {
+          property: "Date",
+          date: { equals: date },
         },
-      },
-    };
+      };
 
-    if (cursor) body.start_cursor = cursor;
+      if (cursor) body.start_cursor = cursor;
 
-    const response = await notion.databases.query(body);
-    pages = pages.concat(response.results || []);
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
+      const response = await notion.databases.query(body);
+      pages = pages.concat(response.results || []);
+      cursor = response.has_more ? response.next_cursor : undefined;
+    } while (cursor);
 
-  // Cache corto para el día activo, más largo para reportes de días pasados.
-  setCache(cacheKey, pages, date === todayISO() ? 10000 : 120000);
-
-  if (typeof ServerCache !== "undefined") {
+    setCache(cacheKey, pages, ttlMs);
     ServerCache.set("rooms", date, pages);
-  }
-
-  return pages;
+    return pages;
+  });
 }
 // ■ Status de Notion
 function notionStatusFromAction(action) {
@@ -1746,62 +1766,54 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
 }
 async function getEmployeesCached(forceRefresh = false) {
   const cacheKey = "employees:active";
-  const EMPLOYEES_CACHE_MS = Number(
-    process.env.EMPLOYEES_CACHE_MS || 3000
-  );
+  const ttlMs = Number(process.env.EMPLOYEES_CACHE_MS || 300000);
 
-  // ServerCache no tiene vencimiento automático, así que verificamos su edad.
-  const employeeCache =
-    !forceRefresh && typeof ServerCache !== "undefined"
-      ? ServerCache.get("employees", "active")
-      : null;
+  const employeeCache = !forceRefresh
+    ? ServerCache.get("employees", "active")
+    : null;
 
   if (employeeCache) {
-    const cacheAge = Date.now() - new Date(employeeCache.updatedAt).getTime();
-
-    if (Number.isFinite(cacheAge) && cacheAge < EMPLOYEES_CACHE_MS) {
+    const age = Date.now() - new Date(employeeCache.updatedAt).getTime();
+    if (Number.isFinite(age) && age < ttlMs) {
       return employeeCache.value;
     }
-
     ServerCache.clear("employees", "active");
   }
 
   const cached = !forceRefresh ? getCache(cacheKey) : null;
-
   if (cached) {
-    if (typeof ServerCache !== "undefined") {
-      ServerCache.set("employees", "active", cached);
-    }
-
+    ServerCache.set("employees", "active", cached);
     return cached;
   }
 
   if (!NOTION_EMPLOYEES_DATABASE_ID) return [];
 
-  let results = [];
-  let cursor = undefined;
+  return singleFlight("employees:active", async () => {
+    if (!forceRefresh) {
+      const secondCheck = getCache(cacheKey);
+      if (secondCheck) return secondCheck;
+    }
 
-  do {
-    const body = {
-      database_id: NOTION_EMPLOYEES_DATABASE_ID,
-      page_size: 100,
-    };
+    let results = [];
+    let cursor;
 
-    if (cursor) body.start_cursor = cursor;
+    do {
+      const body = {
+        database_id: NOTION_EMPLOYEES_DATABASE_ID,
+        page_size: 100,
+      };
 
-    const response = await notion.databases.query(body);
-    results = results.concat(response.results || []);
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
+      if (cursor) body.start_cursor = cursor;
 
-  // Los empleados se renuevan cada 3 segundos por defecto.
-  setCache(cacheKey, results, EMPLOYEES_CACHE_MS);
+      const response = await notion.databases.query(body);
+      results = results.concat(response.results || []);
+      cursor = response.has_more ? response.next_cursor : undefined;
+    } while (cursor);
 
-  if (typeof ServerCache !== "undefined") {
+    setCache(cacheKey, results, ttlMs);
     ServerCache.set("employees", "active", results);
-  }
-
-  return results;
+    return results;
+  });
 }
 
 function clearEmployeesCache() {
@@ -1971,17 +1983,8 @@ async function findEmployeeByCode(code) {
       return employeeCode === cleanCode;
     });
 
-  let employees = await getEmployeesCached();
-  let employee = findMatch(employees);
-
-  // Reintento fresco para códigos recién creados en Notion.
-  if (!employee) {
-    clearEmployeesCache();
-    employees = await getEmployeesCached(true);
-    employee = findMatch(employees);
-  }
-
-  return employee;
+  const employees = await getEmployeesCached();
+  return findMatch(employees);
 }
 
 async function findEmployeeByLogin(login) {
@@ -1999,17 +2002,8 @@ async function findEmployeeByLogin(login) {
       return nameMatch || codeMatch;
     });
 
-  let employees = await getEmployeesCached();
-  let employee = findMatch(employees);
-
-  // Si el empleado acaba de agregarse en Notion, fuerza una lectura nueva.
-  if (!employee) {
-    clearEmployeesCache();
-    employees = await getEmployeesCached(true);
-    employee = findMatch(employees);
-  }
-
-  return employee;
+  const employees = await getEmployeesCached();
+  return findMatch(employees);
 }
 
 function mobileHomeFromRole(role) {
@@ -3636,7 +3630,7 @@ app.get("/operations-reports", async (req, res) => {
       reports,
     };
 
-    setCache(cacheKey, payload, 1500);
+    setCache(cacheKey, payload, Number(process.env.ASSIGNMENTS_CACHE_MS || 15000));
     res.json(payload);
   } catch (error) {
     console.error("Error en /operations-reports:", error.message);
@@ -4365,7 +4359,7 @@ app.get("/inspector-assignments", async (req, res) => {
       units,
     };
 
-    setCache(cacheKey, payload, 1500);
+    setCache(cacheKey, payload, Number(process.env.ASSIGNMENTS_CACHE_MS || 15000));
 
     res.json(payload);
   } catch (error) {
@@ -4447,7 +4441,7 @@ if(cached){
       units,
     };
     
-    setCache(cacheKey, payload, 1500);
+    setCache(cacheKey, payload, Number(process.env.ASSIGNMENTS_CACHE_MS || 15000));
     
     res.json(payload);
 
