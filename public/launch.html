@@ -35,20 +35,22 @@
     <h1>417 Maid</h1>
     <p>Ingresa tu código para entrar a tu área de trabajo.</p>
 
-    <div id="loginBox">
-      <label for="code">Código de empleado</label>
-      <input id="code" placeholder="Ejemplo: 1234" autocomplete="off" inputmode="text">
-      <button id="loginBtn" onclick="login()">Entrar</button>
-    </div>
+    <form id="loginForm" autocomplete="off">
+      <div id="loginBox">
+        <label for="code">Código de empleado</label>
+        <input id="code" placeholder="Ejemplo: 1234" autocomplete="off" inputmode="text">
+        <button id="loginBtn" type="submit">Entrar</button>
+      </div>
+    </form>
 
     <div id="roleChoice" class="choice">
       <h2>¿Qué vas a hacer hoy?</h2>
       <p id="choiceName">Selecciona tu área de trabajo.</p>
       <div class="choice-grid">
-        <button onclick="goCleaning()"><b>🧹</b>Limpieza</button>
-        <button onclick="goInspection()"><b>🔍</b>Inspección</button>
+        <button type="button" onclick="goCleaning()"><b>🧹</b>Limpieza</button>
+        <button type="button" onclick="goInspection()"><b>🔍</b>Inspección</button>
       </div>
-      <button class="secondary" onclick="resetLogin()">Usar otro código</button>
+      <button type="button" class="secondary" onclick="resetLogin()">Usar otro código</button>
     </div>
 
     <div id="status" class="status"></div>
@@ -59,38 +61,96 @@
 <script src="/js/maid-core.js"></script>
 
 <script>
+const SESSION_TTL_MS = 5 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 12000;
+
 let currentUser = null;
+let isLoggingIn = false;
 
 function normalizeRole(role){
   return String(role || "").trim().toLowerCase();
 }
 
+function setStatus(message, ok = false){
+  const status = document.getElementById("status");
+  status.className = ok ? "status ok" : "status";
+  status.innerText = message || "";
+}
+
 function openOS(moduleName, fallbackUrl){
-  if(window.OS && typeof OS.open === "function"){
-    OS.open(moduleName);
+  if(window.OS && typeof window.OS.open === "function"){
+    window.OS.open(moduleName);
     return;
   }
-  window.location.href = fallbackUrl;
+
+  window.location.replace(fallbackUrl);
 }
 
 function saveUser(data, typedCode){
-  const realCode = data.code || typedCode || "";
+  const realCode = String(data.code || typedCode || "").trim();
+  const name = String(data.name || "").trim();
+  const role = String(data.role || "").trim();
 
   localStorage.setItem("employeeCode", realCode);
-  localStorage.setItem("employeeName", data.name || "");
-  localStorage.setItem("employeeRole", data.role || "");
+  localStorage.setItem("employeeName", name);
+  localStorage.setItem("employeeRole", role);
+  localStorage.setItem("employeeSessionVerifiedAt", String(Date.now()));
 
-  currentUser = {
-    name: data.name || "",
-    code: realCode,
-    role: data.role || "",
-  };
+  currentUser = { name, code: realCode, role };
+}
+
+function loadSavedUser(){
+  const code = localStorage.getItem("employeeCode") || "";
+  const name = localStorage.getItem("employeeName") || "";
+  const role = localStorage.getItem("employeeRole") || "";
+
+  if(!code || !name || !role) return null;
+
+  return { code, name, role };
+}
+
+function clearUserSession(){
+  [
+    "employeeCode",
+    "employeeName",
+    "employeeRole",
+    "employeeSessionVerifiedAt",
+    "cleanerName"
+  ].forEach(key => localStorage.removeItem(key));
+}
+
+async function fetchJson(url, options = {}){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try{
+    const response = await fetch(url, {
+      ...options,
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if(!response.ok){
+      throw new Error(data.message || `Error ${response.status}`);
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function goCleaning(){
   if(currentUser && currentUser.name){
     localStorage.setItem("cleanerName", currentUser.name);
   }
+
   openOS("cleaning", "/");
 }
 
@@ -106,34 +166,28 @@ function showRoleChoice(){
       ? currentUser.name + ", selecciona tu área de trabajo."
       : "Selecciona tu área de trabajo.";
 
-  const btn = document.getElementById("loginBtn");
-  if(btn) btn.disabled = false;
+  document.getElementById("loginBtn").disabled = false;
 }
 
 function resetLogin(){
   currentUser = null;
-  localStorage.clear();
+  isLoggingIn = false;
+  clearUserSession();
+
   document.getElementById("code").value = "";
   document.getElementById("roleChoice").style.display = "none";
   document.getElementById("loginBox").style.display = "block";
-  document.getElementById("status").innerText = "";
-  document.getElementById("status").className = "status";
   document.getElementById("loginBtn").disabled = false;
+
+  setStatus("");
   document.getElementById("code").focus();
 }
 
 function routeUser(){
   const role = normalizeRole(currentUser && currentUser.role);
 
-  if(role === "cleaner"){
-    goCleaning();
-    return;
-  }
-
-  if(role === "inspector"){
-    goInspection();
-    return;
-  }
+  if(role === "cleaner") return goCleaning();
+  if(role === "inspector") return goInspection();
 
   if(role === "cleaner / inspector" || role === "inspector / cleaner"){
     showRoleChoice();
@@ -145,108 +199,125 @@ function routeUser(){
     return;
   }
 
-  if(
-    role === "laundry / activities" ||
-    role === "laundry / activities / runner" ||
-    role === "laundry" ||
-    role === "activities" ||
-    role === "runner"
-  ){
+  if([
+    "laundry / activities",
+    "laundry / activities / runner",
+    "laundry",
+    "activities",
+    "runner"
+  ].includes(role)){
     openOS("clock", "/time-clock");
     return;
   }
 
-  if(
-    role === "admin" ||
-    role === "manager" ||
-    role === "owner" ||
-    role === "company owner" ||
-    role === "dispatch" ||
-    role === "operations"
-  ){
+  if([
+    "admin",
+    "manager",
+    "owner",
+    "company owner",
+    "dispatch",
+    "operations"
+  ].includes(role)){
     openOS("dashboard", "/app");
     return;
   }
 
-  document.getElementById("status").innerText = "Tu rol no tiene acceso configurado.";
+  setStatus("Tu rol no tiene acceso configurado.");
   document.getElementById("loginBtn").disabled = false;
+  isLoggingIn = false;
 }
 
 async function login(){
+  if(isLoggingIn) return;
+
   const code = document.getElementById("code").value.trim();
-  const status = document.getElementById("status");
   const btn = document.getElementById("loginBtn");
 
-  status.className = "status";
-
   if(!code){
-    status.innerText = "Escribe tu código.";
+    setStatus("Escribe tu código.");
     return;
   }
 
-  status.innerText = "Verificando...";
+  isLoggingIn = true;
   btn.disabled = true;
+  setStatus("Verificando...");
 
   try{
-    const response = await fetch("/login-role?code=" + encodeURIComponent(code) + "&t=" + Date.now());
-    const data = await response.json();
+    const data = await fetchJson(
+      "/login-role?code=" + encodeURIComponent(code)
+    );
 
     if(!data.ok){
-      status.innerText = data.message || "Código no encontrado.";
-      btn.disabled = false;
-      return;
+      throw new Error(data.message || "Código no encontrado.");
     }
 
     saveUser(data, code);
-    status.className = "status ok";
-    status.innerText = "Acceso correcto. Abriendo...";
+    setStatus("Acceso correcto. Abriendo...", true);
     routeUser();
 
-  }catch(error){
-    status.innerText = "Error verificando código.";
+  } catch(error){
+    const message = error.name === "AbortError"
+      ? "El servidor tardó demasiado. Intenta otra vez."
+      : error.message || "Error verificando código.";
+
+    setStatus(message);
     btn.disabled = false;
+    isLoggingIn = false;
   }
 }
 
-document.getElementById("code").addEventListener("keydown", event => {
-  if(event.key === "Enter"){
-    login();
-  }
-});
-
-window.addEventListener("load", async () => {
-  const savedCode = localStorage.getItem("employeeCode");
-  if(!savedCode) return;
-
-  document.getElementById("code").value = savedCode;
-
-  const status = document.getElementById("status");
-  status.className = "status ok";
-  status.innerText = "Sesión encontrada. Entrando...";
-
+async function validateSavedSession(savedUser){
   try{
-    const response = await fetch("/api/me?code=" + encodeURIComponent(savedCode) + "&t=" + Date.now());
-    const data = await response.json();
+    const data = await fetchJson(
+      "/api/me?code=" + encodeURIComponent(savedUser.code)
+    );
 
     if(!data.ok || !data.user || !data.user.active){
-      localStorage.clear();
-      status.className = "status";
-      status.innerText = "Sesión expirada. Ingresa tu código otra vez.";
-      return;
+      throw new Error("Sesión expirada");
     }
 
     saveUser({
       name: data.user.name,
       code: data.user.code,
       role: data.user.role,
-    }, savedCode);
+    }, savedUser.code);
 
     routeUser();
-
-  }catch(error){
-    status.className = "status";
-    status.innerText = "No se pudo validar la sesión.";
+  } catch(error){
+    clearUserSession();
+    currentUser = null;
+    setStatus("Sesión expirada. Ingresa tu código otra vez.");
+    document.getElementById("loginBtn").disabled = false;
   }
+}
+
+document.getElementById("loginForm").addEventListener("submit", event => {
+  event.preventDefault();
+  login();
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+  const savedUser = loadSavedUser();
+  if(!savedUser) return;
+
+  currentUser = savedUser;
+  document.getElementById("code").value = savedUser.code;
+
+  const verifiedAt = Number(
+    localStorage.getItem("employeeSessionVerifiedAt") || 0
+  );
+
+  const sessionIsFresh =
+    verifiedAt > 0 && Date.now() - verifiedAt < SESSION_TTL_MS;
+
+  if(sessionIsFresh){
+    setStatus("Sesión encontrada. Entrando...", true);
+    routeUser();
+    return;
+  }
+
+  setStatus("Validando sesión...", true);
+  validateSavedSession(savedUser);
 });
 </script>
 </body>
