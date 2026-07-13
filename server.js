@@ -11,6 +11,7 @@ const app = express();
 const http = require("http");
 const { Server } = require("socket.io");
 const EmployeeService = require("./services/employeeService");
+const { createOSCore } = require("./services/osCore");
 
 const server = http.createServer(app);
 
@@ -19,6 +20,19 @@ const io = new Server(server, {
     origin: "*",
   },
 });
+
+const OSCore = createOSCore({
+  io,
+  config: {
+    cacheTtlMs: process.env.CORE_CACHE_TTL_MS,
+    cacheMaxEntries: process.env.CORE_CACHE_MAX_ENTRIES,
+    notionConcurrency: process.env.CORE_NOTION_CONCURRENCY,
+    notionMinDelayMs: process.env.CORE_NOTION_MIN_DELAY_MS,
+    notionMaxQueueSize: process.env.CORE_NOTION_MAX_QUEUE_SIZE,
+  },
+});
+
+console.log("417 Maid Core iniciado:", OSCore.version, OSCore.mode);
 let systemNotifications = [];
 let systemTimeline = [];
 function addNotification(title, message) {
@@ -48,6 +62,10 @@ app.get("/api/timeline", (req, res) => {
     ok: true,
     timeline: systemTimeline.slice(0, 100),
   });
+});
+
+app.get("/api/core-status", (req, res) => {
+  res.json(OSCore.status());
 });
 
 app.get("/api/cache-status", (req, res) => {
