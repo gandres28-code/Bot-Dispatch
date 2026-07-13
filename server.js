@@ -45,6 +45,18 @@ function coreDeleteKeys(...keys) {
 
   return deleted;
 }
+
+function coreInvalidateTags(...tags) {
+  let removed = 0;
+
+  for (const tag of tags.flat().filter(Boolean)) {
+    removed += Number(
+      OSCore?.cache?.invalidateTag?.(String(tag)) || 0
+    );
+  }
+
+  return removed;
+}
 let systemNotifications = [];
 let systemTimeline = [];
 function addNotification(title, message) {
@@ -1061,6 +1073,33 @@ recentActions.delete(key);
 }, 30000);
 return false;
 }
+// ■ Lectura directa para sincronización externa.
+// Consulta Notion sin borrar el caché que están usando los paneles.
+async function fetchRoomsFreshFromNotion(date) {
+  let pages = [];
+  let cursor;
+
+  do {
+    const body = {
+      database_id: NOTION_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        property: "Date",
+        date: { equals: date },
+      },
+    };
+
+    if (cursor) body.start_cursor = cursor;
+
+    const response = await notion.databases.query(body);
+    pages = pages.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  OSCore.metrics.increment("watcher.rooms.notion");
+  return pages;
+}
+
 // ■ Buscar unidades de hoy en Notion usando search
 async function queryTodayRooms(forceRefresh = false) {
   return queryRoomsByDate(todayISO(), forceRefresh);
@@ -1102,25 +1141,7 @@ async function queryRoomsByDate(date, forceRefresh = false) {
         return legacyCached;
       }
 
-      let pages = [];
-      let cursor;
-
-      do {
-        const body = {
-          database_id: NOTION_DATABASE_ID,
-          page_size: 100,
-          filter: {
-            property: "Date",
-            date: { equals: date },
-          },
-        };
-
-        if (cursor) body.start_cursor = cursor;
-
-        const response = await notion.databases.query(body);
-        pages = pages.concat(response.results || []);
-        cursor = response.has_more ? response.next_cursor : undefined;
-      } while (cursor);
+      const pages = await fetchRoomsFreshFromNotion(date);
 
       setCache(legacyCacheKey, pages, ttlMs);
       ServerCache.set("rooms", date, pages);
@@ -5907,7 +5928,8 @@ async function checkNotionAssignmentChanges() {
   notionWatcherRunning = true;
 
   try {
-    const pages = await queryTodayRooms(true);
+    const date = todayISO();
+    const pages = await fetchRoomsFreshFromNotion(date);
     const nextSnapshot = buildAssignmentSnapshot(pages);
 
     if (!notionWatcherSnapshot) {
@@ -5921,9 +5943,23 @@ async function checkNotionAssignmentChanges() {
     if (nextSnapshot === notionWatcherSnapshot) return;
 
     notionWatcherSnapshot = nextSnapshot;
+
     broadcastAssignmentUpdate("direct-notion-change", {
       roomCount: pages.length,
     });
+
+    const legacyCacheKey = `todayRooms:${date}`;
+    const coreCacheKey = `core:rooms:${date}`;
+    const ttlMs = Number(process.env.ROOMS_CACHE_MS || 30000);
+
+    setCache(legacyCacheKey, pages, ttlMs);
+    ServerCache.set("rooms", date, pages);
+    OSCore.cache.set(
+      coreCacheKey,
+      pages,
+      ttlMs,
+      [`rooms:${date}`, "rooms"]
+    );
 
     console.log("🔔 Cambio en Notion detectado y enviado a los paneles");
   } catch (error) {
