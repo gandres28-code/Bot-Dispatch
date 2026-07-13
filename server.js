@@ -11,7 +11,6 @@ const app = express();
 const http = require("http");
 const { Server } = require("socket.io");
 const EmployeeService = require("./services/employeeService");
-const { createOSCore } = require("./services/osCore");
 
 const server = http.createServer(app);
 
@@ -20,19 +19,6 @@ const io = new Server(server, {
     origin: "*",
   },
 });
-
-const OSCore = createOSCore({
-  io,
-  config: {
-    cacheTtlMs: process.env.CORE_CACHE_TTL_MS,
-    cacheMaxEntries: process.env.CORE_CACHE_MAX_ENTRIES,
-    notionConcurrency: process.env.CORE_NOTION_CONCURRENCY,
-    notionMinDelayMs: process.env.CORE_NOTION_MIN_DELAY_MS,
-    notionMaxQueueSize: process.env.CORE_NOTION_MAX_QUEUE_SIZE,
-  },
-});
-
-console.log("417 Maid Core iniciado:", OSCore.version, OSCore.mode);
 let systemNotifications = [];
 let systemTimeline = [];
 function addNotification(title, message) {
@@ -62,10 +48,6 @@ app.get("/api/timeline", (req, res) => {
     ok: true,
     timeline: systemTimeline.slice(0, 100),
   });
-});
-
-app.get("/api/core-status", (req, res) => {
-  res.json(OSCore.status());
 });
 
 app.get("/api/cache-status", (req, res) => {
@@ -200,6 +182,8 @@ function clearOpsCache(){
   if (typeof ServerCache !== "undefined") {
     ServerCache.clear("dashboard");
   }
+
+  coreInvalidateTags("dashboard", "operations");
 }
 
 function clearRoomCache(date = todayISO()){
@@ -213,6 +197,8 @@ function clearRoomCache(date = todayISO()){
     ServerCache.clear("dashboard");
     ServerCache.clear("assignments");
   }
+
+  coreInvalidateTags(`rooms:${date}`, `assignments:${date}`, "dashboard");
 }
 
 // =========================================================
@@ -237,6 +223,8 @@ function clearAssignmentCaches(date = todayISO()) {
     ServerCache.clear("assignments");
     ServerCache.clear("dashboard");
   }
+
+  coreInvalidateTags(`rooms:${date}`, `assignments:${date}`, "dashboard");
 }
 
 function broadcastAssignmentUpdate(reason = "notion-change", extra = {}) {
@@ -1050,60 +1038,67 @@ async function queryTodayRooms(forceRefresh = false) {
 // ■ Buscar unidades de cualquier fecha en la página central de Notion
 async function queryRoomsByDate(date, forceRefresh = false) {
   const isToday = date === todayISO();
-  const cacheKey = isToday ? `todayRooms:${date}` : `roomsByDate:${date}`;
+  const legacyCacheKey = isToday ? `todayRooms:${date}` : `roomsByDate:${date}`;
+  const coreCacheKey = `core:rooms:${date}`;
   const ttlMs = isToday
     ? Number(process.env.ROOMS_CACHE_MS || 30000)
     : 120000;
 
-  const roomCache = !forceRefresh
-    ? ServerCache.get("rooms", date)
-    : null;
-
-  if (roomCache) {
-    const age = Date.now() - new Date(roomCache.updatedAt).getTime();
-    if (Number.isFinite(age) && age < ttlMs) {
-      return roomCache.value;
-    }
+  if (forceRefresh) {
+    coreDeleteKeys(coreCacheKey);
+    cacheStore.delete(legacyCacheKey);
     ServerCache.clear("rooms", date);
   }
 
-  const cached = !forceRefresh ? getCache(cacheKey) : null;
-  if (cached) {
-    ServerCache.set("rooms", date, cached);
-    return cached;
-  }
+  return OSCore.cache.remember(
+    coreCacheKey,
+    ttlMs,
+    async () => {
+      const legacyRoomCache = !forceRefresh
+        ? ServerCache.get("rooms", date)
+        : null;
 
-  return singleFlight(`rooms:${date}`, async () => {
-    // Otra solicitud pudo llenar el caché mientras esta esperaba.
-    if (!forceRefresh) {
-      const secondCheck = getCache(cacheKey);
-      if (secondCheck) return secondCheck;
-    }
+      if (legacyRoomCache) {
+        const age = Date.now() - new Date(legacyRoomCache.updatedAt).getTime();
+        if (Number.isFinite(age) && age < ttlMs) {
+          return legacyRoomCache.value;
+        }
+        ServerCache.clear("rooms", date);
+      }
 
-    let pages = [];
-    let cursor;
+      const legacyCached = !forceRefresh ? getCache(legacyCacheKey) : null;
+      if (legacyCached) {
+        ServerCache.set("rooms", date, legacyCached);
+        return legacyCached;
+      }
 
-    do {
-      const body = {
-        database_id: NOTION_DATABASE_ID,
-        page_size: 100,
-        filter: {
-          property: "Date",
-          date: { equals: date },
-        },
-      };
+      let pages = [];
+      let cursor;
 
-      if (cursor) body.start_cursor = cursor;
+      do {
+        const body = {
+          database_id: NOTION_DATABASE_ID,
+          page_size: 100,
+          filter: {
+            property: "Date",
+            date: { equals: date },
+          },
+        };
 
-      const response = await notion.databases.query(body);
-      pages = pages.concat(response.results || []);
-      cursor = response.has_more ? response.next_cursor : undefined;
-    } while (cursor);
+        if (cursor) body.start_cursor = cursor;
 
-    setCache(cacheKey, pages, ttlMs);
-    ServerCache.set("rooms", date, pages);
-    return pages;
-  });
+        const response = await notion.databases.query(body);
+        pages = pages.concat(response.results || []);
+        cursor = response.has_more ? response.next_cursor : undefined;
+      } while (cursor);
+
+      setCache(legacyCacheKey, pages, ttlMs);
+      ServerCache.set("rooms", date, pages);
+      OSCore.metrics.increment("reads.rooms.notion");
+      return pages;
+    },
+    [`rooms:${date}`, "rooms"]
+  );
 }
 // ■ Status de Notion
 function notionStatusFromAction(action) {
@@ -1783,59 +1778,69 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
     });
 }
 async function getEmployeesCached(forceRefresh = false) {
-  const cacheKey = "employees:active";
+  const legacyCacheKey = "employees:active";
+  const coreCacheKey = "core:employees:active";
   const ttlMs = Number(process.env.EMPLOYEES_CACHE_MS || 300000);
-
-  const employeeCache = !forceRefresh
-    ? ServerCache.get("employees", "active")
-    : null;
-
-  if (employeeCache) {
-    const age = Date.now() - new Date(employeeCache.updatedAt).getTime();
-    if (Number.isFinite(age) && age < ttlMs) {
-      return employeeCache.value;
-    }
-    ServerCache.clear("employees", "active");
-  }
-
-  const cached = !forceRefresh ? getCache(cacheKey) : null;
-  if (cached) {
-    ServerCache.set("employees", "active", cached);
-    return cached;
-  }
 
   if (!NOTION_EMPLOYEES_DATABASE_ID) return [];
 
-  return singleFlight("employees:active", async () => {
-    if (!forceRefresh) {
-      const secondCheck = getCache(cacheKey);
-      if (secondCheck) return secondCheck;
-    }
+  if (forceRefresh) {
+    coreDeleteKeys(coreCacheKey);
+    cacheStore.delete(legacyCacheKey);
+    ServerCache.clear("employees", "active");
+  }
 
-    let results = [];
-    let cursor;
+  return OSCore.cache.remember(
+    coreCacheKey,
+    ttlMs,
+    async () => {
+      const employeeCache = !forceRefresh
+        ? ServerCache.get("employees", "active")
+        : null;
 
-    do {
-      const body = {
-        database_id: NOTION_EMPLOYEES_DATABASE_ID,
-        page_size: 100,
-      };
+      if (employeeCache) {
+        const age = Date.now() - new Date(employeeCache.updatedAt).getTime();
+        if (Number.isFinite(age) && age < ttlMs) {
+          return employeeCache.value;
+        }
+        ServerCache.clear("employees", "active");
+      }
 
-      if (cursor) body.start_cursor = cursor;
+      const legacyCached = !forceRefresh ? getCache(legacyCacheKey) : null;
+      if (legacyCached) {
+        ServerCache.set("employees", "active", legacyCached);
+        return legacyCached;
+      }
 
-      const response = await notion.databases.query(body);
-      results = results.concat(response.results || []);
-      cursor = response.has_more ? response.next_cursor : undefined;
-    } while (cursor);
+      let results = [];
+      let cursor;
 
-    setCache(cacheKey, results, ttlMs);
-    ServerCache.set("employees", "active", results);
-    return results;
-  });
+      do {
+        const body = {
+          database_id: NOTION_EMPLOYEES_DATABASE_ID,
+          page_size: 100,
+        };
+
+        if (cursor) body.start_cursor = cursor;
+
+        const response = await notion.databases.query(body);
+        results = results.concat(response.results || []);
+        cursor = response.has_more ? response.next_cursor : undefined;
+      } while (cursor);
+
+      setCache(legacyCacheKey, results, ttlMs);
+      ServerCache.set("employees", "active", results);
+      OSCore.metrics.increment("reads.employees.notion");
+      return results;
+    },
+    ["employees"]
+  );
 }
 
 function clearEmployeesCache() {
   cacheStore.delete("employees:active");
+  coreDeleteKeys("core:employees:active");
+  coreInvalidateTags("employees");
 
   if (typeof ServerCache !== "undefined") {
     ServerCache.clear("employees", "active");
@@ -4285,12 +4290,6 @@ app.get("/time-clock", (req, res) => {
 app.get("/inspector-assignments", async (req, res) => {
   try {
     const code = String(req.query.code || "").trim();
-    const cacheKey = `inspector-assignments:${code}`;
-    const cached = getCache(cacheKey);
-
-    if (cached) {
-      return res.json(cached);
-    }
 
     if (!code) {
       return res.status(400).json({
@@ -4299,91 +4298,96 @@ app.get("/inspector-assignments", async (req, res) => {
       });
     }
 
-    const employee = await findEmployeeByCode(code);
+    const date = todayISO();
+    const ttlMs = Number(process.env.ASSIGNMENTS_CACHE_MS || 15000);
+    const coreCacheKey = `core:inspector-assignments:${date}:${code}`;
 
-    if (!employee) {
-      return res.status(404).json({
-        ok: false,
-        message: "Código no encontrado",
-      });
-    }
+    const payload = await OSCore.cache.remember(
+      coreCacheKey,
+      ttlMs,
+      async () => {
+        const employee = await findEmployeeByCode(code);
 
-    const user = pageToUser(employee);
+        if (!employee) {
+          const error = new Error("Código no encontrado");
+          error.status = 404;
+          throw error;
+        }
 
-    if (!user.active) {
-      return res.status(403).json({
-        ok: false,
-        message: "Empleado inactivo",
-      });
-    }
+        const user = pageToUser(employee);
 
-    if (!userCan(user, "inspection")) {
-      return res.status(403).json({
-        ok: false,
-        message: "Este código no tiene acceso a inspecciones",
-      });
-    }
+        if (!user.active) {
+          const error = new Error("Empleado inactivo");
+          error.status = 403;
+          throw error;
+        }
 
-    const inspectorName = user.name;
-    const role = user.role;
-    const canSeeAll = userCan(user, "all") || userCan(user, "operations");
-    const pages = await queryTodayRooms();
+        if (!userCan(user, "inspection")) {
+          const error = new Error("Este código no tiene acceso a inspecciones");
+          error.status = 403;
+          throw error;
+        }
 
-    const units = pages
-      .map((page) => {
-        const props = page.properties;
+        const inspectorName = user.name;
+        const role = user.role;
+        const canSeeAll = userCan(user, "all") || userCan(user, "operations");
+        const pages = await queryRoomsByDate(date);
 
-        const assignedInspector =
-          props["Assigned Inspector"]?.multi_select?.map((i) => i.name).join(", ") ||
-          props["Assigned Inspector"]?.select?.name ||
-          props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
-          "";
+        const units = pages
+          .map((page) => {
+            const props = page.properties;
+            const assignedInspector =
+              props["Assigned Inspector"]?.multi_select?.map((i) => i.name).join(", ") ||
+              props["Assigned Inspector"]?.select?.name ||
+              props["Assigned Inspector"]?.rich_text?.map((t) => t.plain_text).join("") ||
+              "";
+            const flags = getRoomOpsFlags(page);
 
-        const flags = getRoomOpsFlags(page);
+            return {
+              id: page.id,
+              unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+              status: props["Cleaning Status"]?.status?.name || "",
+              priority: props.Priority?.select?.name || "Normal",
+              assignedInspector,
+              arrival: !!props.Arrival?.checkbox,
+              guestOut: flags.guestOut,
+              guestOutAt: flags.guestOutAt,
+              preInspection: flags.preInspection,
+              preInspectionStarted: flags.preInspectionStarted,
+              preInspectionStartedAt: flags.preInspectionStartedAt,
+              preInspectionCompletedAt: flags.preInspectionCompletedAt,
+            };
+          })
+          .filter((item) => {
+            if (canSeeAll) return true;
+
+            const inspectorList = String(item.assignedInspector || "")
+              .toLowerCase()
+              .split(",")
+              .map((x) => x.trim())
+              .filter(Boolean);
+
+            return inspectorList.includes(inspectorName.toLowerCase().trim());
+          });
+
+        OSCore.metrics.increment("reads.assignments.inspectorBuilt");
 
         return {
-          id: page.id,
-          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
-          status: props["Cleaning Status"]?.status?.name || "",
-          priority: props.Priority?.select?.name || "Normal",
-          assignedInspector,
-          arrival: !!props.Arrival?.checkbox,
-          guestOut: flags.guestOut,
-          guestOutAt: flags.guestOutAt,
-          preInspection: flags.preInspection,
-          preInspectionStarted: flags.preInspectionStarted,
-          preInspectionStartedAt: flags.preInspectionStartedAt,
-          preInspectionCompletedAt: flags.preInspectionCompletedAt,
+          ok: true,
+          inspector: inspectorName,
+          role,
+          permissions: user.permissions,
+          count: units.length,
+          units,
         };
-      })
-      .filter((item) => {
-        if (canSeeAll) return true;
+      },
+      [`assignments:${date}`, "assignments", `inspector:${code}`]
+    );
 
-        const inspectorList = String(item.assignedInspector || "")
-          .toLowerCase()
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean);
-
-        return inspectorList.includes(inspectorName.toLowerCase().trim());
-      });
-
-    const payload = {
-      ok: true,
-      inspector: inspectorName,
-      role,
-      permissions: user.permissions,
-      count: units.length,
-      units,
-    };
-
-    setCache(cacheKey, payload, Number(process.env.ASSIGNMENTS_CACHE_MS || 15000));
-
-    res.json(payload);
+    return res.json(payload);
   } catch (error) {
     console.error("Error en /inspector-assignments:", error.message);
-
-    res.status(500).json({
+    return res.status(error.status || 500).json({
       ok: false,
       message: error.message,
     });
@@ -4392,12 +4396,6 @@ app.get("/inspector-assignments", async (req, res) => {
 app.get("/cleaner-assignments", async (req, res) => {
   try {
     const name = String(req.query.name || "").trim();
-    const cacheKey = `cleaner-assignments:${name.toLowerCase()}`;
-const cached = getCache(cacheKey);
-
-if(cached){
-  return res.json(cached);
-}
 
     if (!name) {
       return res.status(400).json({
@@ -4406,67 +4404,67 @@ if(cached){
       });
     }
 
-    const cleanText = (value) => {
-      return String(value || "")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .trim();
-    };
+    const cleanText = (value) => String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
 
     const typedName = cleanText(name);
+    const date = todayISO();
+    const ttlMs = Number(process.env.ASSIGNMENTS_CACHE_MS || 15000);
+    const coreCacheKey = `core:cleaner-assignments:${date}:${typedName}`;
 
-    const pages = await queryTodayRooms();
+    const payload = await OSCore.cache.remember(
+      coreCacheKey,
+      ttlMs,
+      async () => {
+        const pages = await queryRoomsByDate(date);
 
-    const units = pages
-      .map((page) => {
-        const props = page.properties;
+        const units = pages
+          .map((page) => {
+            const props = page.properties;
+            const assignedCleaner =
+              props["Assigned Cleaner"]?.select?.name ||
+              props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
+              "";
+            const flags = getRoomOpsFlags(page);
 
-        const assignedCleaner =
-          props["Assigned Cleaner"]?.select?.name ||
-          props["Assigned Cleaner"]?.rich_text?.map((t) => t.plain_text).join("") ||
-          "";
+            return {
+              id: page.id,
+              unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
+              status: props["Cleaning Status"]?.status?.name || "",
+              assignedCleaner,
+              arrival: !!props.Arrival?.checkbox,
+              guestOut: flags.guestOut,
+              guestOutAt: flags.guestOutAt,
+              preInspection: flags.preInspection,
+              preInspectionStarted: flags.preInspectionStarted,
+              preInspectionStartedAt: flags.preInspectionStartedAt,
+              preInspectionCompletedAt: flags.preInspectionCompletedAt,
+            };
+          })
+          .filter((item) => {
+            const assignedCleaner = cleanText(item.assignedCleaner);
+            return !!typedName && !!assignedCleaner && assignedCleaner.includes(typedName);
+          });
 
-        const flags = getRoomOpsFlags(page);
+        OSCore.metrics.increment("reads.assignments.cleanerBuilt");
 
         return {
-          id: page.id,
-          unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
-          status: props["Cleaning Status"]?.status?.name || "",
-          assignedCleaner,
-          arrival: !!props.Arrival?.checkbox,
-          guestOut: flags.guestOut,
-          guestOutAt: flags.guestOutAt,
-          preInspection: flags.preInspection,
-          preInspectionStarted: flags.preInspectionStarted,
-          preInspectionStartedAt: flags.preInspectionStartedAt,
-          preInspectionCompletedAt: flags.preInspectionCompletedAt,
+          ok: true,
+          cleaner: name,
+          count: units.length,
+          units,
         };
-      })
-      .filter((item) => {
-        const assignedCleaner = cleanText(item.assignedCleaner);
+      },
+      [`assignments:${date}`, "assignments", `cleaner:${typedName}`]
+    );
 
-        if (!typedName || !assignedCleaner) {
-          return false;
-        }
-
-        return assignedCleaner.includes(typedName);
-      });
-    const payload = {
-      ok: true,
-      cleaner: name,
-      count: units.length,
-      units,
-    };
-    
-    setCache(cacheKey, payload, Number(process.env.ASSIGNMENTS_CACHE_MS || 15000));
-    
-    res.json(payload);
-
+    return res.json(payload);
   } catch (error) {
     console.error("Error en /cleaner-assignments:", error.message);
-
-    res.status(500).json({
+    return res.status(500).json({
       ok: false,
       message: error.message,
     });
