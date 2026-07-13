@@ -44,7 +44,7 @@ function createOSCore({ io, config = {} } = {}) {
   }
 
   return {
-    version: "2.1.0-step2-read-cache",
+    version: "2.1.1-step2-cache-stable",
     mode: "read-cache",
     cache,
     metrics,
