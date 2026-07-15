@@ -12,8 +12,72 @@ const http = require("http");
 const { Server } = require("socket.io");
 const EmployeeService = require("./services/employeeService");
 const { createOSCore } = require("./services/osCore/index.js");
+const {
+  initializeDatabase,
+  testDatabaseConnection,
+} = require("./db");
 
 const server = http.createServer(app);
+
+// =========================================================
+// POSTGRESQL · 417 MAID OS
+// =========================================================
+// En esta primera etapa PostgreSQL se prepara al arrancar, pero Notion
+// continúa funcionando como fuente operativa. Si PostgreSQL no responde,
+// el servidor no se cae y la operación diaria puede continuar.
+let postgresStatus = {
+  configured: !!process.env.DATABASENEW_URL,
+  connected: false,
+  database: "",
+  databaseTime: null,
+  lastCheckedAt: null,
+  error: "",
+};
+
+async function startPostgres() {
+  postgresStatus.configured = !!process.env.DATABASENEW_URL;
+  postgresStatus.lastCheckedAt = new Date().toISOString();
+
+  if (!postgresStatus.configured) {
+    postgresStatus.connected = false;
+    postgresStatus.error =
+      "Falta DATABASENEW_URL en las variables de entorno de Render.";
+
+    console.warn("⚠️ PostgreSQL sin configurar:", postgresStatus.error);
+    return postgresStatus;
+  }
+
+  try {
+    const database = await initializeDatabase();
+
+    postgresStatus = {
+      configured: true,
+      connected: true,
+      database: database.database_name || "",
+      databaseTime: database.database_time || null,
+      lastCheckedAt: new Date().toISOString(),
+      error: "",
+    };
+
+    console.log("✅ PostgreSQL conectado:", {
+      database: postgresStatus.database,
+      time: postgresStatus.databaseTime,
+    });
+  } catch (error) {
+    postgresStatus = {
+      configured: true,
+      connected: false,
+      database: "",
+      databaseTime: null,
+      lastCheckedAt: new Date().toISOString(),
+      error: error.message,
+    };
+
+    console.error("⚠️ PostgreSQL no pudo iniciar:", error.message);
+  }
+
+  return postgresStatus;
+}
 
 const io = new Server(server, {
   cors: {
@@ -353,6 +417,43 @@ const cors = require("cors");
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
+
+// Diagnóstico seguro de PostgreSQL. No expone DATABASENEW_URL.
+app.get("/api/database-status", async (req, res) => {
+  try {
+    if (!process.env.DATABASENEW_URL) {
+      return res.status(503).json({
+        ok: false,
+        ...postgresStatus,
+      });
+    }
+
+    const database = await testDatabaseConnection();
+
+    postgresStatus = {
+      configured: true,
+      connected: true,
+      database: database.database_name || "",
+      databaseTime: database.database_time || null,
+      lastCheckedAt: new Date().toISOString(),
+      error: "",
+    };
+
+    return res.json({
+      ok: true,
+      ...postgresStatus,
+    });
+  } catch (error) {
+    postgresStatus.connected = false;
+    postgresStatus.error = error.message;
+    postgresStatus.lastCheckedAt = new Date().toISOString();
+
+    return res.status(503).json({
+      ok: false,
+      ...postgresStatus,
+    });
+  }
+});
 // ■ Carpeta para PDFs
 const reportsDir = path.join(__dirname, "reports");
 if (!fs.existsSync(reportsDir)) {
@@ -969,7 +1070,7 @@ M: Number(process.env.PAYROLL_RATE_M || 20), // Motel
 "38 LAKEHOUSE": Number(process.env.PAYROLL_RATE_5 || 55),
 "37": Number(process.env.PAYROLL_RATE_5 || 55),
 "TOUCH UP": Number(process.env.PAYROLL_RATE_5 || 0),
-"SUITES": Number(process.env.PAYROLL_RATE_5 || 20),
+"SUITES": Number(process.env.PAYROLL_RATE_5 || 0),
 };
 // ■ Leer tipo de habitación desde lo que está entre paréntesis: 331A (2), 405 (S), 210 (M)
 function getRoomType(unitName) {
@@ -7656,6 +7757,8 @@ app.get("/statistics", (req, res) => {
 });
 
 
-server.listen(PORT, () => {
-  console.log(`Panel web activo en puerto ${PORT}`);
+startPostgres().finally(() => {
+  server.listen(PORT, () => {
+    console.log(`Panel web activo en puerto ${PORT}`);
+  });
 });
