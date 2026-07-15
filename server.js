@@ -4121,16 +4121,29 @@ app.get("/finalizar-dia", async (req, res) => {
 
 app.post("/generate-payroll-excel", async (req, res) => {
   try {
-    const selectedDate = req.body.date || todayISO();
-    const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
+    const requestedStart = String(req.body.start || "").trim();
+    const requestedEnd = String(req.body.end || "").trim();
 
-    const payroll = await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+    let weekStart;
+    let weekEnd;
+
+    if (requestedStart && requestedEnd) {
+      weekStart = requestedStart;
+      weekEnd = requestedEnd;
+    } else {
+      const selectedDate = req.body.date || todayISO();
+      const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
+      weekStart = week.weekStart;
+      weekEnd = week.weekEnd;
+    }
+
+    const payroll = await generateWeeklyPayrollExcel(weekStart, weekEnd);
 
     res.json({
       ok: true,
       message: "Payroll Excel updated successfully",
-      weekStart: week.weekStart,
-      weekEnd: week.weekEnd,
+      weekStart,
+      weekEnd,
       totalRecords: payroll.totalRecords,
       file: payroll.fileName,
       url: payroll.fileUrl,
@@ -4148,10 +4161,23 @@ app.post("/generate-payroll-excel", async (req, res) => {
 
 app.get("/payroll-excel", async (req, res) => {
   try {
-    const selectedDate = req.query.date || todayISO();
-    const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
+    const requestedStart = String(req.query.start || "").trim();
+    const requestedEnd = String(req.query.end || "").trim();
 
-    const payroll = await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+    let weekStart;
+    let weekEnd;
+
+    if (requestedStart && requestedEnd) {
+      weekStart = requestedStart;
+      weekEnd = requestedEnd;
+    } else {
+      const selectedDate = req.query.date || todayISO();
+      const week = getPayrollWeek(new Date(`${selectedDate}T12:00:00`));
+      weekStart = week.weekStart;
+      weekEnd = week.weekEnd;
+    }
+
+    const payroll = await generateWeeklyPayrollExcel(weekStart, weekEnd);
 
     res.download(payroll.filePath, payroll.fileName);
   } catch (error) {
@@ -4256,8 +4282,7 @@ app.get("/backfill-payroll", async (req, res) => {
       }
     }
 
-    const week = getPayrollWeek(new Date(`${start}T12:00:00`));
-    await generateWeeklyPayrollExcel(week.weekStart, week.weekEnd);
+    await generateWeeklyPayrollExcel(start, end);
 
     res.json({
       ok: true,
