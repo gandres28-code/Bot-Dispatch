@@ -16,6 +16,11 @@ const {
   initializeDatabase,
   testDatabaseConnection,
 } = require("./db");
+const {
+  syncEmployeesFromNotion,
+  listEmployeesPostgres,
+  getEmployeeSyncStatus,
+} = require("./services/employeeSyncService");
 
 const server = http.createServer(app);
 
@@ -2008,6 +2013,164 @@ function clearEmployeesCache() {
     ServerCache.clear("employees", "active");
   }
 }
+
+// =========================================================
+// EMPLOYEES · NOTION → POSTGRESQL
+// =========================================================
+// Notion sigue siendo la fuente administrativa durante esta etapa.
+// PostgreSQL recibe una copia rápida de Employees para preparar login,
+// permisos, nómina, notificaciones y la futura aplicación móvil.
+let employeeSyncTimer = null;
+let employeeSyncRunning = false;
+
+async function runEmployeeSync(reason = "manual") {
+  if (!postgresStatus.connected) {
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      message: "PostgreSQL no está conectado; Employees continúa operando desde Notion.",
+    };
+  }
+
+  if (employeeSyncRunning) {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      message: "La sincronización de Employees ya está en ejecución.",
+    };
+  }
+
+  if (!NOTION_EMPLOYEES_DATABASE_ID) {
+    throw new Error("Falta NOTION_EMPLOYEES_DATABASE_ID en Render.");
+  }
+
+  employeeSyncRunning = true;
+
+  try {
+    const result = await syncEmployeesFromNotion({
+      notion,
+      databaseId: NOTION_EMPLOYEES_DATABASE_ID,
+      queryDatabase: (body) => notion.databases.query(body),
+    });
+
+    clearEmployeesCache();
+
+    const payload = {
+      ...result,
+      reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    io.emit("employees-updated", payload);
+
+    console.log("✅ Employees sincronizados Notion → PostgreSQL:", {
+      reason,
+      totalFromNotion: result.totalFromNotion,
+      saved: result.saved,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("EMPLOYEE SYNC ERROR:", error.message);
+    throw error;
+  } finally {
+    employeeSyncRunning = false;
+  }
+}
+
+function startEmployeeSyncSchedule() {
+  const intervalMs = Math.max(
+    60000,
+    Number(process.env.EMPLOYEE_SYNC_INTERVAL_MS || 300000)
+  );
+
+  if (employeeSyncTimer) {
+    clearInterval(employeeSyncTimer);
+  }
+
+  employeeSyncTimer = setInterval(() => {
+    runEmployeeSync("scheduled").catch((error) => {
+      console.error("EMPLOYEE SCHEDULED SYNC ERROR:", error.message);
+    });
+  }, intervalMs);
+
+  // Evita que este temporizador impida un apagado limpio del proceso.
+  if (typeof employeeSyncTimer.unref === "function") {
+    employeeSyncTimer.unref();
+  }
+
+  console.log(
+    `🔄 Employee sync programado cada ${Math.round(intervalMs / 60000)} minuto(s).`
+  );
+}
+
+app.post("/api/sync/employees", async (req, res) => {
+  try {
+    const result = await runEmployeeSync("manual");
+
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/sync/employees/status", async (req, res) => {
+  try {
+    const status = postgresStatus.connected
+      ? await getEmployeeSyncStatus()
+      : null;
+
+    return res.json({
+      ok: true,
+      postgresConnected: postgresStatus.connected,
+      running: employeeSyncRunning,
+      scheduled: !!employeeSyncTimer,
+      intervalMs: Math.max(
+        60000,
+        Number(process.env.EMPLOYEE_SYNC_INTERVAL_MS || 300000)
+      ),
+      status,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/postgres/employees", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado.",
+      });
+    }
+
+    const employees = await listEmployeesPostgres({
+      activeOnly: String(req.query.all || "").toLowerCase() !== "true",
+    });
+
+    return res.json({
+      ok: true,
+      count: employees.length,
+      employees,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
 
 
 function cleanEmployeeText(value) {
@@ -7757,8 +7920,38 @@ app.get("/statistics", (req, res) => {
 });
 
 
-startPostgres().finally(() => {
+async function startServer() {
+  const databaseStatus = await startPostgres();
+
+  if (databaseStatus.connected) {
+    try {
+      await runEmployeeSync("startup");
+      startEmployeeSyncSchedule();
+    } catch (error) {
+      // La sincronización no bloquea el panel. Notion sigue disponible.
+      console.error(
+        "⚠️ El servidor arrancará sin la sincronización inicial de Employees:",
+        error.message
+      );
+
+      startEmployeeSyncSchedule();
+    }
+  } else {
+    console.warn(
+      "⚠️ Employee sync no se inició porque PostgreSQL no está conectado."
+    );
+  }
+
   server.listen(PORT, () => {
     console.log(`Panel web activo en puerto ${PORT}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("SERVER START ERROR:", error);
+
+  // Último salvavidas: incluso si falla el bootstrap, intenta abrir el panel.
+  server.listen(PORT, () => {
+    console.log(`Panel web activo en puerto ${PORT} (modo de respaldo)`);
   });
 });
