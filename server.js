@@ -969,7 +969,7 @@ M: Number(process.env.PAYROLL_RATE_M || 20), // Motel
 "38 LAKEHOUSE": Number(process.env.PAYROLL_RATE_5 || 55),
 "37": Number(process.env.PAYROLL_RATE_5 || 55),
 "TOUCH UP": Number(process.env.PAYROLL_RATE_5 || 0),
-"SUITES": Number(process.env.PAYROLL_RATE_5 || 0),
+"SUITES": Number(process.env.PAYROLL_RATE_5 || 20),
 };
 // ■ Leer tipo de habitación desde lo que está entre paréntesis: 331A (2), 405 (S), 210 (M)
 function getRoomType(unitName) {
