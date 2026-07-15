@@ -772,6 +772,9 @@ app.get("/launch", (req, res) => {
 app.get("/app", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "app.html"));
 });
+app.get("/payroll", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "payroll.html"));
+});
 app.get("/", (req, res) => {
 res.sendFile(__dirname + "/public/index.html");
 });
@@ -1053,6 +1056,38 @@ function sleep(ms) {
 // Nombre del archivo Excel semanal
 function payrollFileName(weekStart, weekEnd) {
   return `Payroll_${weekStart}_to_${weekEnd}.xlsx`;
+}
+
+function isISODate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function validatePayrollRange(weekStart, weekEnd) {
+  if (!isISODate(weekStart) || !isISODate(weekEnd)) {
+    throw new Error("Las fechas de nómina deben usar el formato YYYY-MM-DD");
+  }
+
+  const start = new Date(`${weekStart}T12:00:00`);
+  const end = new Date(`${weekEnd}T12:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new Error("El periodo de nómina contiene fechas inválidas");
+  }
+
+  if (end < start) {
+    throw new Error("La fecha final no puede ser anterior a la fecha inicial");
+  }
+
+  const days = Math.round((end - start) / 86400000) + 1;
+  if (days !== 7) {
+    throw new Error("La nómina debe contener exactamente 7 días");
+  }
+
+  if (start.getDay() !== 1 || end.getDay() !== 0) {
+    throw new Error("La nómina debe comenzar en lunes y terminar en domingo");
+  }
+
+  return { weekStart, weekEnd };
 }
 
 // Leer título real de la unidad desde Notion, incluyendo paréntesis
@@ -1605,6 +1640,23 @@ async function payrollRecordExists({ cleaner, unit, date }) {
     );
   });
 }
+// Separar correctamente varios limpiadores escritos en un mismo campo.
+// Acepta: "Daniela / Aide", "Daniela/Aide", "Daniela & Aide", comas y saltos de línea.
+function splitCleanerNames(value) {
+  const names = String(value || "")
+    .replace(/\s+(?:and|y)\s+/gi, " / ")
+    .replace(/[&|,;\n]+/g, " / ")
+    .split(/\s*\/\s*/g)
+    .map((name) => normalizeCleaner(name))
+    .filter(Boolean);
+
+  return [...new Map(names.map((name) => [cleanEmployeeText(name), name])).values()];
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
 // ■ Crear registro de nómina cuando se termina una unidad
 async function payrollRecordAlreadyExists({ cleaner, unit, date }) {
   if (!NOTION_PAYROLL_DATABASE_ID) return false;
@@ -1643,107 +1695,65 @@ async function payrollRecordAlreadyExists({ cleaner, unit, date }) {
 }
 
 async function createPayrollRecord({ cleaner, unit, date }) {
-  cleaner = normalizeCleaner(cleaner);
   unit = String(unit || "").trim();
+  const cleaners = splitCleanerNames(cleaner);
 
   if (!NOTION_PAYROLL_DATABASE_ID) {
-    console.log("NOTION_PAYROLL_DATABASE_ID faltante, no se guardó Payroll Record");
-    return;
+    throw new Error("NOTION_PAYROLL_DATABASE_ID faltante");
   }
 
-  if (!cleaner || !unit || !date) {
-    console.log("Payroll incompleto, falta cleaner, unit o date:", {
-      cleaner,
-      unit,
-      date,
-    });
-    return;
+  if (!cleaners.length || !unit || !date) {
+    throw new Error(`Payroll incompleto: cleaner=${cleaner || ""}, unit=${unit}, date=${date || ""}`);
   }
 
   const pay = getUnitPay(unit);
+  if (pay.error) throw new Error(`${pay.error}: ${unit}`);
 
-  if (pay.error) {
-    console.log("Payroll error:", pay.error, unit);
-    return;
-  }
-
-  const exists = await payrollRecordAlreadyExists({
-    cleaner,
-    unit,
-    date,
-  });
-
-  if (exists) {
-    console.log("Payroll duplicado ignorado:", cleaner, unit, date);
-    return;
-  }
+  // Por defecto el pago de la unidad se divide equitativamente.
+  // PAYROLL_SPLIT_MODE=full_each pagaría el total completo a cada persona.
+  const splitMode = String(process.env.PAYROLL_SPLIT_MODE || "equal").toLowerCase();
+  const amountPerCleaner = splitMode === "full_each"
+    ? roundMoney(pay.amount)
+    : roundMoney(pay.amount / cleaners.length);
 
   const week = getPayrollWeek(new Date(`${date}T12:00:00`));
+  const result = { created: 0, skipped: 0, cleaners, amountPerCleaner };
 
-  await notion.pages.create({
-    parent: {
-      database_id: NOTION_PAYROLL_DATABASE_ID,
-    },
-    properties: {
-      Payroll: {
-        title: [
-          {
-            text: {
-              content: `${cleaner} - ${unit} - $${pay.amount}`,
-            },
-          },
-        ],
-      },
-      Date: {
-        date: {
-          start: date,
-        },
-      },
-      Cleaner: {
-        rich_text: [
-          {
-            text: {
-              content: cleaner,
-            },
-          },
-        ],
-      },
-      Unit: {
-        rich_text: [
-          {
-            text: {
-              content: unit,
-            },
-          },
-        ],
-      },
-      "Room Type": {
-        select: {
-          name: pay.roomType,
-        },
-      },
-      Amount: {
-        number: pay.amount,
-      },
-      "Week Start": {
-        date: {
-          start: week.weekStart,
-        },
-      },
-      "Week End": {
-        date: {
-          start: week.weekEnd,
-        },
-      },
-      Status: {
-        select: {
-          name: "Pending",
-        },
-      },
-    },
-  });
+  for (const cleanerName of cleaners) {
+    const exists = await payrollRecordAlreadyExists({
+      cleaner: cleanerName,
+      unit,
+      date,
+    });
 
-  console.log("Payroll Record guardado:", cleaner, unit, `$${pay.amount}`);
+    if (exists) {
+      console.log("Payroll duplicado ignorado:", cleanerName, unit, date);
+      result.skipped += 1;
+      continue;
+    }
+
+    await notion.pages.create({
+      parent: { database_id: NOTION_PAYROLL_DATABASE_ID },
+      properties: {
+        Payroll: {
+          title: [{ text: { content: `${cleanerName} - ${unit} - $${amountPerCleaner.toFixed(2)}` } }],
+        },
+        Date: { date: { start: date } },
+        Cleaner: { rich_text: [{ text: { content: cleanerName } }] },
+        Unit: { rich_text: [{ text: { content: unit } }] },
+        "Room Type": { select: { name: pay.roomType } },
+        Amount: { number: amountPerCleaner },
+        "Week Start": { date: { start: week.weekStart } },
+        "Week End": { date: { start: week.weekEnd } },
+        Status: { select: { name: "Pending" } },
+      },
+    });
+
+    result.created += 1;
+    console.log("Payroll Record guardado:", cleanerName, unit, `$${amountPerCleaner.toFixed(2)}`);
+  }
+
+  return result;
 }
 // ■ Leer Payroll Records desde Notion
 async function getPayrollRecords(weekStart, weekEnd) {
@@ -2191,135 +2201,68 @@ app.get("/test-mobile-code-login", async (req, res) => {
 });
 
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
+  validatePayrollRange(weekStart, weekEnd);
   const records = await getPayrollRecords(weekStart, weekEnd);
   const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
- 
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = process.env.COMPANY_NAME || "Housekeeping Payroll System";
+  workbook.creator = process.env.COMPANY_NAME || "417 Maid";
   workbook.created = new Date();
 
   const summarySheet = workbook.addWorksheet("Payroll Summary");
   const quickbooksSheet = workbook.addWorksheet("QuickBooks Upload");
   const dailySheet = workbook.addWorksheet("Daily Payroll");
   const hourlySheet = workbook.addWorksheet("Hourly Payroll");
+  const warningsSheet = workbook.addWorksheet("Payroll Warnings");
+
+  const people = new Map();
+  const warnings = [];
+
+  function getPerson(name) {
+    const employee = normalizeCleaner(name || "Unknown");
+    const key = cleanEmployeeText(employee);
+    if (!people.has(key)) {
+      people.set(key, {
+        employee,
+        unitRecords: [],
+        hourlyRecords: [],
+        roles: new Set(),
+        unitTotal: 0,
+        hourlyTotal: 0,
+        hours: 0,
+      });
+    }
+    return people.get(key);
+  }
 
   dailySheet.columns = [
     { header: "Date", key: "date", width: 15 },
-    { header: "Cleaner", key: "cleaner", width: 22 },
-    { header: "Unit", key: "unit", width: 22 },
+    { header: "Cleaner", key: "cleaner", width: 24 },
+    { header: "Unit", key: "unit", width: 24 },
     { header: "Room Type", key: "roomType", width: 15 },
     { header: "Amount", key: "amount", width: 15 },
   ];
 
-  records.forEach((r) => {
-    dailySheet.addRow({
-      date: r.date,
-      cleaner: r.cleaner,
-      unit: r.unit,
-      roomType: r.roomType,
-      amount: Number(r.amount || 0),
-    });
-  });
+  for (const r of records) {
+    const person = getPerson(r.cleaner);
+    const amount = roundMoney(r.amount);
+    person.unitRecords.push(r);
+    person.unitTotal += amount;
+    person.roles.add("Cleaner");
 
-  const totals = {};
-
-  records.forEach((r) => {
-    const cleaner = (r.cleaner || "Unknown").trim();
-
-    if (!totals[cleaner]) {
-      totals[cleaner] = {
-        cleaner,
-        totalUnits: 0,
-        totalAmount: 0,
-        records: [],
-      };
+    if (!r.date || !r.cleaner || !r.unit) {
+      warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `Registro incompleto: ${r.unit || "sin unidad"}` });
+    }
+    if (!r.roomType || amount <= 0) {
+      warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `${r.unit}: tarifa o tipo de unidad inválido` });
     }
 
-    totals[cleaner].totalUnits += 1;
-    totals[cleaner].totalAmount += Number(r.amount || 0);
-    totals[cleaner].records.push(r);
-  });
-
-  const hourlyTotals = {};
-
-  hourlyRecords.forEach((r) => {
-    const employee = normalizeCleaner(r.employee || "Unknown");
-
-    if (!hourlyTotals[employee]) {
-      hourlyTotals[employee] = {
-        employee,
-        role: r.role,
-        hours: 0,
-        total: 0,
-      };
-    }
-
-    hourlyTotals[employee].hours += Number(r.hours || 0);
-    hourlyTotals[employee].total += Number(r.total || 0);
-  });
-
-  summarySheet.columns = [
-    { header: "Employee", key: "employee", width: 22 },
-    { header: "Pay Type", key: "payType", width: 15 },
-    { header: "Units", key: "units", width: 12 },
-    { header: "Hours", key: "hours", width: 12 },
-    { header: "Weekly Total", key: "total", width: 15 },
-  ];
-
-  quickbooksSheet.columns = [
-    { header: "Employee", key: "employee", width: 22 },
-    { header: "Pay Type", key: "payType", width: 15 },
-    { header: "Pay Period", key: "payPeriod", width: 25 },
-    { header: "Amount", key: "amount", width: 15 },
-  ];
-  Object.values(totals)
-    .sort((a, b) => a.cleaner.localeCompare(b.cleaner))
-    .forEach((t) => {
-      summarySheet.addRow({
-        employee: t.cleaner,
-        payType: "Unit Pay",
-        units: t.totalUnits,
-        hours: "",
-        total: Number(t.totalAmount.toFixed(2)),
-      });
-
-      quickbooksSheet.addRow({
-        employee: t.cleaner,
-        payType: "Unit Pay",
-        payPeriod: `${weekStart} to ${weekEnd}`,
-        amount: Number(t.totalAmount.toFixed(2)),
-      });
-
-      const sheetName = uniqueSheetName(workbook, `${t.cleaner} - Cleaning`);
-      const cleanerSheet = workbook.addWorksheet(sheetName);
-
-      cleanerSheet.columns = [
-        { header: "Date", key: "date", width: 15 },
-        { header: "Unit", key: "unit", width: 22 },
-        { header: "Room Type", key: "roomType", width: 15 },
-        { header: "Amount", key: "amount", width: 15 },
-      ];
-
-      t.records.forEach((r) => {
-        cleanerSheet.addRow({
-          date: r.date,
-          unit: r.unit,
-          roomType: r.roomType,
-          amount: Number(r.amount || 0),
-        });
-      });
-
-      cleanerSheet.addRow({});
-      cleanerSheet.addRow({
-        date: "TOTAL",
-        amount: Number(t.totalAmount.toFixed(2)),
-      });
-    });
+    dailySheet.addRow({ ...r, amount });
+  }
 
   hourlySheet.columns = [
-    { header: "Employee", key: "employee", width: 22 },
-    { header: "Role", key: "role", width: 18 },
+    { header: "Employee", key: "employee", width: 24 },
+    { header: "Role", key: "role", width: 20 },
     { header: "Clock In", key: "clockIn", width: 25 },
     { header: "Clock Out", key: "clockOut", width: 25 },
     { header: "Hours", key: "hours", width: 12 },
@@ -2327,54 +2270,130 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Total", key: "total", width: 15 },
   ];
 
-  hourlyRecords.forEach((r) => {
-    hourlySheet.addRow({
-     employee: (r.employee || "Unknown").trim(),
-      role: r.role,
-      clockIn: r.clockIn,
-      clockOut: r.clockOut,
-      hours: Number(r.hours || 0),
-      hourlyRate: Number(r.hourlyRate || 0),
-      total: Number(r.total || 0),
-    });
-  });
+  for (const r of hourlyRecords) {
+    const person = getPerson(r.employee);
+    const hours = Number(r.hours || 0);
+    const total = roundMoney(r.total);
+    person.hourlyRecords.push(r);
+    person.hours += hours;
+    person.hourlyTotal += total;
+    if (r.role) person.roles.add(r.role);
 
-  Object.values(hourlyTotals)
-    .sort((a, b) => a.employee.localeCompare(b.employee))
-    .forEach((t) => {
-      summarySheet.addRow({
-        employee: t.employee,
-        payType: "Hourly",
-        units: "",
-        hours: Number(t.hours.toFixed(2)),
-        total: Number(t.total.toFixed(2)),
-      });
+    if (!r.clockOut || hours <= 0 || Number(r.hourlyRate || 0) <= 0) {
+      warnings.push({ type: "Hourly", employee: r.employee, date: String(r.clockIn || "").slice(0, 10), detail: "Clock Out, horas o tarifa inválidos" });
+    }
 
-      quickbooksSheet.addRow({
-        employee: t.employee,
-        payType: "Hourly",
-        payPeriod: `${weekStart} to ${weekEnd}`,
-        amount: Number(t.total.toFixed(2)),
-      });
-    });
-
-  const folder = path.join(__dirname, "payroll_exports");
-
-  if (!fs.existsSync(folder)) {
-    fs.mkdirSync(folder);
+    hourlySheet.addRow({ ...r, total });
   }
 
+  summarySheet.columns = [
+    { header: "Employee", key: "employee", width: 24 },
+    { header: "Functions", key: "roles", width: 28 },
+    { header: "Units", key: "units", width: 10 },
+    { header: "Unit Pay", key: "unitPay", width: 15 },
+    { header: "Hours", key: "hours", width: 12 },
+    { header: "Hourly Pay", key: "hourlyPay", width: 15 },
+    { header: "Weekly Total", key: "total", width: 16 },
+  ];
+
+  quickbooksSheet.columns = [
+    { header: "Employee", key: "employee", width: 24 },
+    { header: "Pay Period", key: "payPeriod", width: 25 },
+    { header: "Unit Pay", key: "unitPay", width: 15 },
+    { header: "Hourly Pay", key: "hourlyPay", width: 15 },
+    { header: "Total", key: "total", width: 15 },
+  ];
+
+  const sortedPeople = [...people.values()].sort((a, b) => a.employee.localeCompare(b.employee));
+
+  for (const person of sortedPeople) {
+    const unitPay = roundMoney(person.unitTotal);
+    const hourlyPay = roundMoney(person.hourlyTotal);
+    const grandTotal = roundMoney(unitPay + hourlyPay);
+    const roles = [...person.roles].filter(Boolean).join(" / ") || "Unspecified";
+
+    summarySheet.addRow({
+      employee: person.employee,
+      roles,
+      units: person.unitRecords.length,
+      unitPay,
+      hours: Number(person.hours.toFixed(2)),
+      hourlyPay,
+      total: grandTotal,
+    });
+
+    quickbooksSheet.addRow({
+      employee: person.employee,
+      payPeriod: `${weekStart} to ${weekEnd}`,
+      unitPay,
+      hourlyPay,
+      total: grandTotal,
+    });
+
+    const employeeSheet = workbook.addWorksheet(uniqueSheetName(workbook, person.employee));
+    employeeSheet.addRow(["Employee", person.employee]);
+    employeeSheet.addRow(["Pay Period", `${weekStart} to ${weekEnd}`]);
+    employeeSheet.addRow(["Functions", roles]);
+    employeeSheet.addRow([]);
+
+    employeeSheet.addRow(["CLEANING / UNIT PAY"]);
+    employeeSheet.addRow(["Date", "Unit", "Room Type", "Amount"]);
+    for (const r of person.unitRecords) {
+      employeeSheet.addRow([r.date, r.unit, r.roomType, roundMoney(r.amount)]);
+    }
+    employeeSheet.addRow(["Cleaning subtotal", "", "", unitPay]);
+    employeeSheet.addRow([]);
+
+    employeeSheet.addRow(["HOURLY WORK"]);
+    employeeSheet.addRow(["Date", "Role", "Clock In", "Clock Out", "Hours", "Rate", "Total"]);
+    for (const r of person.hourlyRecords) {
+      employeeSheet.addRow([
+        String(r.clockIn || "").slice(0, 10), r.role, r.clockIn, r.clockOut,
+        Number(r.hours || 0), Number(r.hourlyRate || 0), roundMoney(r.total),
+      ]);
+    }
+    employeeSheet.addRow(["Hourly subtotal", "", "", "", Number(person.hours.toFixed(2)), "", hourlyPay]);
+    employeeSheet.addRow([]);
+    employeeSheet.addRow(["WEEKLY TOTAL", "", "", "", "", "", grandTotal]);
+
+    employeeSheet.columns = [
+      { width: 18 }, { width: 24 }, { width: 20 }, { width: 25 },
+      { width: 12 }, { width: 12 }, { width: 15 },
+    ];
+  }
+
+  warningsSheet.columns = [
+    { header: "Type", key: "type", width: 15 },
+    { header: "Employee", key: "employee", width: 24 },
+    { header: "Date", key: "date", width: 15 },
+    { header: "Detail", key: "detail", width: 60 },
+  ];
+  if (warnings.length) warnings.forEach((warning) => warningsSheet.addRow(warning));
+  else warningsSheet.addRow({ type: "OK", detail: "No payroll warnings found" });
+
+  for (const sheet of workbook.worksheets) {
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    const header = sheet.getRow(1);
+    header.font = { bold: true };
+    sheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        if (typeof cell.value === "number") cell.numFmt = '$#,##0.00';
+      });
+    });
+  }
+
+  const folder = path.join(__dirname, "payroll_exports");
+  if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
   const filePath = path.join(folder, payrollFileName(weekStart, weekEnd));
-
   await workbook.xlsx.writeFile(filePath);
-
-  console.log("Excel de nómina actualizado:", filePath);
 
   return {
     fileName: payrollFileName(weekStart, weekEnd),
     filePath,
     fileUrl: `/payroll_exports/${payrollFileName(weekStart, weekEnd)}`,
     totalRecords: records.length + hourlyRecords.length,
+    employees: sortedPeople.length,
+    warnings: warnings.length,
   };
 }
 // ■ Actualizar habitación principal
@@ -4119,6 +4138,264 @@ app.get("/finalizar-dia", async (req, res) => {
   }
 });
 
+
+// =========================================================
+// NOTIFICACIONES DIRIGIDAS Y GUEST OUT DESDE HOTSOS
+// =========================================================
+const employeeNotifications = new Map();
+
+function notificationEmployeeKey(name) {
+  return cleanEmployeeText(name || "");
+}
+
+function saveEmployeeNotification(employee, payload) {
+  const key = notificationEmployeeKey(employee);
+  if (!key) return null;
+
+  const item = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    employee: normalizeCleaner(employee),
+    createdAt: new Date().toISOString(),
+    read: false,
+    ...payload,
+  };
+
+  const current = employeeNotifications.get(key) || [];
+  current.unshift(item);
+  employeeNotifications.set(key, current.slice(0, 100));
+
+  io.emit("employee-notification", item);
+  return item;
+}
+
+function notifyAssignedCleaners(cleanerText, payload) {
+  return splitCleanerNames(cleanerText).map((employee) =>
+    saveEmployeeNotification(employee, payload)
+  ).filter(Boolean);
+}
+
+app.get("/api/employee-notifications", (req, res) => {
+  const employee = String(req.query.employee || "").trim();
+  const key = notificationEmployeeKey(employee);
+
+  if (!key) {
+    return res.status(400).json({ ok: false, message: "Empleado requerido" });
+  }
+
+  return res.json({
+    ok: true,
+    employee,
+    notifications: employeeNotifications.get(key) || [],
+  });
+});
+
+app.post("/api/employee-notifications/read", (req, res) => {
+  const employee = String(req.body.employee || "").trim();
+  const notificationId = String(req.body.notificationId || "").trim();
+  const key = notificationEmployeeKey(employee);
+  const items = employeeNotifications.get(key) || [];
+
+  items.forEach((item) => {
+    if (!notificationId || item.id === notificationId) item.read = true;
+  });
+
+  employeeNotifications.set(key, items);
+  res.json({ ok: true });
+});
+
+async function applyGuestOutFromHotSOS(unit, source = "HotSOS") {
+  const cleanUnit = String(unit || "").trim();
+  if (!cleanUnit) throw new Error("Unidad requerida");
+
+  const pages = await queryTodayRooms(true);
+  const normalizedTarget = normalizeRoom(cleanUnit);
+  const digits = roomDigits(cleanUnit);
+  const page = pages.find((item) => normalizeRoom(getRoomTitleFromPage(item)) === normalizedTarget)
+    || pages.find((item) => roomDigits(getRoomTitleFromPage(item)) === digits);
+
+  if (!page) throw new Error(`No encontré la unidad ${cleanUnit} para hoy`);
+
+  const flags = getRoomOpsFlags(page);
+  const fullUnit = getRoomTitleFromPage(page) || cleanUnit;
+  const assignedCleaner = getAssignedCleaner(page);
+
+  if (!flags.guestOut) {
+    await updateNotionRoom(fullUnit, "GUEST_OUT", source, "Guest Out recibido desde HotSOS", "system");
+  }
+
+  const notifications = notifyAssignedCleaners(assignedCleaner, {
+    type: "GUEST_OUT",
+    title: "🚪 Guest Out",
+    message: `La unidad ${fullUnit} ya está disponible para comenzar.`,
+    unit: fullUnit,
+    urgent: false,
+    source,
+  });
+
+  broadcastAssignmentUpdate("hotsos-guest-out", { unit: fullUnit, assignedCleaner });
+  broadcastOpsUpdate({
+    type: "guest-out",
+    action: "GUEST_OUT",
+    unit: fullUnit,
+    employee: source,
+    message: "Guest Out recibido desde HotSOS",
+  });
+
+  return {
+    unit: fullUnit,
+    assignedCleaner,
+    alreadyGuestOut: flags.guestOut,
+    notifications: notifications.length,
+  };
+}
+
+app.post("/api/hotsos/guest-out", async (req, res) => {
+  try {
+    const configuredSecret = String(process.env.HOTSOS_WEBHOOK_SECRET || "").trim();
+    const receivedSecret = String(req.get("x-hotsos-secret") || req.body.secret || "").trim();
+
+    if (configuredSecret && receivedSecret !== configuredSecret) {
+      return res.status(401).json({ ok: false, message: "HotSOS secret inválido" });
+    }
+
+    const units = Array.isArray(req.body.units)
+      ? req.body.units
+      : [req.body.unit || req.body.room || req.body.jobSiteName];
+
+    const results = [];
+    const errors = [];
+
+    for (const unit of units.filter(Boolean)) {
+      try {
+        results.push(await applyGuestOutFromHotSOS(unit));
+      } catch (error) {
+        errors.push({ unit, error: error.message });
+      }
+    }
+
+    return res.status(errors.length && !results.length ? 400 : 200).json({
+      ok: results.length > 0,
+      results,
+      errors,
+    });
+  } catch (error) {
+    console.error("HotSOS Guest Out error:", error.message);
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/room-alert", async (req, res) => {
+  try {
+    const unit = String(req.body.unit || "").trim();
+    const type = String(req.body.type || "URGENT").toUpperCase();
+    const message = String(req.body.message || "").trim();
+    const pages = await queryTodayRooms();
+    const page = pages.find((item) => normalizeRoom(getRoomTitleFromPage(item)) === normalizeRoom(unit));
+
+    if (!page) return res.status(404).json({ ok: false, message: "Unidad no encontrada" });
+
+    const fullUnit = getRoomTitleFromPage(page) || unit;
+    const assignedCleaner = getAssignedCleaner(page);
+    const urgent = type === "URGENT";
+    const notifications = notifyAssignedCleaners(assignedCleaner, {
+      type,
+      title: urgent ? "🚨 Unidad urgente" : "🔔 Actualización de unidad",
+      message: message || (urgent
+        ? `La unidad ${fullUnit} debe atenderse primero.`
+        : `Hay una actualización para la unidad ${fullUnit}.`),
+      unit: fullUnit,
+      urgent,
+      source: "Dispatch",
+    });
+
+    broadcastOpsUpdate({
+      type: urgent ? "urgent" : "room-alert",
+      action: type,
+      unit: fullUnit,
+      employee: "Dispatch",
+      message: message || "Alerta enviada al limpiador asignado",
+    });
+
+    res.json({ ok: true, assignedCleaner, notifications: notifications.length });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/payroll-preview", async (req, res) => {
+  try {
+    const weekStart = String(req.query.start || "").trim();
+    const weekEnd = String(req.query.end || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+
+    const [records, hourlyRecords] = await Promise.all([
+      getPayrollRecords(weekStart, weekEnd),
+      getHourlyPayrollRecords(weekStart, weekEnd),
+    ]);
+
+    const employees = new Map();
+    const warnings = [];
+
+    const ensure = (name) => {
+      const employee = normalizeCleaner(name || "Unknown");
+      const key = cleanEmployeeText(employee);
+      if (!employees.has(key)) employees.set(key, {
+        employee,
+        units: 0,
+        cleaningPay: 0,
+        hours: 0,
+        hourlyPay: 0,
+        roles: new Set(),
+      });
+      return employees.get(key);
+    };
+
+    records.forEach((record) => {
+      const person = ensure(record.cleaner);
+      person.units += 1;
+      person.cleaningPay += Number(record.amount || 0);
+      person.roles.add("Cleaner");
+      if (!record.roomType || Number(record.amount || 0) <= 0) {
+        warnings.push(`${record.unit || "Unidad desconocida"}: tarifa o tipo inválido`);
+      }
+    });
+
+    hourlyRecords.forEach((record) => {
+      const person = ensure(record.employee);
+      person.hours += Number(record.hours || 0);
+      person.hourlyPay += Number(record.total || 0);
+      if (record.role) person.roles.add(record.role);
+      if (!record.clockOut) warnings.push(`${record.employee}: falta Clock Out`);
+    });
+
+    const people = [...employees.values()].map((person) => ({
+      employee: person.employee,
+      units: person.units,
+      cleaningPay: roundMoney(person.cleaningPay),
+      hours: roundMoney(person.hours),
+      hourlyPay: roundMoney(person.hourlyPay),
+      total: roundMoney(person.cleaningPay + person.hourlyPay),
+      roles: [...person.roles],
+    })).sort((a, b) => a.employee.localeCompare(b.employee));
+
+    res.json({
+      ok: true,
+      weekStart,
+      weekEnd,
+      totals: {
+        employees: people.length,
+        units: records.length,
+        hourlyEntries: hourlyRecords.length,
+        amount: roundMoney(people.reduce((sum, person) => sum + person.total, 0)),
+      },
+      people,
+      warnings: [...new Set(warnings)],
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
 app.post("/generate-payroll-excel", async (req, res) => {
   try {
     const requestedStart = String(req.body.start || "").trim();
@@ -4137,6 +4414,7 @@ app.post("/generate-payroll-excel", async (req, res) => {
       weekEnd = week.weekEnd;
     }
 
+    validatePayrollRange(weekStart, weekEnd);
     const payroll = await generateWeeklyPayrollExcel(weekStart, weekEnd);
 
     res.json({
@@ -4177,6 +4455,7 @@ app.get("/payroll-excel", async (req, res) => {
       weekEnd = week.weekEnd;
     }
 
+    validatePayrollRange(weekStart, weekEnd);
     const payroll = await generateWeeklyPayrollExcel(weekStart, weekEnd);
 
     res.download(payroll.filePath, payroll.fileName);
@@ -4264,14 +4543,10 @@ app.get("/backfill-payroll", async (req, res) => {
       }
 
       try {
-        await createPayrollRecord({
-          cleaner,
-          unit,
-          date,
-        });
-
+        const result = await createPayrollRecord({ cleaner, unit, date });
         await sleep(350);
-        created++;
+        created += Number(result?.created || 0);
+        skipped += Number(result?.skipped || 0);
       } catch (error) {
         errors.push({
           unit,
