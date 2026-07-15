@@ -1,13 +1,17 @@
 {
   "name": "cleaning-panel",
-  "version": "1.0.0",
-  "description": "Housekeeping Operations Panel with Notion and OpenAI",
+  "version": "1.1.0",
+  "description": "417 Maid housekeeping operations, payroll, reporting and HotSOS integration",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node --check server.js"
   },
   "author": "Andres Garcia",
   "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@notionhq/client": "^2.2.15",
     "cloudinary": "^2.5.1",
