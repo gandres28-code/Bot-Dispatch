@@ -141,9 +141,17 @@ CREATE TABLE IF NOT EXISTS payroll_records (
   source TEXT NOT NULL DEFAULT 'notion',
   raw_data JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (work_date, normalized_employee, unit, pay_type, role_worked)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migración: permite registros legítimos repetidos en la misma unidad.
+-- La identidad de cada pago sincronizado es notion_id.
+ALTER TABLE payroll_records
+DROP CONSTRAINT IF EXISTS payroll_records_work_date_normalized_employee_unit_pay_type_role_worked_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payroll_records_notion_id_unique_idx
+ON payroll_records (notion_id)
+WHERE notion_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS payroll_records_week_idx
 ON payroll_records (week_start, week_end);
