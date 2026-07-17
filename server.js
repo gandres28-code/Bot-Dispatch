@@ -66,6 +66,9 @@ const {
 const {
   createEventEngine,
 } = require("./services/eventEngine");
+const {
+  createIntelligenceEngine,
+} = require("./services/intelligenceEngine");
 
 const server = http.createServer(app);
 
@@ -4750,6 +4753,68 @@ app.get("/unit-history", async (req, res) => {
 
 
 // =========================================================
+// REAL-TIME INTELLIGENCE ENGINE · FASE 8
+// =========================================================
+const IntelligenceEngine = createIntelligenceEngine({
+  io,
+});
+
+console.log(
+  "✅ Intelligence Engine iniciado:",
+  IntelligenceEngine.version
+);
+
+app.get("/api/intelligence/status", async (req, res) => {
+  try {
+    return res.json(await IntelligenceEngine.status());
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/intelligence", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const fresh =
+      String(req.query.fresh || "").toLowerCase() === "true";
+
+    const snapshot = await IntelligenceEngine.get(date, {
+      fresh,
+    });
+
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/intelligence/refresh", async (req, res) => {
+  try {
+    const date = String(
+      req.body?.date || req.query.date || todayISO()
+    ).trim();
+
+    const snapshot = await IntelligenceEngine.refresh(
+      date,
+      "manual-api"
+    );
+
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+// =========================================================
 // MOTOR CENTRAL DE EVENTOS · FASE 7
 // =========================================================
 const EventEngine = createEventEngine({
@@ -4766,6 +4831,12 @@ const EventEngine = createEventEngine({
       source: "event-engine",
       eventId: payload.eventId,
     });
+  },
+  onEventCommitted({ workDate, payload }) {
+    IntelligenceEngine.scheduleRefresh(
+      workDate,
+      `event:${payload.action}`
+    );
   },
 });
 
@@ -9601,6 +9672,18 @@ async function startServer() {
     console.warn(
       "⚠️ Employee sync no se inició porque PostgreSQL no está conectado."
     );
+  }
+
+  if (databaseStatus.connected) {
+    setTimeout(() => {
+      IntelligenceEngine.refresh(todayISO(), "server-start")
+        .catch((error) => {
+          console.error(
+            "INITIAL INTELLIGENCE REFRESH ERROR:",
+            error.message
+          );
+        });
+    }, 2500);
   }
 
   server.listen(PORT, () => {
