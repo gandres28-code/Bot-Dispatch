@@ -395,3 +395,54 @@ VALUES ('003_durable_sync_queue')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS system_events (
+  id BIGSERIAL PRIMARY KEY,
+  event_id TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL DEFAULT 'room',
+  aggregate_id TEXT NOT NULL DEFAULT '',
+  work_date DATE NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  actor TEXT NOT NULL DEFAULT '',
+  actor_role TEXT NOT NULL DEFAULT '',
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'processed'
+    CHECK (status IN ('pending','processing','processed','failed')),
+  processed_at TIMESTAMPTZ,
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS system_events_date_idx
+ON system_events (work_date, occurred_at DESC);
+
+CREATE INDEX IF NOT EXISTS system_events_aggregate_idx
+ON system_events (
+  aggregate_type,
+  aggregate_id,
+  occurred_at DESC
+);
+
+CREATE INDEX IF NOT EXISTS system_events_type_idx
+ON system_events (event_type, occurred_at DESC);
+
+ALTER TABLE payroll_records
+ADD COLUMN IF NOT EXISTS source_event_id TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payroll_records_source_event_unique
+ON payroll_records (source_event_id)
+WHERE source_event_id IS NOT NULL
+  AND source_event_id <> '';
+
+CREATE INDEX IF NOT EXISTS notifications_source_idx
+ON notifications (source, created_at DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('004_central_event_engine')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
