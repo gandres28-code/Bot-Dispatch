@@ -33,7 +33,19 @@ const {
   getPayrollSyncStatus,
   mapPayrollPostgresToLegacy,
   comparePayrollRecordSets,
+  getPayrollRecordsFromNotionPage,
 } = require("./services/payrollSyncService");
+const {
+  getPayrollWeekState,
+  listPayrollRates,
+  savePayrollRate,
+  updatePayrollRecordAmount,
+  resetPayrollRecordAmount,
+  validatePayrollWeek,
+  closePayrollWeek,
+  reopenPayrollWeek,
+  listPayrollAudit,
+} = require("./services/payrollManagementService");
 
 const server = http.createServer(app);
 
@@ -1904,28 +1916,28 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
     cursor = response.has_more ? response.next_cursor : undefined;
   } while (cursor);
 
-  return results.map((page) => {
-    const properties = page.properties || {};
+  const expanded = await Promise.all(
+    results.map((page) => getPayrollRecordsFromNotionPage(page))
+  );
 
-    return {
-      date: properties.Date?.date?.start?.slice(0, 10) || "",
-      cleaner: normalizeCleaner(
-        properties.Cleaner?.rich_text?.map((item) => item.plain_text).join("") || ""
-      ),
-      unit: properties.Unit?.rich_text?.map((item) => item.plain_text).join("") || "",
-      roomType: properties["Room Type"]?.select?.name || "",
-      amount: roundMoney(properties.Amount?.number || 0),
-      notionId: page.id || "",
-      payType:
-        properties["Pay Type"]?.select?.name ||
-        properties["Pay Type"]?.rich_text?.map((item) => item.plain_text).join("") ||
-        "unit",
-      roleWorked:
-        properties["Role Worked"]?.select?.name ||
-        properties["Role Worked"]?.rich_text?.map((item) => item.plain_text).join("") ||
-        "Cleaner",
-    };
-  });
+  return expanded.flat().map((record) => ({
+    id: null,
+    date: record.workDate,
+    cleaner: normalizeCleaner(record.employee),
+    unit: record.unit,
+    roomType: record.roomType,
+    propertyName: record.propertyName,
+    grossUnitAmount: record.grossUnitAmount,
+    splitCount: record.splitCount,
+    splitPercent: record.splitPercent,
+    amount: roundMoney(record.amount),
+    notionId: record.notionId,
+    payType: record.payType,
+    roleWorked: record.roleWorked,
+    manualOverride: false,
+    adjustmentReason: "",
+    status: record.status,
+  }));
 }
 
 async function getPayrollRecordsWithSource(
@@ -2440,6 +2452,18 @@ async function runPayrollSync(reason = "manual", weekStart = "", weekEnd = "") {
       reason,
       ...week,
       message: "PostgreSQL no está conectado; Payroll continúa operando desde Notion.",
+    };
+  }
+
+  const weekState = await getPayrollWeekState(week.weekStart, week.weekEnd);
+  if (weekState?.status === "closed") {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      ...week,
+      weekState,
+      message: "La semana está cerrada y no se volvió a sincronizar.",
     };
   }
 
@@ -5057,6 +5081,132 @@ app.post("/api/hotsos/guest-out", async (req, res) => {
   } catch (error) {
     console.error("HotSOS Guest Out error:", error.message);
     return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+
+// =========================================================
+// PAYROLL 2.0 · TARIFAS, AJUSTES, BLOQUEO Y AUDITORÍA
+// =========================================================
+app.get("/api/payroll/week", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const [week, validation] = await Promise.all([
+      getPayrollWeekState(weekStart, weekEnd),
+      validatePayrollWeek(weekStart, weekEnd),
+    ]);
+    res.json({ ok: true, weekStart, weekEnd, status: week?.status || "open", week, validation });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/payroll/rates", async (req, res) => {
+  try {
+    const rates = await listPayrollRates({ includeInactive: req.query.all === "true" });
+    res.json({ ok: true, rates });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/rates", async (req, res) => {
+  try {
+    const result = await savePayrollRate({
+      propertyName: req.body.propertyName,
+      roomType: req.body.roomType,
+      amount: req.body.amount,
+      effectiveFrom: req.body.effectiveFrom,
+      changedBy: req.body.changedBy || "Admin",
+      reason: req.body.reason || "Rate updated from Payroll 2.0",
+      weekStart: req.body.weekStart || "",
+      weekEnd: req.body.weekEnd || "",
+      applyToWeek: Boolean(req.body.applyToWeek),
+    });
+    io.emit("payroll-rates-updated", result);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.patch("/api/payroll/records/:id", async (req, res) => {
+  try {
+    const record = await updatePayrollRecordAmount({
+      recordId: Number(req.params.id),
+      amount: req.body.amount,
+      reason: req.body.reason,
+      changedBy: req.body.changedBy || "Admin",
+    });
+    io.emit("payroll-record-updated", record);
+    res.json({ ok: true, record });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/records/:id/reset", async (req, res) => {
+  try {
+    const record = await resetPayrollRecordAmount({
+      recordId: Number(req.params.id),
+      reason: req.body.reason,
+      changedBy: req.body.changedBy || "Admin",
+    });
+    io.emit("payroll-record-updated", record);
+    res.json({ ok: true, record });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/week/close", async (req, res) => {
+  try {
+    const weekStart = String(req.body.start || "").trim();
+    const weekEnd = String(req.body.end || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const week = await closePayrollWeek({
+      weekStart,
+      weekEnd,
+      changedBy: req.body.changedBy || "Admin",
+      reason: req.body.reason || "Payroll reviewed and approved",
+    });
+    io.emit("payroll-week-closed", week);
+    res.json({ ok: true, week });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/week/reopen", async (req, res) => {
+  try {
+    const weekStart = String(req.body.start || "").trim();
+    const weekEnd = String(req.body.end || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const week = await reopenPayrollWeek({
+      weekStart,
+      weekEnd,
+      changedBy: req.body.changedBy || "Admin",
+      reason: req.body.reason,
+    });
+    io.emit("payroll-week-reopened", week);
+    res.json({ ok: true, week });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/payroll/audit", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const audit = await listPayrollAudit(weekStart, weekEnd, req.query.limit || 100);
+    res.json({ ok: true, weekStart, weekEnd, audit });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
   }
 });
 
