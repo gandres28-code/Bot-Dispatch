@@ -1,4 +1,3 @@
-
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS employees (
@@ -225,6 +224,101 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 INSERT INTO schema_migrations (migration_name)
 VALUES ('001_initial_417_maid_schema')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
+
+BEGIN;
+
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS property_name TEXT NOT NULL DEFAULT 'ALL';
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS manual_override BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS adjustment_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS adjusted_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS adjusted_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS payroll_rates (
+  id BIGSERIAL PRIMARY KEY,
+  property_name TEXT NOT NULL DEFAULT 'ALL',
+  room_type TEXT NOT NULL,
+  amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  effective_from DATE NOT NULL,
+  effective_to DATE,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by TEXT NOT NULL DEFAULT 'Admin',
+  reason TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (property_name, room_type, effective_from)
+);
+
+CREATE INDEX IF NOT EXISTS payroll_rates_lookup_idx
+ON payroll_rates (property_name, room_type, effective_from DESC)
+WHERE active = TRUE;
+
+CREATE TABLE IF NOT EXISTS payroll_weeks (
+  id BIGSERIAL PRIMARY KEY,
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  snapshot_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  snapshot_records INTEGER NOT NULL DEFAULT 0,
+  snapshot_employees INTEGER NOT NULL DEFAULT 0,
+  snapshot_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  closed_at TIMESTAMPTZ,
+  closed_by TEXT NOT NULL DEFAULT '',
+  close_reason TEXT NOT NULL DEFAULT '',
+  reopened_at TIMESTAMPTZ,
+  reopened_by TEXT NOT NULL DEFAULT '',
+  reopen_reason TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (week_start, week_end)
+);
+
+CREATE TABLE IF NOT EXISTS payroll_adjustments (
+  id BIGSERIAL PRIMARY KEY,
+  payroll_record_id BIGINT REFERENCES payroll_records(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  employee TEXT NOT NULL,
+  unit TEXT NOT NULL DEFAULT '',
+  original_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  new_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL,
+  changed_by TEXT NOT NULL DEFAULT 'Admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS payroll_audit (
+  id BIGSERIAL PRIMARY KEY,
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  action TEXT NOT NULL,
+  employee TEXT NOT NULL DEFAULT '',
+  unit TEXT NOT NULL DEFAULT '',
+  payroll_record_id BIGINT,
+  changed_by TEXT NOT NULL DEFAULT 'Admin',
+  reason TEXT NOT NULL DEFAULT '',
+  before_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  after_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS payroll_audit_week_idx
+ON payroll_audit (week_start, week_end, created_at DESC);
+
+INSERT INTO payroll_rates (property_name, room_type, amount, effective_from, created_by, reason)
+VALUES
+  ('ALL','3',55,'2026-01-01','System','Initial default rate'),
+  ('ALL','2',45,'2026-01-01','System','Initial default rate'),
+  ('ALL','1',35,'2026-01-01','System','Initial default rate'),
+  ('ALL','M',20,'2026-01-01','System','Initial default rate'),
+  ('ALL','S',22,'2026-01-01','System','Initial default rate'),
+  ('ALL','SUITE',20,'2026-01-01','System','Initial default rate')
+ON CONFLICT (property_name, room_type, effective_from) DO NOTHING;
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('002_payroll_2_complete')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
