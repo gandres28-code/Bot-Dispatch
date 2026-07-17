@@ -21,6 +21,11 @@ const {
   listEmployeesPostgres,
   getEmployeeSyncStatus,
 } = require("./services/employeeSyncService");
+const {
+  syncRoomsFromNotion,
+  listRoomsPostgres,
+  getRoomSyncStatus,
+} = require("./services/roomSyncService");
 
 const server = http.createServer(app);
 
@@ -2163,6 +2168,164 @@ app.get("/api/postgres/employees", async (req, res) => {
       ok: true,
       count: employees.length,
       employees,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+// =========================================================
+// ROOMS · NOTION → POSTGRESQL
+// =========================================================
+// Modo seguro: Notion continúa siendo la fuente operativa.
+// PostgreSQL recibe una copia de las habitaciones para validar datos
+// antes de que los paneles comiencen a leer desde la nueva base.
+let roomSyncTimer = null;
+let roomSyncRunning = false;
+
+async function runRoomSync(reason = "manual", date = todayISO()) {
+  if (!postgresStatus.connected) {
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      date,
+      message: "PostgreSQL no está conectado; Rooms continúa operando desde Notion.",
+    };
+  }
+
+  if (roomSyncRunning) {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      date,
+      message: "La sincronización de Rooms ya está en ejecución.",
+    };
+  }
+
+  roomSyncRunning = true;
+
+  try {
+    const result = await syncRoomsFromNotion({
+      notion,
+      databaseId: NOTION_DATABASE_ID,
+      queryDatabase: (body) => notion.databases.query(body),
+      date,
+    });
+
+    const payload = {
+      ...result,
+      reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    io.emit("rooms-postgres-synced", payload);
+
+    console.log("✅ Rooms sincronizados Notion → PostgreSQL:", {
+      reason,
+      date,
+      totalFromNotion: result.totalFromNotion,
+      saved: result.saved,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("ROOM SYNC ERROR:", error.message);
+    throw error;
+  } finally {
+    roomSyncRunning = false;
+  }
+}
+
+function startRoomSyncSchedule() {
+  const intervalMs = Math.max(
+    60000,
+    Number(process.env.ROOM_SYNC_INTERVAL_MS || 120000)
+  );
+
+  if (roomSyncTimer) {
+    clearInterval(roomSyncTimer);
+  }
+
+  roomSyncTimer = setInterval(() => {
+    runRoomSync("scheduled", todayISO()).catch((error) => {
+      console.error("ROOM SCHEDULED SYNC ERROR:", error.message);
+    });
+  }, intervalMs);
+
+  if (typeof roomSyncTimer.unref === "function") {
+    roomSyncTimer.unref();
+  }
+
+  console.log(
+    `🏨 Rooms sync programado cada ${Math.round(intervalMs / 60000)} minuto(s).`
+  );
+}
+
+app.post("/api/sync/rooms", async (req, res) => {
+  try {
+    const date = String(req.body?.date || req.query?.date || todayISO()).trim();
+    const result = await runRoomSync("manual", date);
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/sync/rooms/status", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const status = postgresStatus.connected
+      ? await getRoomSyncStatus(date)
+      : null;
+
+    return res.json({
+      ok: true,
+      date,
+      postgresConnected: postgresStatus.connected,
+      running: roomSyncRunning,
+      scheduled: !!roomSyncTimer,
+      intervalMs: Math.max(
+        60000,
+        Number(process.env.ROOM_SYNC_INTERVAL_MS || 120000)
+      ),
+      status,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/postgres/rooms", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado.",
+      });
+    }
+
+    const date = String(req.query.date || todayISO()).trim();
+    const rooms = await listRoomsPostgres(date);
+
+    return res.json({
+      ok: true,
+      date,
+      count: rooms.length,
+      rooms,
     });
   } catch (error) {
     return res.status(500).json({
@@ -7927,6 +8090,9 @@ async function startServer() {
     try {
       await runEmployeeSync("startup");
       startEmployeeSyncSchedule();
+
+      await runRoomSync("startup", todayISO());
+      startRoomSyncSchedule();
     } catch (error) {
       // La sincronización no bloquea el panel. Notion sigue disponible.
       console.error(
@@ -7935,6 +8101,17 @@ async function startServer() {
       );
 
       startEmployeeSyncSchedule();
+
+      try {
+        await runRoomSync("startup-recovery", todayISO());
+      } catch (roomError) {
+        console.error(
+          "⚠️ El servidor arrancará sin la sincronización inicial de Rooms:",
+          roomError.message
+        );
+      }
+
+      startRoomSyncSchedule();
     }
   } else {
     console.warn(
