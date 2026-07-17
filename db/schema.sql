@@ -356,3 +356,42 @@ VALUES ('002_payroll_2_complete')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS sync_queue (
+  id BIGSERIAL PRIMARY KEY,
+  job_type TEXT NOT NULL,
+  destination TEXT NOT NULL DEFAULT 'notion',
+  dedupe_key TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','processing','completed','failed')),
+  priority INTEGER NOT NULL DEFAULT 100,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 10,
+  next_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  locked_at TIMESTAMPTZ,
+  locked_by TEXT NOT NULL DEFAULT '',
+  last_error TEXT NOT NULL DEFAULT '',
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sync_queue_dedupe_key_unique
+ON sync_queue (dedupe_key)
+WHERE dedupe_key IS NOT NULL AND dedupe_key <> '';
+
+CREATE INDEX IF NOT EXISTS sync_queue_pending_idx
+ON sync_queue (status, next_retry_at, priority, created_at)
+WHERE status IN ('pending','failed');
+
+CREATE INDEX IF NOT EXISTS sync_queue_destination_idx
+ON sync_queue (destination, status, created_at DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('003_durable_sync_queue')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
