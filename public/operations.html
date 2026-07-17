@@ -19,7 +19,7 @@
 <div class="shell">
   <header class="hero">
     <div class="hero-top">
-      <div><div class="live"><span class="dot"></span> Operación en vivo</div><h1>Centro de Operaciones</h1><p>Lo importante primero: urgentes, Guest Out, problemas y progreso del día.</p></div>
+      <div><div class="live"><span class="dot"></span> <span id="liveSource">Conectando…</span></div><h1>Centro de Operaciones</h1><p>Lo importante primero: urgentes, Guest Out, problemas y progreso del día.</p></div>
       <div class="actions"><button class="btn" onclick="enableNotifications()">🔔 Alertas</button><button class="btn green" onclick="openReportDialog()">📄 Reporte PDF</button></div>
     </div>
   </header>
@@ -72,9 +72,93 @@ function renderEvents(){const items=filteredEvents();$("eventsCount").textConten
 function updateStats(){const pending=allReports.filter(r=>!isSent(r)).length;const urgent=[...allReports,...allEvents].filter(x=>/urgent|urgente|blocking|high/.test((reportText(x)+" "+eventText(x)))).length;$("statEvents").textContent=allEvents.length;$("statReports").textContent=allReports.length;$("statPending").textContent=pending;$("statUrgent").textContent=urgent}
 function renderAll(){renderReports();renderEvents();updateStats();$("status").textContent=`Actualizado ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}`}
 async function loadReports(){try{const r=await fetch("/operations-reports?includePhotos=true");const d=await r.json();allReports=d.reports||d.events||d.items||[];const newest=allReports[0];if(!firstLoad&&newest&&reportId(newest)!==lastReportId){playAlert();browserNotice("Nuevo reporte",`${newest.unit||"Unidad"} · ${newest.employee||newest.person||""}`)}if(newest)lastReportId=reportId(newest);renderAll()}catch(e){$("status").textContent="Error cargando reportes"}}
-async function loadEvents(){try{const r=await fetch("/operations-events");const d=await r.json();allEvents=d.events||[];const newest=allEvents[0];if(!firstLoad&&newest&&newest.id!==lastEventId){playAlert();browserNotice(newest.action||"Nueva actividad",`${newest.unit||"Unidad"} · ${newest.person||""}`)}if(newest)lastEventId=newest.id;renderAll();firstLoad=false}catch(e){$("status").textContent="Error cargando actividad"}}
+async function loadEvents(){
+  const date=$("reportDate").value||todayISO();
+  let source="postgres";
+
+  try{
+    let r=await fetch(`/api/v2/operations?date=${encodeURIComponent(date)}&limit=300`,{
+      cache:"no-store"
+    });
+    let d=await r.json();
+
+    if(!r.ok||!d.ok){
+      throw new Error(d.message||"PostgreSQL no disponible");
+    }
+
+    allEvents=d.events||[];
+  }catch(primaryError){
+    source="notion-fallback";
+
+    try{
+      const r=await fetch("/operations-events",{cache:"no-store"});
+      const d=await r.json();
+      allEvents=d.events||[];
+    }catch(fallbackError){
+      $("status").textContent="Error cargando actividad";
+      $("liveSource").textContent="Sin conexión";
+      return;
+    }
+  }
+
+  const newest=allEvents[0];
+
+  if(!firstLoad&&newest&&String(newest.id)!==String(lastEventId)){
+    playAlert();
+    browserNotice(
+      newest.action||"Nueva actividad",
+      `${newest.unit||"Unidad"} · ${newest.person||newest.employee||""}`
+    );
+  }
+
+  if(newest)lastEventId=String(newest.id);
+
+  $("liveSource").textContent=
+    source==="postgres"
+      ?"PostgreSQL en vivo"
+      :"Fallback Notion";
+
+  renderAll();
+  firstLoad=false;
+}
+
 document.querySelectorAll(".filter").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".filter").forEach(b=>b.classList.remove("active"));btn.classList.add("active");activeFilter=btn.dataset.filter;renderAll()}));
-loadReports();loadEvents();setInterval(loadEvents,6000);setInterval(loadReports,9000);const socket=io();socket.on("ops-update",()=>{photosCache={};loadEvents();loadReports()});socket.on("assignments-updated",loadEvents);
+loadReports();
+loadEvents();
+
+$("reportDate").addEventListener("change",()=>{
+  lastEventId="";
+  firstLoad=true;
+  loadEvents();
+});
+
+setInterval(loadEvents,60000);
+setInterval(loadReports,60000);
+
+const socket=io();
+
+socket.on("connect",()=>{
+  $("liveSource").textContent="PostgreSQL en vivo";
+});
+
+socket.on("disconnect",()=>{
+  $("liveSource").textContent="Reconectando…";
+});
+
+function refreshLiveOperations(){
+  photosCache={};
+  loadEvents();
+}
+
+socket.on("operations-log-created",refreshLiveOperations);
+socket.on("ops-update",()=>{
+  refreshLiveOperations();
+  loadReports();
+});
+socket.on("room-updated",refreshLiveOperations);
+socket.on("rooms-updated",refreshLiveOperations);
+socket.on("assignments-updated",refreshLiveOperations);
+socket.on("data-api-updated",refreshLiveOperations);
 </script>
 </body>
 </html>
