@@ -56,6 +56,13 @@ const {
   getDataApiPayrollWeek,
   getDataApiBootstrap,
 } = require("./services/dataApiService");
+const {
+  enqueueSyncJob,
+  recoverStaleJobs,
+  processNextSyncJob,
+  getSyncQueueStatus,
+  retryFailedJobs,
+} = require("./services/syncQueueService");
 
 const server = http.createServer(app);
 
@@ -4894,13 +4901,48 @@ async function updateOperationalRoomPostgres({
 }
 
 function syncOperationalActionToNotionInBackground({
-  action, unit, note, name, role, photoUrl,
+  action,
+  unit,
+  note,
+  name,
+  role,
+  photoUrl,
 }) {
-  Promise.resolve()
-    .then(() => updateNotionRoom(unit, action, name, note, role, photoUrl))
-    .then(() => {
-      io.emit("notion-action-synced", {
+  const dedupeKey = [
+    "notion-room-action",
+    todayISO(),
+    normalizeRoom(unit),
+    action,
+    cleanEmployeeText(name),
+    Date.now(),
+  ].join(":");
+
+  enqueueSyncJob({
+    jobType: "notion-room-action",
+    destination: "notion",
+    dedupeKey,
+    priority: action === "READY_GUEST" ? 10 : 50,
+    payload: {
+      action,
+      unit,
+      note: note || "",
+      name,
+      role,
+      photoUrl: photoUrl || "",
+      queuedAt: new Date().toISOString(),
+    },
+  })
+    .then((job) => {
+      console.log("📥 Acción guardada en sync_queue:", {
+        id: job.id,
+        action,
+        unit,
+        employee: name,
+      });
+
+      io.emit("notion-action-queued", {
         ok: true,
+        queueId: job.id,
         action,
         unit,
         employee: name,
@@ -4908,19 +4950,12 @@ function syncOperationalActionToNotionInBackground({
       });
     })
     .catch((error) => {
-      console.error("⚠️ PostgreSQL actualizado, pero Notion falló:", error.message);
+      console.error("🔴 No se pudo guardar en sync_queue:", error.message);
+
       addNotification(
-        "⚠️ Pendiente de sincronizar con Notion",
+        "🔴 No se pudo crear trabajo de sincronización",
         `${action} · ${unit} · ${name}: ${error.message}`
       );
-      io.emit("notion-action-sync-error", {
-        ok: false,
-        action,
-        unit,
-        employee: name,
-        message: error.message,
-        updatedAt: new Date().toISOString(),
-      });
     });
 }
 
@@ -9005,10 +9040,144 @@ app.get("/api/v2/bootstrap", async (req, res) => {
 });
 
 
+
+// =========================================================
+// SYNC QUEUE WORKER · NOTION
+// =========================================================
+let syncQueueTimer = null;
+let syncQueueBusy = false;
+
+async function processNotionQueueOnce() {
+  if (syncQueueBusy || !postgresStatus.connected) {
+    return;
+  }
+
+  syncQueueBusy = true;
+
+  try {
+    const result = await processNextSyncJob({
+      destination: "notion",
+      processors: {
+        "notion-room-action": async (payload) => {
+          const result = await updateNotionRoom(
+            payload.unit,
+            payload.action,
+            payload.name,
+            payload.note || "",
+            payload.role || "",
+            payload.photoUrl || ""
+          );
+
+          io.emit("notion-action-synced", {
+            ok: true,
+            action: payload.action,
+            unit: payload.unit,
+            employee: payload.name,
+            updatedAt: new Date().toISOString(),
+          });
+
+          return result;
+        },
+      },
+    });
+
+    if (result.processed && !result.ok) {
+      const payload = result.job?.payload || {};
+
+      console.error("⚠️ sync_queue reintentará trabajo:", {
+        id: result.job?.id,
+        action: payload.action,
+        unit: payload.unit,
+        attempts: result.job?.attempts,
+        error: result.error?.message || result.job?.last_error,
+      });
+
+      if (result.exhausted) {
+        addNotification(
+          "🔴 Sincronización con Notion agotada",
+          `${payload.action || "ACTION"} · ${payload.unit || ""}: ${
+            result.error?.message || result.job?.last_error || "Error desconocido"
+          }`
+        );
+      }
+    }
+  } catch (error) {
+    console.error("SYNC QUEUE WORKER ERROR:", error.message);
+  } finally {
+    syncQueueBusy = false;
+  }
+}
+
+function startSyncQueueWorker() {
+  if (syncQueueTimer) {
+    return;
+  }
+
+  const intervalMs = Math.max(
+    2000,
+    Number(process.env.SYNC_QUEUE_INTERVAL_MS || 5000)
+  );
+
+  recoverStaleJobs(
+    Number(process.env.SYNC_QUEUE_STALE_MINUTES || 10)
+  ).catch((error) => {
+    console.error("SYNC QUEUE RECOVERY ERROR:", error.message);
+  });
+
+  processNotionQueueOnce();
+
+  syncQueueTimer = setInterval(
+    processNotionQueueOnce,
+    intervalMs
+  );
+
+  console.log(`✅ Sync Queue Worker activo cada ${intervalMs}ms`);
+}
+
+app.get("/api/sync-queue/status", async (req, res) => {
+  try {
+    const status = await getSyncQueueStatus();
+
+    return res.json({
+      ok: true,
+      ...status,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/sync-queue/retry", async (req, res) => {
+  try {
+    const retried = await retryFailedJobs();
+
+    setImmediate(() => {
+      processNotionQueueOnce();
+    });
+
+    return res.json({
+      ok: true,
+      retried,
+      message: `${retried} trabajos enviados de nuevo a la cola`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
 async function startServer() {
   const databaseStatus = await startPostgres();
 
   if (databaseStatus.connected) {
+    startSyncQueueWorker();
+
     try {
       await runEmployeeSync("startup");
       startEmployeeSyncSchedule();
