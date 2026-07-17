@@ -272,8 +272,33 @@ function mapPayrollPostgresToLegacy(record) {
   };
 }
 
+function normalizeComparisonDate(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const text = String(value).trim();
+  const isoMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+  if (isoMatch) return isoMatch[0];
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? text.slice(0, 10) : parsed.toISOString().slice(0, 10);
+}
+
 function payrollComparisonKey(record) {
-  return [String(record?.date || record?.work_date || '').slice(0,10), normalizeEmployeeName(record?.cleaner || record?.employee || ''), String(record?.unit || '').trim().toUpperCase(), String(record?.payType || record?.pay_type || 'unit').toLowerCase(), String(record?.roleWorked || record?.role_worked || 'Cleaner').toLowerCase()].join('|');
+  // El ID de Notion ya incluye el índice y el empleado cuando una unidad se divide.
+  // Es la identidad más segura y evita marcar todos los registros como faltantes/extras.
+  const notionId = String(record?.notionId || record?.notion_id || '').trim();
+  if (notionId) return `notion:${notionId}`;
+
+  return [
+    normalizeComparisonDate(record?.date || record?.work_date),
+    normalizeEmployeeName(record?.cleaner || record?.employee || ''),
+    String(record?.unit || '').trim().toUpperCase().replace(/\s+/g, ''),
+    String(record?.payType || record?.pay_type || 'unit').trim().toLowerCase(),
+    String(record?.roleWorked || record?.role_worked || 'Cleaner').trim().toLowerCase(),
+  ].join('|');
 }
 
 function comparePayrollRecordSets(notionRecords = [], postgresRecords = []) {
