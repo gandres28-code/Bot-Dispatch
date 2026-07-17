@@ -8,6 +8,9 @@
     raw: null,
     syncStatus: null,
     comparison: null,
+    weekState: null,
+    rates: [],
+    selectedRecord: null,
     loading: false,
   };
 
@@ -77,7 +80,7 @@
 
   function setLoading(loading, message = "") {
     state.loading = loading;
-    ["syncButton", "compareButton", "excelButton", "refreshButton", "prevWeek", "nextWeek", "currentWeek"]
+    ["syncButton", "compareButton", "ratesButton", "weekLockButton", "auditButton", "excelButton", "refreshButton", "prevWeek", "nextWeek", "currentWeek"]
       .forEach((id) => { $(id).disabled = loading; });
 
     if (message) {
@@ -127,6 +130,7 @@
         fetchJson(`/payroll-preview?${range}`),
         fetchJson(`/api/payroll/preview?${range}`),
         fetchJson(`/api/sync/payroll/status?${range}`),
+        fetchJson(`/api/payroll/week?${range}`),
       ];
 
       if (compare) requests.push(fetchJson(`/api/payroll/compare?${range}`));
@@ -135,7 +139,8 @@
       state.preview = results[0].data;
       state.raw = results[1].data;
       state.syncStatus = results[2].data;
-      if (compare) state.comparison = results[3].data;
+      state.weekState = results[3].data;
+      if (compare) state.comparison = results[4].data;
 
       renderAll();
       setBadge($("systemBadge"), "Actualizado", "green");
@@ -145,6 +150,7 @@
       showToast(error.message || "No se pudo cargar Payroll.", "error");
     } finally {
       setLoading(false);
+      if (state.weekState) renderWeekState();
     }
   }
 
@@ -153,6 +159,7 @@
     renderSource();
     renderSyncStatus();
     renderComparison();
+    renderWeekState();
     renderEmployees();
     renderDaily();
     renderWarnings();
@@ -230,6 +237,26 @@
     setBadge($("comparisonBadge"), matches ? "Coinciden" : "Revisar", matches ? "green" : "red");
   }
 
+
+  function renderWeekState() {
+    const closed = state.weekState?.status === "closed";
+    const week = state.weekState?.week || {};
+    const validation = state.weekState?.validation || {};
+    const banner = $("weekStateBanner");
+    banner.classList.toggle("closed", closed);
+    $("weekStateTitle").textContent = closed ? "🔒 Semana cerrada" : "🟢 Semana abierta";
+    $("weekStateText").textContent = closed
+      ? `Cerrada por ${week.closed_by || "Admin"}. Total congelado: ${money(week.snapshot_total || 0)}.`
+      : validation.valid
+        ? "Lista para revisar, ajustar o cerrar."
+        : (validation.errors || []).join(" ") || "Puedes sincronizar, editar tarifas y ajustar pagos.";
+    setBadge($("weekStateBadge"), closed ? "CLOSED" : "OPEN", closed ? "amber" : "green");
+    $("weekLockButton").textContent = closed ? "🔓 Reabrir semana" : "🔒 Cerrar semana";
+    $("weekLockButton").className = `btn ${closed ? "danger" : "amber"}`;
+    $("syncButton").disabled = state.loading || closed;
+    $("ratesButton").disabled = state.loading || closed;
+  }
+
   function employeeRecords(employeeName) {
     const normalized = String(employeeName || "").trim().toLowerCase();
     return (state.raw?.records || []).filter((record) => {
@@ -249,13 +276,21 @@
 
     container.innerHTML = people.map((person, index) => {
       const records = employeeRecords(person.employee);
+      const closed = state.weekState?.status === "closed";
       const detailRows = records.length
         ? records.map((record) => `
           <tr>
             <td>${escapeHtml(String(record.date || record.work_date || "").slice(0, 10))}</td>
-            <td>${escapeHtml(record.unit || "Sin unidad")}</td>
+            <td>${escapeHtml(record.unit || "Sin unidad")}${Number(record.splitCount || 1) > 1 ? `<span class="split-note">Compartida entre ${Number(record.splitCount)} · Base ${money(record.grossUnitAmount)}</span>` : ""}</td>
             <td>${escapeHtml(record.roomType || record.room_type || "-")}</td>
-            <td>${money(record.amount)}</td>
+            <td>
+              <div class="record-actions">
+                <strong>${money(record.amount)}</strong>
+                ${record.manualOverride ? '<span class="adjusted">AJUSTADO</span>' : ""}
+                ${!closed && record.id ? `<button class="mini-btn edit-payment" data-record-id="${record.id}">Editar</button>` : ""}
+                ${!closed && record.id && record.manualOverride ? `<button class="mini-btn reset reset-payment" data-record-id="${record.id}">Restaurar</button>` : ""}
+              </div>
+            </td>
           </tr>`).join("")
         : '<tr><td colspan="4">Los pagos por hora se muestran en el total, pero todavía se leen desde Time Clock.</td></tr>';
 
@@ -283,6 +318,18 @@
 
     container.querySelectorAll(".employee-main").forEach((button) => {
       button.addEventListener("click", () => button.closest(".employee-card").classList.toggle("open"));
+    });
+    container.querySelectorAll(".edit-payment").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openAdjustment(Number(button.dataset.recordId));
+      });
+    });
+    container.querySelectorAll(".reset-payment").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await resetAdjustment(Number(button.dataset.recordId));
+      });
     });
   }
 
@@ -335,6 +382,127 @@
 
     container.innerHTML = warnings.map((warning) => `
       <div class="warning-item"><span>⚠️</span><span>${escapeHtml(warning)}</span></div>`).join("");
+  }
+
+
+  function openModal(id) { $(id).classList.add("open"); }
+  function closeModal(id) { $(id).classList.remove("open"); }
+
+  async function loadRates() {
+    const { data } = await fetchJson("/api/payroll/rates");
+    state.rates = data.rates || [];
+    $("rateList").innerHTML = state.rates.length
+      ? state.rates.map((rate) => `<div class="rate-row"><span class="property">${escapeHtml(rate.property_name)}</span><strong>${escapeHtml(rate.room_type)}</strong><b>${money(rate.amount)}</b></div>`).join("")
+      : '<div class="empty">No hay tarifas configuradas.</div>';
+  }
+
+  async function openRates() {
+    try {
+      $("rateEffectiveFrom").value = state.start;
+      openModal("rateModal");
+      await loadRates();
+    } catch (error) { showToast(error.message, "error"); }
+  }
+
+  async function saveRate() {
+    try {
+      const payload = {
+        propertyName: $("rateProperty").value || "ALL",
+        roomType: $("rateRoomType").value,
+        amount: Number($("rateAmount").value),
+        effectiveFrom: $("rateEffectiveFrom").value,
+        reason: $("rateReason").value,
+        applyToWeek: $("rateApplyWeek").checked,
+        weekStart: state.start,
+        weekEnd: state.end,
+        changedBy: "Admin",
+      };
+      const { data } = await fetchJson("/api/payroll/rates", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      showToast(`Tarifa guardada. ${data.appliedRecords || 0} registros actualizados.`, "success");
+      $("rateRoomType").value = ""; $("rateAmount").value = ""; $("rateReason").value = "";
+      await loadRates();
+      await loadDashboard();
+    } catch (error) { showToast(error.message, "error"); }
+  }
+
+  function findRecord(recordId) {
+    return (state.raw?.records || []).find((record) => Number(record.id) === Number(recordId));
+  }
+
+  function openAdjustment(recordId) {
+    const record = findRecord(recordId);
+    if (!record) return showToast("Registro no encontrado", "error");
+    state.selectedRecord = record;
+    $("adjustDescription").textContent = `${record.cleaner} · ${record.unit} · Pago actual ${money(record.amount)}`;
+    $("adjustAmount").value = Number(record.amount || 0).toFixed(2);
+    $("adjustReason").value = record.adjustmentReason || "";
+    openModal("adjustModal");
+  }
+
+  async function saveAdjustment() {
+    try {
+      if (!state.selectedRecord?.id) throw new Error("Registro no seleccionado");
+      await fetchJson(`/api/payroll/records/${state.selectedRecord.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: Number($("adjustAmount").value), reason: $("adjustReason").value, changedBy: "Admin" }),
+      });
+      closeModal("adjustModal");
+      showToast("Pago ajustado y registrado en auditoría.", "success");
+      await loadDashboard();
+    } catch (error) { showToast(error.message, "error"); }
+  }
+
+  async function resetAdjustment(recordId) {
+    const reason = window.prompt("Motivo para restaurar el pago calculado:");
+    if (!reason) return;
+    try {
+      await fetchJson(`/api/payroll/records/${recordId}/reset`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason, changedBy: "Admin" }),
+      });
+      showToast("Pago restaurado al cálculo base.", "success");
+      await loadDashboard();
+    } catch (error) { showToast(error.message, "error"); }
+  }
+
+  function openWeekAction() {
+    const closed = state.weekState?.status === "closed";
+    $("weekModalTitle").textContent = closed ? "🔓 Reabrir semana" : "🔒 Cerrar semana";
+    $("weekModalDescription").textContent = closed
+      ? "La semana volverá a aceptar sincronizaciones, cambios de tarifa y ajustes manuales."
+      : "Se congelarán los totales y los pagos no podrán cambiar hasta que la semana sea reabierta.";
+    $("weekReason").value = closed ? "" : "Payroll reviewed and approved";
+    $("confirmWeekButton").textContent = closed ? "Reabrir" : "Cerrar semana";
+    openModal("weekModal");
+  }
+
+  async function confirmWeekAction() {
+    const closed = state.weekState?.status === "closed";
+    const endpoint = closed ? "/api/payroll/week/reopen" : "/api/payroll/week/close";
+    try {
+      await fetchJson(endpoint, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: state.start, end: state.end, reason: $("weekReason").value, changedBy: "Admin" }),
+      });
+      closeModal("weekModal");
+      showToast(closed ? "Semana reabierta." : "Semana cerrada y congelada.", "success");
+      await loadDashboard();
+    } catch (error) { showToast(error.message, "error"); }
+  }
+
+  async function openAudit() {
+    openModal("auditModal");
+    try {
+      const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}`;
+      const { data } = await fetchJson(`/api/payroll/audit?${range}`);
+      const audit = data.audit || [];
+      $("auditList").innerHTML = audit.length ? audit.map((item) => `
+        <div class="audit-row"><strong>${escapeHtml(item.action)}</strong><br>
+        ${escapeHtml([item.employee, item.unit].filter(Boolean).join(" · "))}
+        <small>${escapeHtml(item.reason || "Sin nota")} · ${new Date(item.created_at).toLocaleString("es-US")}</small></div>`).join("")
+        : '<div class="empty">Todavía no hay cambios registrados.</div>';
+    } catch (error) { $("auditList").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; }
   }
 
   async function syncPayroll() {
@@ -400,6 +568,14 @@
     });
     $("syncButton").addEventListener("click", syncPayroll);
     $("compareButton").addEventListener("click", comparePayroll);
+    $("ratesButton").addEventListener("click", openRates);
+    $("weekLockButton").addEventListener("click", openWeekAction);
+    $("auditButton").addEventListener("click", openAudit);
+    $("saveRateButton").addEventListener("click", saveRate);
+    $("saveAdjustmentButton").addEventListener("click", saveAdjustment);
+    $("confirmWeekButton").addEventListener("click", confirmWeekAction);
+    document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => closeModal(button.dataset.closeModal)));
+    document.querySelectorAll(".modal-backdrop").forEach((modal) => modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal.id); }));
     $("excelButton").addEventListener("click", downloadExcel);
     $("refreshButton").addEventListener("click", () => loadDashboard());
     $("startDate").addEventListener("change", () => {
