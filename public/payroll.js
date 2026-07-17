@@ -20,6 +20,23 @@
     currency: "USD",
   }).format(Number(value || 0));
 
+
+  function safeDate(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+
+  function safeFormatDate(value, options, fallback = "Fecha no disponible") {
+    const date = safeDate(value);
+    if (!date) return fallback;
+    try {
+      return new Intl.DateTimeFormat("es-US", options).format(date);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   const escapeHtml = (value) => String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -45,7 +62,8 @@
   }
 
   function parseLocalDate(value) {
-    return new Date(`${value}T12:00:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return null;
+    return safeDate(`${value}T12:00:00`);
   }
 
   function formatRange(start, end) {
@@ -54,13 +72,18 @@
       day: "numeric",
       year: "numeric",
     });
-    return `${formatter.format(parseLocalDate(start))} – ${formatter.format(parseLocalDate(end))}`;
+    const startDate = parseLocalDate(start);
+    const endDate = parseLocalDate(end);
+    if (!startDate || !endDate) return "Semana sin fecha válida";
+    return `${formatter.format(startDate)} – ${formatter.format(endDate)}`;
   }
 
   function dayName(dateValue) {
     if (!dateValue) return "Sin fecha";
     const formatter = new Intl.DateTimeFormat("es-US", { weekday: "long" });
-    const value = formatter.format(parseLocalDate(String(dateValue).slice(0, 10)));
+    const parsed = parseLocalDate(String(dateValue).slice(0, 10));
+    if (!parsed) return "Sin fecha";
+    const value = formatter.format(parsed);
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
@@ -213,10 +236,10 @@
     }
 
     const timeValue = status.last_success_at || status.last_run_at || status.updated_at;
-    const formatted = timeValue
-      ? new Intl.DateTimeFormat("es-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(timeValue))
-      : "Fecha no disponible";
-    $("lastSyncText").textContent = formatted;
+    $("lastSyncText").textContent = safeFormatDate(
+      timeValue,
+      { dateStyle: "medium", timeStyle: "short" }
+    );
 
     const success = status.status === "success" || status.last_status === "success" || !status.last_error;
     setBadge($("syncBadge"), success ? "Sincronizado" : "Con error", success ? "green" : "red");
