@@ -15,6 +15,7 @@ const { createOSCore } = require("./services/osCore/index.js");
 const {
   initializeDatabase,
   testDatabaseConnection,
+  query: postgresQuery,
 } = require("./db");
 const {
   syncEmployeesFromNotion,
@@ -4736,6 +4737,193 @@ app.get("/unit-history", async (req, res) => {
   }
 });
 
+
+// =========================================================
+// OPERACIONES EN VIVO · POSTGRESQL FIRST
+// =========================================================
+function postgresStatusFromAction(action) {
+  if (action === "START") return "In Progress";
+  if (action === "DONE") return "Cleaned - Awaiting Inspection";
+  if (action === "INSPECTION_START") return "Inspection Started";
+  if (action === "READY_GUEST") return "Ready for Guest";
+  return "";
+}
+
+async function updateOperationalRoomPostgres({
+  action,
+  unit,
+  employee,
+  role,
+  note = "",
+  photoUrl = "",
+}) {
+  if (!postgresStatus.connected) {
+    throw new Error("PostgreSQL no está conectado");
+  }
+
+  const workDate = todayISO();
+  const normalizedRoom = normalizeRoom(unit);
+  const eventTime = new Date().toISOString();
+
+  if (!normalizedRoom) {
+    throw new Error(`No pude normalizar la unidad ${unit}`);
+  }
+
+  let sql = "";
+
+  if (action === "START") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'In Progress',
+          started_at = COALESCE(started_at, $3::timestamptz),
+          finished_at = NULL,
+          inspection_started_at = NULL,
+          ready_at = NULL,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else if (action === "DONE") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'Cleaned - Awaiting Inspection',
+          started_at = COALESCE(started_at, $3::timestamptz),
+          finished_at = $3::timestamptz,
+          inspection_started_at = NULL,
+          ready_at = NULL,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else if (action === "INSPECTION_START") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'Inspection Started',
+          inspection_started_at = COALESCE(inspection_started_at, $3::timestamptz),
+          ready_at = NULL,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else if (action === "READY_GUEST") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'Ready for Guest',
+          inspection_started_at = COALESCE(inspection_started_at, $3::timestamptz),
+          ready_at = $3::timestamptz,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else {
+    return { updated: false, status: "" };
+  }
+
+  const result = await postgresQuery(sql, [workDate, normalizedRoom, eventTime]);
+
+  if (!result.rows.length) {
+    throw new Error(`La unidad ${unit} no existe en PostgreSQL para ${workDate}`);
+  }
+
+  const room = result.rows[0];
+  const status = postgresStatusFromAction(action);
+  const externalEventId = `live:${workDate}:${normalizedRoom}:${action}:${Date.now()}`;
+
+  await postgresQuery(
+    `
+      INSERT INTO operations_logs (
+        external_event_id, work_date, event_time, unit, normalized_room,
+        action, cleaner, inspector, employee, role_worked, note,
+        photo_url, category, priority, source, raw_data
+      )
+      VALUES (
+        $1, $2::date, $3::timestamptz, $4, $5,
+        $6, $7, $8, $9, $10, $11,
+        $12, 'Other', 'Normal', '417-maid-live', $13::jsonb
+      )
+      ON CONFLICT (external_event_id) DO NOTHING
+    `,
+    [
+      externalEventId,
+      workDate,
+      eventTime,
+      room.room_number || unit,
+      normalizedRoom,
+      action,
+      String(role).toLowerCase().includes("cleaner") ? employee : "",
+      String(role).toLowerCase().includes("inspector") ? employee : "",
+      employee,
+      role,
+      note || "",
+      photoUrl || "",
+      JSON.stringify({ roomId: room.id, source: "postgres-first" }),
+    ]
+  );
+
+  clearRoomCache(workDate);
+  clearAssignmentCaches(workDate);
+
+  const payload = {
+    module: "rooms",
+    date: workDate,
+    reason: "operational-action",
+    action,
+    unit: room.room_number || unit,
+    normalizedRoom,
+    status,
+    employee,
+    role,
+    startedAt: room.started_at || null,
+    finishedAt: room.finished_at || null,
+    inspectionStartedAt: room.inspection_started_at || null,
+    readyAt: room.ready_at || null,
+    updatedAt: new Date().toISOString(),
+    source: "postgres",
+  };
+
+  io.emit("room-updated", payload);
+  io.emit("rooms-updated", payload);
+  io.emit("assignments-updated", payload);
+  io.emit("data-api-updated", payload);
+
+  return { updated: true, status, room, payload };
+}
+
+function syncOperationalActionToNotionInBackground({
+  action, unit, note, name, role, photoUrl,
+}) {
+  Promise.resolve()
+    .then(() => updateNotionRoom(unit, action, name, note, role, photoUrl))
+    .then(() => {
+      io.emit("notion-action-synced", {
+        ok: true,
+        action,
+        unit,
+        employee: name,
+        updatedAt: new Date().toISOString(),
+      });
+    })
+    .catch((error) => {
+      console.error("⚠️ PostgreSQL actualizado, pero Notion falló:", error.message);
+      addNotification(
+        "⚠️ Pendiente de sincronizar con Notion",
+        `${action} · ${unit} · ${name}: ${error.message}`
+      );
+      io.emit("notion-action-sync-error", {
+        ok: false,
+        action,
+        unit,
+        employee: name,
+        message: error.message,
+        updatedAt: new Date().toISOString(),
+      });
+    });
+}
+
 app.post("/action", async (req, res) => {
   try {
     const { action, unit, note, name, photoUrl } = req.body;
@@ -4754,33 +4942,70 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    if ((action === "ISSUE" || action === "SUPPLIES" || action === "LOST_FOUND") && !String(note || "").trim()) {
+    if (
+      ["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(action) &&
+      !String(note || "").trim()
+    ) {
       return res.status(400).json({
         success: false,
         message: "Debes escribir una nota",
       });
     }
 
-    const result = await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl);
+    let postgresResult = null;
+    let source = "notion";
+
+    try {
+      postgresResult = await updateOperationalRoomPostgres({
+        action,
+        unit,
+        employee: name,
+        role: "Cleaner",
+        note,
+        photoUrl,
+      });
+      if (postgresResult.updated) source = "postgres";
+    } catch (postgresError) {
+      console.error("⚠️ PostgreSQL-first falló:", postgresError.message);
+    }
+
+    if (source === "postgres") {
+      syncOperationalActionToNotionInBackground({
+        action, unit, note, name, role: "cleaner", photoUrl,
+      });
+    } else {
+      await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl);
+      runRoomSync("action-fallback", todayISO()).catch((error) => {
+        console.error("ROOM SYNC AFTER FALLBACK ERROR:", error.message);
+      });
+    }
 
     if (action === "DONE") {
-      await notifyInspectors(unit);
+      notifyInspectors(unit).catch((error) => {
+        console.error("Error notificando inspectores:", error.message);
+      });
     }
+
     broadcastOpsUpdate({
       type: "action",
       action,
       unit,
       employee: name,
       message: note || "",
+      source,
     });
-    res.json({
+
+    return res.json({
       success: true,
-      message: `Enviado correctamente: ${result.label} - ${unit}`,
+      source,
+      postgresUpdated: Boolean(postgresResult?.updated),
+      notionSync: source === "postgres" ? "queued" : "completed",
+      status: postgresResult?.status || notionStatusFromAction(action) || "",
+      message: `Enviado correctamente: ${actionLabel(action)} - ${unit}`,
     });
   } catch (error) {
     console.error("Error en /action:", error.message);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: `Error: ${error.message}`,
     });
@@ -4806,7 +5031,7 @@ app.post("/inspector-action", async (req, res) => {
     }
 
     if (
-      (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES" || action === "LOST_FOUND") &&
+      ["INSPECTION_REPORT", "INSPECTION_SUPPLIES", "LOST_FOUND"].includes(action) &&
       !String(note || "").trim()
     ) {
       return res.status(400).json({
@@ -4815,22 +5040,54 @@ app.post("/inspector-action", async (req, res) => {
       });
     }
 
-    const result = await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
+    let postgresResult = null;
+    let source = "notion";
+
+    try {
+      postgresResult = await updateOperationalRoomPostgres({
+        action,
+        unit,
+        employee: name,
+        role: "Inspector",
+        note,
+        photoUrl,
+      });
+      if (postgresResult.updated) source = "postgres";
+    } catch (postgresError) {
+      console.error("⚠️ Inspector PostgreSQL-first falló:", postgresError.message);
+    }
+
+    if (source === "postgres") {
+      syncOperationalActionToNotionInBackground({
+        action, unit, note, name, role: "inspector", photoUrl,
+      });
+    } else {
+      await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
+      runRoomSync("inspector-action-fallback", todayISO()).catch((error) => {
+        console.error("ROOM SYNC AFTER INSPECTOR FALLBACK ERROR:", error.message);
+      });
+    }
+
     broadcastOpsUpdate({
       type: "action",
       action,
       unit,
       employee: name,
       message: note || "",
+      source,
     });
-    res.json({
+
+    return res.json({
       success: true,
-      message: `Inspector: ${result.label} - ${unit}`,
+      source,
+      postgresUpdated: Boolean(postgresResult?.updated),
+      notionSync: source === "postgres" ? "queued" : "completed",
+      status: postgresResult?.status || notionStatusFromAction(action) || "",
+      message: `Inspector: ${actionLabel(action)} - ${unit}`,
     });
   } catch (error) {
     console.error("Error inspector:", error.message);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: `Error: ${error.message}`,
     });
