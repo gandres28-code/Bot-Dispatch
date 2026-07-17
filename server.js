@@ -4900,6 +4900,116 @@ async function updateOperationalRoomPostgres({
   return { updated: true, status, room, payload };
 }
 
+
+async function insertOperationalEventPostgres({
+  action,
+  unit,
+  employee = "",
+  role = "",
+  note = "",
+  photoUrl = "",
+  category = "Other",
+  priority = "Normal",
+  source = "417-maid-live",
+  externalEventId = "",
+}) {
+  const workDate = todayISO();
+  const normalizedRoom = normalizeRoom(unit);
+  const eventTime = new Date().toISOString();
+  const normalizedRole = String(role || "").toLowerCase();
+
+  const result = await postgresQuery(
+    `
+      INSERT INTO operations_logs (
+        external_event_id,
+        work_date,
+        event_time,
+        unit,
+        normalized_room,
+        action,
+        cleaner,
+        inspector,
+        employee,
+        role_worked,
+        note,
+        photo_url,
+        category,
+        priority,
+        source,
+        raw_data
+      )
+      VALUES (
+        NULLIF($1, ''),
+        $2::date,
+        $3::timestamptz,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15,
+        $16::jsonb
+      )
+      ON CONFLICT (external_event_id)
+      WHERE external_event_id IS NOT NULL
+        AND external_event_id <> ''
+      DO NOTHING
+      RETURNING *
+    `,
+    [
+      externalEventId ||
+        `ops:${workDate}:${normalizedRoom}:${action}:${Date.now()}`,
+      workDate,
+      eventTime,
+      unit || "",
+      normalizedRoom,
+      action || "UPDATE",
+      normalizedRole.includes("cleaner") ? employee : "",
+      normalizedRole.includes("inspector") ? employee : "",
+      employee || "",
+      role || "",
+      note || "",
+      photoUrl || "",
+      category || "Other",
+      priority || "Normal",
+      source || "417-maid-live",
+      JSON.stringify({
+        source,
+        capturedBy: "operations-postgres-first",
+      }),
+    ]
+  );
+
+  const event = result.rows[0] || null;
+
+  if (event) {
+    io.emit("operations-log-created", {
+      id: event.id,
+      date: event.work_date,
+      eventTime: event.event_time,
+      unit: event.unit,
+      normalizedRoom: event.normalized_room,
+      action: event.action,
+      employee: event.employee,
+      person: event.employee,
+      role: event.role_worked,
+      note: event.note,
+      photoUrl: event.photo_url,
+      category: event.category,
+      priority: event.priority,
+      source: "postgres",
+    });
+  }
+
+  return event;
+}
+
 function syncOperationalActionToNotionInBackground({
   action,
   unit,
@@ -5010,6 +5120,30 @@ app.post("/action", async (req, res) => {
       });
     } else {
       await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl);
+
+      try {
+        await insertOperationalEventPostgres({
+          action,
+          unit,
+          employee: name,
+          role: "Cleaner",
+          note,
+          photoUrl,
+          category: ["ISSUE", "LOST_FOUND"].includes(action)
+            ? "Problem"
+            : action === "SUPPLIES"
+              ? "Supplies"
+              : "Other",
+          priority: action === "ISSUE" ? "High" : "Normal",
+          source: "notion-fallback",
+        });
+      } catch (logError) {
+        console.error(
+          "POSTGRES OPERATIONS LOG FALLBACK ERROR:",
+          logError.message
+        );
+      }
+
       runRoomSync("action-fallback", todayISO()).catch((error) => {
         console.error("ROOM SYNC AFTER FALLBACK ERROR:", error.message);
       });
@@ -5098,6 +5232,30 @@ app.post("/inspector-action", async (req, res) => {
       });
     } else {
       await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
+
+      try {
+        await insertOperationalEventPostgres({
+          action,
+          unit,
+          employee: name,
+          role: "Inspector",
+          note,
+          photoUrl,
+          category: ["INSPECTION_REPORT", "LOST_FOUND"].includes(action)
+            ? "Problem"
+            : action === "INSPECTION_SUPPLIES"
+              ? "Supplies"
+              : "Inspection",
+          priority: action === "INSPECTION_REPORT" ? "High" : "Normal",
+          source: "notion-fallback",
+        });
+      } catch (logError) {
+        console.error(
+          "POSTGRES INSPECTOR LOG FALLBACK ERROR:",
+          logError.message
+        );
+      }
+
       runRoomSync("inspector-action-fallback", todayISO()).catch((error) => {
         console.error("ROOM SYNC AFTER INSPECTOR FALLBACK ERROR:", error.message);
       });
@@ -8978,6 +9136,100 @@ app.get("/api/v2/rooms", async (req, res) => {
   } catch (error) {
     res.status(400).json({
       ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+app.get("/api/v2/operations", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const requestedLimit = Number(req.query.limit || 250);
+    const limit = Math.min(Math.max(requestedLimit, 1), 500);
+
+    const result = await postgresQuery(
+      `
+        SELECT
+          id,
+          notion_id,
+          external_event_id,
+          work_date,
+          event_time,
+          unit,
+          normalized_room,
+          action,
+          cleaner,
+          inspector,
+          employee,
+          role_worked,
+          note,
+          photo_url,
+          category,
+          priority,
+          source,
+          created_at
+        FROM operations_logs
+        WHERE work_date = $1::date
+        ORDER BY event_time DESC, id DESC
+        LIMIT $2
+      `,
+      [date, limit]
+    );
+
+    const events = result.rows.map((row) => ({
+      id: String(row.id),
+      notionId: row.notion_id || "",
+      externalEventId: row.external_event_id || "",
+      date: row.work_date,
+      eventTime: row.event_time,
+      time: row.event_time
+        ? new Date(row.event_time).toLocaleString("en-US", {
+            timeZone: "America/Chicago",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : "",
+      unit: row.unit || "",
+      normalizedRoom: row.normalized_room || "",
+      action: row.action || "",
+      cleaner: row.cleaner || "",
+      inspector: row.inspector || "",
+      employee:
+        row.employee ||
+        row.cleaner ||
+        row.inspector ||
+        "",
+      person:
+        row.employee ||
+        row.cleaner ||
+        row.inspector ||
+        "",
+      role: row.role_worked || "",
+      note: row.note || "",
+      photoUrl: row.photo_url || "",
+      category: row.category || "Other",
+      priority: row.priority || "Normal",
+      source: row.source || "postgres",
+      createdAt: row.created_at,
+    }));
+
+    return res.json({
+      ok: true,
+      source: "postgres",
+      date,
+      count: events.length,
+      events,
+    });
+  } catch (error) {
+    console.error("Error en /api/v2/operations:", error.message);
+
+    return res.status(500).json({
+      ok: false,
+      source: "postgres",
+      count: 0,
+      events: [],
       message: error.message,
     });
   }
