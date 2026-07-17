@@ -146,8 +146,34 @@ CREATE TABLE IF NOT EXISTS payroll_records (
 
 -- Migración: permite registros legítimos repetidos en la misma unidad.
 -- La identidad de cada pago sincronizado es notion_id.
+-- Eliminamos los nombres históricos conocidos y cualquier variante antigua
+-- que PostgreSQL haya conservado de versiones anteriores del esquema.
+ALTER TABLE payroll_records
+DROP CONSTRAINT IF EXISTS payroll_records_work_date_normalized_employee_unit_pay_type_key;
+
 ALTER TABLE payroll_records
 DROP CONSTRAINT IF EXISTS payroll_records_work_date_normalized_employee_unit_pay_type_role_worked_key;
+
+DO $$
+DECLARE
+  constraint_record RECORD;
+BEGIN
+  FOR constraint_record IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'payroll_records'::regclass
+      AND contype = 'u'
+      AND conname LIKE 'payroll_records_work_date_normalized_employee_unit_pay_type%'
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE payroll_records DROP CONSTRAINT IF EXISTS %I',
+      constraint_record.conname
+    );
+  END LOOP;
+END $$;
+
+DROP INDEX IF EXISTS payroll_records_work_date_normalized_employee_unit_pay_type_key;
+DROP INDEX IF EXISTS payroll_records_work_date_normalized_employee_unit_pay_type_role_worked_key;
 
 CREATE UNIQUE INDEX IF NOT EXISTS payroll_records_notion_id_unique_idx
 ON payroll_records (notion_id)
