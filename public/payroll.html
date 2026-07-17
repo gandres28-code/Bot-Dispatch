@@ -439,6 +439,39 @@
       .employee-main .mobile-hide { display: none; }
       .panel-header { align-items: flex-start; }
     }
+  
+    .btn.violet { background: #7c3aed; color: white; }
+    .btn.danger { background: #dc2626; color: white; }
+    .btn.amber { background: #d97706; color: white; }
+    .locked-banner { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 18px; border-radius:18px; background:#f8fafc; border:1px solid var(--line); margin-top:12px; }
+    .locked-banner.closed { background:#fef3c7; border-color:#f59e0b; }
+    .locked-banner strong { display:block; }
+    .locked-banner small { display:block; color:var(--muted); margin-top:3px; }
+    .record-actions { display:flex; gap:6px; align-items:center; }
+    .mini-btn { border:0; border-radius:9px; padding:7px 9px; cursor:pointer; font-weight:850; background:#eff6ff; color:#1d4ed8; }
+    .mini-btn.reset { background:#f1f5f9; color:#475569; }
+    .adjusted { display:inline-block; margin-left:6px; padding:2px 6px; border-radius:999px; background:#f3e8ff; color:#7e22ce; font-size:10px; font-weight:900; }
+    .split-note { display:block; color:#64748b; font-size:11px; margin-top:3px; }
+    .modal-backdrop { position:fixed; inset:0; z-index:80; display:none; place-items:center; padding:18px; background:rgba(15,23,42,.58); backdrop-filter:blur(5px); }
+    .modal-backdrop.open { display:grid; }
+    .modal { width:min(720px,100%); max-height:88vh; overflow:auto; background:white; border-radius:24px; box-shadow:0 30px 80px rgba(15,23,42,.28); }
+    .modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 22px; border-bottom:1px solid var(--line); }
+    .modal-head h3 { margin:0; }
+    .modal-body { padding:22px; }
+    .modal-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .field { display:grid; gap:6px; }
+    .field.full { grid-column:1/-1; }
+    .field label { font-size:12px; font-weight:900; color:#475569; }
+    .field input, .field select, .field textarea { width:100%; border:1px solid var(--line); border-radius:12px; padding:11px 12px; background:white; }
+    .field textarea { min-height:82px; resize:vertical; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+    .rate-list { display:grid; gap:8px; margin-top:18px; }
+    .rate-row { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:center; padding:11px 12px; border:1px solid var(--line); border-radius:14px; }
+    .audit-list { display:grid; gap:8px; }
+    .audit-row { padding:12px; border:1px solid var(--line); border-radius:14px; }
+    .audit-row small { color:var(--muted); }
+    @media (max-width:680px) { .modal-grid { grid-template-columns:1fr; } .field.full { grid-column:auto; } .rate-row { grid-template-columns:1fr auto; } .rate-row .property { display:none; } }
+
   </style>
 </head>
 <body>
@@ -469,6 +502,10 @@
           </div>
         </div>
         <button class="icon-btn" id="nextWeek" aria-label="Semana siguiente">→</button>
+      </div>
+      <div class="locked-banner" id="weekStateBanner">
+        <div><strong id="weekStateTitle">Semana abierta</strong><small id="weekStateText">Puedes sincronizar, editar tarifas y ajustar pagos.</small></div>
+        <span class="badge green" id="weekStateBadge">OPEN</span>
       </div>
     </section>
 
@@ -502,6 +539,9 @@
       <div class="actions">
         <button class="btn" id="syncButton">🔄 Sincronizar</button>
         <button class="btn secondary" id="compareButton">⚖️ Comparar</button>
+        <button class="btn violet" id="ratesButton">⚙️ Tarifas</button>
+        <button class="btn amber" id="weekLockButton">🔒 Cerrar semana</button>
+        <button class="btn ghost" id="auditButton">🧾 Historial</button>
         <button class="btn success" id="excelButton">⬇️ Descargar Excel</button>
         <button class="btn ghost" id="refreshButton">↻ Actualizar vista</button>
       </div>
@@ -585,6 +625,57 @@
       </div>
     </section>
   </main>
+
+
+  <div class="modal-backdrop" id="rateModal">
+    <div class="modal">
+      <div class="modal-head"><h3>⚙️ Centro de tarifas</h3><button class="mini-btn" data-close-modal="rateModal">✕</button></div>
+      <div class="modal-body">
+        <div class="modal-grid">
+          <div class="field"><label>Propiedad</label><input id="rateProperty" value="ALL" placeholder="ALL o nombre del hotel"></div>
+          <div class="field"><label>Tipo de unidad</label><input id="rateRoomType" placeholder="3, 2, 1, M, S, SUITE"></div>
+          <div class="field"><label>Nueva tarifa</label><input id="rateAmount" type="number" min="0" step="0.01"></div>
+          <div class="field"><label>Vigente desde</label><input id="rateEffectiveFrom" type="date"></div>
+          <div class="field full"><label>Motivo</label><textarea id="rateReason" placeholder="Ejemplo: nueva tarifa aprobada para Chateau"></textarea></div>
+          <div class="field full"><label><input id="rateApplyWeek" type="checkbox"> Aplicar también a la semana seleccionada (excepto ajustes manuales)</label></div>
+        </div>
+        <div class="modal-actions"><button class="btn ghost" data-close-modal="rateModal">Cancelar</button><button class="btn violet" id="saveRateButton">Guardar tarifa</button></div>
+        <div class="rate-list" id="rateList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="adjustModal">
+    <div class="modal">
+      <div class="modal-head"><h3>✏️ Ajustar pago</h3><button class="mini-btn" data-close-modal="adjustModal">✕</button></div>
+      <div class="modal-body">
+        <p id="adjustDescription"></p>
+        <div class="modal-grid">
+          <div class="field"><label>Nuevo pago</label><input id="adjustAmount" type="number" min="0" step="0.01"></div>
+          <div class="field full"><label>Motivo obligatorio</label><textarea id="adjustReason" placeholder="Ejemplo: limpieza profunda autorizada"></textarea></div>
+        </div>
+        <div class="modal-actions"><button class="btn ghost" data-close-modal="adjustModal">Cancelar</button><button class="btn" id="saveAdjustmentButton">Guardar ajuste</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="weekModal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="weekModalTitle">Cerrar semana</h3><button class="mini-btn" data-close-modal="weekModal">✕</button></div>
+      <div class="modal-body">
+        <p id="weekModalDescription"></p>
+        <div class="field"><label>Motivo / nota de autorización</label><textarea id="weekReason"></textarea></div>
+        <div class="modal-actions"><button class="btn ghost" data-close-modal="weekModal">Cancelar</button><button class="btn amber" id="confirmWeekButton">Confirmar</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="auditModal">
+    <div class="modal">
+      <div class="modal-head"><h3>🧾 Historial de cambios</h3><button class="mini-btn" data-close-modal="auditModal">✕</button></div>
+      <div class="modal-body"><div class="audit-list" id="auditList"><div class="empty">Cargando historial…</div></div></div>
+    </div>
+  </div>
 
   <div class="toast" id="toast"></div>
   <script src="/payroll.js" defer></script>
