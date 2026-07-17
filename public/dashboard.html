@@ -11,7 +11,7 @@
 </head>
 <body>
 <main class="shell">
-<header class="top"><div class="brand"><div class="logo">417</div><div><b>Dashboard Ejecutivo</b><span id="dateLabel">Cargando operación...</span></div></div><button class="refresh" onclick="loadDashboard(true)">↻ Actualizar</button></header>
+<header class="top"><div class="brand"><div class="logo">417</div><div><b>Dashboard Ejecutivo</b><span id="dateLabel">Cargando operación...</span></div></div><div style="display:flex;align-items:center;gap:9px"><span id="liveStatus" class="pill">Conectando…</span><button class="refresh" onclick="loadDashboard(true)">↻ Actualizar</button></div></header>
 <div id="error" class="error"></div>
 <section class="hero"><div class="hero-grid"><div><small>COMMAND CENTER · HOUSEKEEPING</small><h1>Estado de la operación</h1><p id="summary">Leyendo habitaciones, empleados, payroll y alertas.</p></div><div class="progress-card"><div class="progress-top"><span>Progreso del día</span><strong id="percent">0%</strong></div><div class="bar"><div id="fill" class="fill"></div></div><div class="meta"><span id="readyMeta">0 listas</span><span id="remainingMeta">0 restantes</span></div></div></div></section>
 <section class="kpis">
@@ -235,6 +235,123 @@ function normalizeV2Dashboard(data) {
   };
 }
 
+
+function normalizeAction(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+}
+
+function calculateOperationalMetrics(events = []) {
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.eventTime || a.time || 0) - new Date(b.eventTime || b.time || 0)
+  );
+
+  const roomState = new Map();
+  const cleaningDurations = [];
+  const inspectionDurations = [];
+
+  for (const event of sorted) {
+    const unit = String(event.normalizedRoom || event.unit || "GENERAL");
+    const action = normalizeAction(event.action);
+
+    if (!roomState.has(unit)) roomState.set(unit, {});
+    const state = roomState.get(unit);
+
+    const timestamp = new Date(event.eventTime || event.time || event.createdAt || 0);
+    if (!Number.isFinite(timestamp.getTime())) continue;
+
+    if (action === "START" || action === "CLEANING_START") {
+      state.cleaningStartedAt = timestamp;
+    }
+
+    if (action === "DONE" || action === "CLEANING_DONE") {
+      if (state.cleaningStartedAt) {
+        const minutes = (timestamp - state.cleaningStartedAt) / 60000;
+        if (minutes >= 1 && minutes <= 600) cleaningDurations.push(minutes);
+      }
+      state.cleaningFinishedAt = timestamp;
+    }
+
+    if (
+      action === "INSPECTION_START" ||
+      action === "PRE_INSPECTION_START"
+    ) {
+      state.inspectionStartedAt = timestamp;
+    }
+
+    if (action === "READY_GUEST" || action === "READY_FOR_GUEST") {
+      if (state.inspectionStartedAt) {
+        const minutes = (timestamp - state.inspectionStartedAt) / 60000;
+        if (minutes >= 1 && minutes <= 300) inspectionDurations.push(minutes);
+      }
+      state.readyAt = timestamp;
+    }
+  }
+
+  const average = (values) =>
+    values.length
+      ? values.reduce((total, value) => total + value, 0) / values.length
+      : 0;
+
+  return {
+    averageCleaningMinutes: average(cleaningDurations),
+    averageInspectionMinutes: average(inspectionDurations),
+  };
+}
+
+function buildOperationalAlerts(events = []) {
+  return events
+    .filter((event) => {
+      const action = normalizeAction(event.action);
+      const priority = String(event.priority || "").toLowerCase();
+
+      return (
+        ["ISSUE", "INSPECTION_REPORT", "LOST_FOUND", "SUPPLIES", "INSPECTION_SUPPLIES"].includes(action) ||
+        ["high", "urgent", "blocking"].some((word) => priority.includes(word))
+      );
+    })
+    .slice(0, 20)
+    .map((event) => ({
+      id: event.id,
+      unit: event.unit || "Operación",
+      message:
+        event.note ||
+        event.message ||
+        event.action ||
+        "Situación pendiente",
+      severity: /high|urgent|blocking/i.test(String(event.priority || ""))
+        ? "high"
+        : "medium",
+      action: event.action,
+      time: event.eventTime || event.time,
+    }));
+}
+
+function mergeOperationsIntoDashboard(baseDashboard, operationsData) {
+  const events = Array.isArray(operationsData?.events)
+    ? operationsData.events
+    : [];
+
+  const metrics = calculateOperationalMetrics(events);
+  const alerts = buildOperationalAlerts(events);
+
+  return {
+    ...baseDashboard,
+    stats: {
+      ...(baseDashboard.stats || {}),
+      problems: alerts.length,
+    },
+    averages: {
+      ...(baseDashboard.averages || {}),
+      ...metrics,
+    },
+    alerts,
+    timeline: events.slice(0, 40),
+  };
+}
+
 function render() {
   const stats = dashboard.stats || {};
   const averages = dashboard.averages || {};
@@ -377,7 +494,7 @@ function renderEmployees() {
         .join("")
     : `<div class="empty">${
         dashboardSource === "postgres"
-          ? "Clock In se migrará en la fase de Time Clock."
+          ? "No hay empleados con Clock In."
           : "No hay empleados con Clock In."
       }</div>`;
 }
@@ -437,7 +554,7 @@ function renderTimeline() {
         .join("")
     : `<div class="empty">${
         dashboardSource === "postgres"
-          ? "Operations Logs se conectará en la siguiente migración."
+          ? "No hay actividad registrada hoy."
           : "No hay actividad reciente."
       }</div>`;
 }
@@ -531,12 +648,22 @@ async function loadDashboard(force = false) {
   const stamp = Date.now();
 
   try {
-    const postgresData = await fetchJson(
-      `/api/v2/dashboard?date=${encodeURIComponent(date)}&t=${stamp}`
-    );
+    const [postgresData, operationsData] = await Promise.all([
+      fetchJson(
+        `/api/v2/dashboard?date=${encodeURIComponent(date)}&t=${stamp}`
+      ),
+      fetchJson(
+        `/api/v2/operations?date=${encodeURIComponent(date)}&limit=300&t=${stamp}`
+      ),
+    ]);
 
     dashboardSource = "postgres";
-    dashboard = normalizeV2Dashboard(postgresData);
+    dashboard = mergeOperationsIntoDashboard(
+      normalizeV2Dashboard(postgresData),
+      operationsData
+    );
+
+    $("liveStatus").textContent = "PostgreSQL en vivo";
     render();
     return;
   } catch (postgresError) {
@@ -547,21 +674,22 @@ async function loadDashboard(force = false) {
   }
 
   try {
-    const separator = force ? "&" : "&";
     const fallbackUrl =
       `/dashboard-data?refresh=${force ? "1" : "0"}` +
-      `${separator}t=${stamp}`;
+      `&t=${stamp}`;
 
     const fallbackData = await fetchJson(fallbackUrl);
 
     dashboardSource = "notion";
     dashboard = fallbackData;
+    $("liveStatus").textContent = "Fallback Notion";
     render();
 
     $("error").textContent =
       "⚠️ PostgreSQL no respondió. Dashboard cargado temporalmente desde Notion.";
     $("error").classList.add("show");
   } catch (fallbackError) {
+    $("liveStatus").textContent = "Sin conexión";
     $("error").textContent = `Dashboard: ${fallbackError.message}`;
     $("error").classList.add("show");
   }
@@ -571,21 +699,29 @@ loadDashboard();
 
 setInterval(() => {
   loadDashboard(false);
-}, 30000);
+}, 60000);
 
 try {
   const socket = io();
 
-  socket.on("data-api-updated", (event) => {
-    if (!event?.module || event.module === "rooms") {
-      loadDashboard(false);
-    }
+  socket.on("connect", () => {
+    $("liveStatus").textContent = "PostgreSQL en vivo";
   });
 
-  socket.on("rooms-postgres-synced", () => loadDashboard(false));
-  socket.on("ops-update", () => loadDashboard(false));
-  socket.on("room-updated", () => loadDashboard(false));
-  socket.on("assignments-updated", () => loadDashboard(false));
+  socket.on("disconnect", () => {
+    $("liveStatus").textContent = "Reconectando…";
+  });
+
+  const refreshDashboard = () => loadDashboard(false);
+
+  socket.on("data-api-updated", refreshDashboard);
+  socket.on("rooms-postgres-synced", refreshDashboard);
+  socket.on("operations-log-created", refreshDashboard);
+  socket.on("ops-update", refreshDashboard);
+  socket.on("room-updated", refreshDashboard);
+  socket.on("rooms-updated", refreshDashboard);
+  socket.on("assignments-updated", refreshDashboard);
+  socket.on("notion-action-synced", refreshDashboard);
 } catch (error) {
   console.warn("Socket.IO no disponible:", error.message);
 }
