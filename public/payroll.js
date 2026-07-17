@@ -78,13 +78,40 @@
     return `${formatter.format(startDate)} – ${formatter.format(endDate)}`;
   }
 
+  function normalizeISODate(...values) {
+    for (const value of values) {
+      if (!value) continue;
+
+      const raw = String(value).trim();
+      const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (isoMatch) return isoMatch[1];
+
+      const parsed = safeDate(value);
+      if (parsed) return isoLocal(parsed);
+    }
+
+    return "";
+  }
+
   function dayName(dateValue) {
-    if (!dateValue) return "Sin fecha";
-    const formatter = new Intl.DateTimeFormat("es-US", { weekday: "long" });
-    const parsed = parseLocalDate(String(dateValue).slice(0, 10));
-    if (!parsed) return "Sin fecha";
-    const value = formatter.format(parsed);
+    const parsed = parseLocalDate(normalizeISODate(dateValue));
+    if (!parsed) return "Fecha no disponible";
+
+    const value = new Intl.DateTimeFormat("es-US", {
+      weekday: "long",
+    }).format(parsed);
+
     return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  function shortDailyDate(dateValue) {
+    const parsed = parseLocalDate(normalizeISODate(dateValue));
+    if (!parsed) return "Fecha no disponible";
+
+    return new Intl.DateTimeFormat("es-US", {
+      day: "numeric",
+      month: "short",
+    }).format(parsed);
   }
 
   function setBadge(element, text, type = "blue") {
@@ -361,9 +388,17 @@
     const daily = new Map();
 
     for (const record of records) {
-      const date = String(record.date || record.work_date || "").slice(0, 10) || "Sin fecha";
+      const date = normalizeISODate(
+        record.work_date,
+        record.workDate,
+        record.date,
+        record.Date
+      );
+
+      if (!date) continue;
+
       const current = daily.get(date) || { date, total: 0, units: 0 };
-      current.total += Number(record.amount || 0);
+      current.total += Number(record.amount ?? record.paid_amount ?? 0);
       current.units += 1;
       daily.set(date, current);
     }
@@ -379,9 +414,17 @@
     const max = Math.max(...items.map((item) => item.total), 1);
     container.innerHTML = items.map((item) => `
       <div class="daily-card">
-        <div class="daily-head"><span>${escapeHtml(dayName(item.date))}</span><span>${money(item.total)}</span></div>
-        <div class="daily-meta"><span>${escapeHtml(item.date)}</span><span>${item.units} unidades</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, (item.total / max) * 100).toFixed(1)}%"></div></div>
+        <div class="daily-head">
+          <span>${escapeHtml(dayName(item.date))}</span>
+          <span>${money(item.total)}</span>
+        </div>
+        <div class="daily-meta">
+          <span>${escapeHtml(shortDailyDate(item.date))}</span>
+          <span>${item.units} unidades</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${Math.max(4, (item.total / max) * 100).toFixed(1)}%"></div>
+        </div>
       </div>`).join("");
   }
 
