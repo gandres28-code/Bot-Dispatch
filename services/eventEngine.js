@@ -596,6 +596,7 @@ function createEventEngine({
   clearRoomCache = () => {},
   clearAssignmentCaches = () => {},
   onPublished = () => {},
+  onEventCommitted = () => {},
 } = {}) {
   async function publish(input = {}) {
     const action = normalizeText(input.action).toUpperCase();
@@ -937,6 +938,22 @@ function createEventEngine({
       } catch (callbackError) {
         console.error(
           "EVENT ENGINE onPublished ERROR:",
+          callbackError.message
+        );
+      }
+
+      try {
+        await Promise.resolve(
+          onEventCommitted({
+            event: eventResult.rows[0],
+            payload: eventPayload,
+            room: updatedRoom,
+            workDate,
+          })
+        );
+      } catch (callbackError) {
+        console.error(
+          "EVENT ENGINE onEventCommitted ERROR:",
           callbackError.message
         );
       }
