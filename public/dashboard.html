@@ -29,19 +29,566 @@
 <div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="modal-card"><div class="modal-head"><div><b id="modalTitle">Habitación</b><div id="modalStatus" class="sub"></div></div><button class="close" onclick="closeModal()">✕</button></div><div id="modalBody" class="modal-body"></div></div></div>
 <script src="/socket.io/socket.io.js"></script>
 <script>
-let dashboard={};const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));const money=v=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(v||0));
-function statusClass(status){const s=String(status||'').toLowerCase();if(s.includes('ready'))return'ready';if(s.includes('inspection')||s.includes('cleaned'))return'inspection';if(s.includes('progress')||s.includes('started'))return'progress';return'pending'}
-function shortUnit(name){return String(name||'').replace(/\s*-\s*[A-Z](?:\s+URGENTE)?\s*$/i,'').trim()}
-function fmtDate(v){if(!v)return'—';const d=new Date(v);return isNaN(d)?v:d.toLocaleString('es-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})}
-function render(){const s=dashboard.stats||{},a=dashboard.averages||{},p=dashboard.payroll||{},e=dashboard.employees||{};const total=Number(s.totalUnits||0),ready=Number(s.ready||0),inspection=Number(s.awaitingInspection||0)+Number(s.inspectionStarted||0),pct=total?Math.round(ready/total*100):0;for(const [id,val] of Object.entries({total,pending:s.pending,inProgress:s.inProgress,inspection,ready,arrivals:s.arrivals,urgentCount:s.urgent,problems:s.problems}))$(id).textContent=Number(val||0);$('percent').textContent=pct+'%';$('fill').style.width=pct+'%';$('readyMeta').textContent=ready+' listas';$('remainingMeta').textContent=Math.max(0,total-ready)+' restantes';$('summary').textContent=`${ready} de ${total} habitaciones están listas. ${s.inProgress||0} siguen en limpieza y ${inspection} están en inspección.`;$('dateLabel').textContent=new Date((dashboard.date||'')+'T12:00:00').toLocaleDateString('es-US',{weekday:'long',month:'long',day:'numeric'});$('cleanAvg').textContent=Number(a.averageCleaningMinutes||0).toFixed(1)+' min';$('inspectAvg').textContent=Number(a.averageInspectionMinutes||0).toFixed(1)+' min';$('payroll').textContent=money(p.total);$('activeEmployees').textContent=e.active||0;renderBuildings();renderEmployees();renderAlerts();renderTimeline()}
-function renderBuildings(){const list=dashboard.buildings||[];$('buildingCount').textContent=list.length+' edificios';$('buildings').innerHTML=list.length?list.map(b=>`<article class="building"><div class="building-top"><div><span class="letter">${esc(b.building)}</span><b>Building ${esc(b.building)}</b></div><small>${b.ready}/${b.total} ready</small></div><div class="bar" style="background:#edf0f5"><div class="fill" style="background:var(--green);width:${b.total?Math.round(b.ready/b.total*100):0}%"></div></div><div class="rooms">${(b.units||[]).map(u=>`<button class="room ${statusClass(u.status)} ${u.urgent?'urgent':''}" onclick='openRoom(${JSON.stringify(u.id)})'>${esc(shortUnit(u.unit))}</button>`).join('')}</div></article>`).join(''):'<div class="empty">No hay edificios cargados.</div>'}
-function renderEmployees(){const list=dashboard.employees?.clockedIn||[];$('employeeCount').textContent=list.length;$('employees').innerHTML=list.length?list.map(x=>`<div class="employee"><div class="row"><div><div class="title">${esc(x.employee)}</div><div class="sub">${esc(x.role||'Empleado')} · Clock In ${fmtDate(x.clockIn)}</div></div><span class="badge">Working</span></div></div>`).join(''):'<div class="empty">No hay empleados con Clock In.</div>'}
-function renderAlerts(){const list=dashboard.alerts||[];$('alertCount').textContent=list.length;$('alerts').innerHTML=list.length?list.map(x=>`<div class="alert"><div class="alert-icon">${x.severity==='high'?'🔴':'🟠'}</div><div><div class="title">${esc(x.unit||'Operación')}</div><div class="sub">${esc(x.message)}</div></div></div>`).join(''):'<div class="empty">✅ No hay alertas críticas.</div>'}
-function renderTimeline(){const list=dashboard.timeline||[];$('timeline').innerHTML=list.length?list.slice(0,30).map(x=>`<div class="event"><div class="row"><div><div class="title">${esc(x.employee||x.person||x.action||'Actualización')}</div><div class="sub">${esc(x.unit||'')} ${esc(x.message||x.note||'')}</div></div><small>${fmtDate(x.time)}</small></div></div>`).join(''):'<div class="empty">No hay actividad reciente en memoria.</div>'}
-function openRoom(id){const u=(dashboard.units||[]).find(x=>x.id===id);if(!u)return;$('modalTitle').textContent=u.unit;$('modalStatus').textContent=u.status;$('modalBody').innerHTML=`<div class="details"><div class="detail"><span>Cleaner</span><b>${esc(u.cleaner||'Sin asignar')}</b></div><div class="detail"><span>Inspector</span><b>${esc(u.inspector||'Sin asignar')}</b></div><div class="detail"><span>Inicio limpieza</span><b>${fmtDate(u.startedAt)}</b></div><div class="detail"><span>Fin limpieza</span><b>${fmtDate(u.finishedAt)}</b></div><div class="detail"><span>Inicio inspección</span><b>${fmtDate(u.inspectionStartedAt)}</b></div><div class="detail"><span>Ready At</span><b>${fmtDate(u.readyAt)}</b></div><div class="detail"><span>Arrival</span><b>${u.arrival?'Sí':'No'}</b></div><div class="detail"><span>Urgent</span><b>${u.urgent?'Sí':'No'}</b></div><div class="detail"><span>Guest Out</span><b>${u.guestOut?'Sí':'No'}</b></div><div class="detail"><span>Pre Inspection</span><b>${u.preInspection?'Completa':u.preInspectionStarted?'Iniciada':'No'}</b></div></div>`;$('modal').classList.add('show')}
-function closeModal(){$('modal').classList.remove('show')}
-async function loadDashboard(force=false){$('error').classList.remove('show');try{const r=await fetch('/dashboard-data'+(force?'?refresh=1':'')+(force?'&':'?')+'t='+Date.now(),{cache:'no-store'});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'No se pudo cargar');dashboard=d;render()}catch(err){$('error').textContent='Dashboard: '+err.message;$('error').classList.add('show')}}
-loadDashboard();setInterval(()=>loadDashboard(false),30000);try{const socket=io();socket.on('ops-update',()=>loadDashboard(false));socket.on('room-updated',()=>loadDashboard(false));socket.on('assignments-updated',()=>loadDashboard(false))}catch(e){}
+let dashboard = {};
+let dashboardSource = "postgres";
+
+const $ = (id) => document.getElementById(id);
+const esc = (value) =>
+  String(value ?? "").replace(
+    /[&<>"']/g,
+    (char) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      })[char]
+  );
+
+const money = (value) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number(value || 0));
+
+function todayChicagoISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function safeDateLabel(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return "Fecha no disponible";
+  }
+
+  const date = new Date(`${text}T12:00:00`);
+  if (!Number.isFinite(date.getTime())) {
+    return "Fecha no disponible";
+  }
+
+  return date.toLocaleDateString("es-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function fmtDate(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
+
+  return date.toLocaleString("es-US", {
+    timeZone: "America/Chicago",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function statusClass(status, statusGroup = "") {
+  const group = String(statusGroup || "").toLowerCase();
+  const value = String(status || "").toLowerCase();
+
+  if (group === "ready" || value.includes("ready")) return "ready";
+
+  if (
+    group === "inspection" ||
+    group === "awaitinginspection" ||
+    value.includes("inspection") ||
+    value.includes("cleaned")
+  ) {
+    return "inspection";
+  }
+
+  if (
+    group === "inprogress" ||
+    value.includes("progress") ||
+    value.includes("started") ||
+    value.includes("cleaning")
+  ) {
+    return "progress";
+  }
+
+  return "pending";
+}
+
+function shortUnit(name) {
+  return String(name || "")
+    .replace(/\s*-\s*[A-Z](?:\s+URGENTE)?\s*$/i, "")
+    .trim();
+}
+
+function normalizeV2Dashboard(data) {
+  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+  const originalBuildings = Array.isArray(data.buildings) ? data.buildings : [];
+
+  const buildingMap = new Map();
+
+  for (const original of originalBuildings) {
+    const key = String(original.building || "OTHER");
+    buildingMap.set(key, {
+      building: key,
+      total: Number(original.total || 0),
+      ready: Number(original.ready || 0),
+      urgent: Number(original.urgent || 0),
+      units: [],
+    });
+  }
+
+  for (const room of rooms) {
+    const key = String(room.building || "OTHER");
+
+    if (!buildingMap.has(key)) {
+      buildingMap.set(key, {
+        building: key,
+        total: 0,
+        ready: 0,
+        urgent: 0,
+        units: [],
+      });
+    }
+
+    const building = buildingMap.get(key);
+
+    building.units.push({
+      id: room.id,
+      unit: room.unit,
+      status: room.status,
+      statusGroup: room.statusGroup,
+      urgent: Boolean(room.urgent),
+    });
+
+    if (!originalBuildings.length) {
+      building.total += 1;
+      if (room.statusGroup === "ready") building.ready += 1;
+      if (room.urgent) building.urgent += 1;
+    }
+  }
+
+  const stats = data.stats || {};
+
+  return {
+    ok: true,
+    source: "postgres",
+    date: data.date || todayChicagoISO(),
+    stats: {
+      totalUnits: Number(stats.totalUnits || rooms.length || 0),
+      pending: Number(stats.pending || 0),
+      inProgress: Number(stats.inProgress || 0),
+      awaitingInspection: Number(stats.awaitingInspection || 0),
+      inspectionStarted: Number(stats.inspection || 0),
+      ready: Number(stats.ready || 0),
+      arrivals: Number(stats.arrivals || 0),
+      urgent: Number(stats.urgent || 0),
+      problems: 0,
+    },
+    averages: {
+      averageCleaningMinutes: 0,
+      averageInspectionMinutes: 0,
+    },
+    payroll: {
+      total: 0,
+    },
+    employees: {
+      active: Number(stats.activeEmployees || 0),
+      clockedIn: [],
+    },
+    alerts: [],
+    timeline: [],
+    buildings: Array.from(buildingMap.values()).sort((a, b) =>
+      a.building.localeCompare(b.building, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    ),
+    units: rooms.map((room) => ({
+      id: room.id,
+      unit: room.unit,
+      status: room.status || "Pending",
+      cleaner:
+        room.assignedCleaner ||
+        (Array.isArray(room.assignedCleaners)
+          ? room.assignedCleaners.join(", ")
+          : ""),
+      inspector:
+        room.assignedInspector ||
+        (Array.isArray(room.assignedInspectors)
+          ? room.assignedInspectors.join(", ")
+          : ""),
+      startedAt: room.startedAt,
+      finishedAt: room.finishedAt,
+      inspectionStartedAt: room.inspectionStartedAt,
+      readyAt: room.readyAt,
+      arrival: Boolean(room.arrival),
+      urgent: Boolean(room.urgent),
+      guestOut: Boolean(room.guestOut),
+      preInspection: false,
+      preInspectionStarted: false,
+    })),
+  };
+}
+
+function render() {
+  const stats = dashboard.stats || {};
+  const averages = dashboard.averages || {};
+  const payroll = dashboard.payroll || {};
+  const employees = dashboard.employees || {};
+
+  const total = Number(stats.totalUnits || 0);
+  const ready = Number(stats.ready || 0);
+  const inspection =
+    Number(stats.awaitingInspection || 0) +
+    Number(stats.inspectionStarted || 0);
+  const percent = total ? Math.round((ready / total) * 100) : 0;
+
+  const values = {
+    total,
+    pending: stats.pending,
+    inProgress: stats.inProgress,
+    inspection,
+    ready,
+    arrivals: stats.arrivals,
+    urgentCount: stats.urgent,
+    problems: stats.problems,
+  };
+
+  for (const [id, value] of Object.entries(values)) {
+    $(id).textContent = Number(value || 0);
+  }
+
+  $("percent").textContent = `${percent}%`;
+  $("fill").style.width = `${percent}%`;
+  $("readyMeta").textContent = `${ready} listas`;
+  $("remainingMeta").textContent = `${Math.max(0, total - ready)} restantes`;
+  $("summary").textContent =
+    `${ready} de ${total} habitaciones están listas. ` +
+    `${stats.inProgress || 0} siguen en limpieza y ` +
+    `${inspection} están en inspección.`;
+
+  $("dateLabel").textContent =
+    `${safeDateLabel(dashboard.date)} · ` +
+    `${dashboardSource === "postgres" ? "PostgreSQL" : "Fallback Notion"}`;
+
+  $("cleanAvg").textContent =
+    `${Number(averages.averageCleaningMinutes || 0).toFixed(1)} min`;
+  $("inspectAvg").textContent =
+    `${Number(averages.averageInspectionMinutes || 0).toFixed(1)} min`;
+  $("payroll").textContent = money(payroll.total);
+  $("activeEmployees").textContent = Number(employees.active || 0);
+
+  renderBuildings();
+  renderEmployees();
+  renderAlerts();
+  renderTimeline();
+}
+
+function renderBuildings() {
+  const list = dashboard.buildings || [];
+  $("buildingCount").textContent = `${list.length} edificios`;
+
+  $("buildings").innerHTML = list.length
+    ? list
+        .map(
+          (building) => `
+            <article class="building">
+              <div class="building-top">
+                <div>
+                  <span class="letter">${esc(building.building)}</span>
+                  <b>${
+                    String(building.building).toUpperCase() === "OTHER"
+                      ? "Casas / Other"
+                      : `Building ${esc(building.building)}`
+                  }</b>
+                </div>
+                <small>${building.ready}/${building.total} ready</small>
+              </div>
+
+              <div class="bar" style="background:#edf0f5">
+                <div
+                  class="fill"
+                  style="
+                    background:var(--green);
+                    width:${
+                      building.total
+                        ? Math.round(
+                            (Number(building.ready || 0) /
+                              Number(building.total || 1)) *
+                              100
+                          )
+                        : 0
+                    }%
+                  "
+                ></div>
+              </div>
+
+              <div class="rooms">
+                ${(building.units || [])
+                  .map(
+                    (unit) => `
+                      <button
+                        class="room ${statusClass(
+                          unit.status,
+                          unit.statusGroup
+                        )} ${unit.urgent ? "urgent" : ""}"
+                        onclick='openRoom(${JSON.stringify(unit.id)})'
+                      >
+                        ${esc(shortUnit(unit.unit))}
+                      </button>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </article>
+          `
+        )
+        .join("")
+    : '<div class="empty">No hay edificios cargados.</div>';
+}
+
+function renderEmployees() {
+  const list = dashboard.employees?.clockedIn || [];
+  $("employeeCount").textContent = list.length;
+
+  $("employees").innerHTML = list.length
+    ? list
+        .map(
+          (employee) => `
+            <div class="employee">
+              <div class="row">
+                <div>
+                  <div class="title">${esc(employee.employee)}</div>
+                  <div class="sub">
+                    ${esc(employee.role || "Empleado")} ·
+                    Clock In ${fmtDate(employee.clockIn)}
+                  </div>
+                </div>
+                <span class="badge">Working</span>
+              </div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="empty">${
+        dashboardSource === "postgres"
+          ? "Clock In se migrará en la fase de Time Clock."
+          : "No hay empleados con Clock In."
+      }</div>`;
+}
+
+function renderAlerts() {
+  const list = dashboard.alerts || [];
+  $("alertCount").textContent = list.length;
+
+  $("alerts").innerHTML = list.length
+    ? list
+        .map(
+          (alert) => `
+            <div class="alert">
+              <div class="alert-icon">${
+                alert.severity === "high" ? "🔴" : "🟠"
+              }</div>
+              <div>
+                <div class="title">${esc(alert.unit || "Operación")}</div>
+                <div class="sub">${esc(alert.message)}</div>
+              </div>
+            </div>
+          `
+        )
+        .join("")
+    : '<div class="empty">✅ No hay alertas críticas en PostgreSQL.</div>';
+}
+
+function renderTimeline() {
+  const list = dashboard.timeline || [];
+
+  $("timeline").innerHTML = list.length
+    ? list
+        .slice(0, 30)
+        .map(
+          (event) => `
+            <div class="event">
+              <div class="row">
+                <div>
+                  <div class="title">
+                    ${esc(
+                      event.employee ||
+                        event.person ||
+                        event.action ||
+                        "Actualización"
+                    )}
+                  </div>
+                  <div class="sub">
+                    ${esc(event.unit || "")}
+                    ${esc(event.message || event.note || "")}
+                  </div>
+                </div>
+                <small>${fmtDate(event.time)}</small>
+              </div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="empty">${
+        dashboardSource === "postgres"
+          ? "Operations Logs se conectará en la siguiente migración."
+          : "No hay actividad reciente."
+      }</div>`;
+}
+
+function openRoom(id) {
+  const unit = (dashboard.units || []).find(
+    (item) => String(item.id) === String(id)
+  );
+
+  if (!unit) return;
+
+  $("modalTitle").textContent = unit.unit || "Habitación";
+  $("modalStatus").textContent = unit.status || "Sin estado";
+
+  $("modalBody").innerHTML = `
+    <div class="details">
+      <div class="detail">
+        <span>Cleaner</span>
+        <b>${esc(unit.cleaner || "Sin asignar")}</b>
+      </div>
+      <div class="detail">
+        <span>Inspector</span>
+        <b>${esc(unit.inspector || "Sin asignar")}</b>
+      </div>
+      <div class="detail">
+        <span>Inicio limpieza</span>
+        <b>${fmtDate(unit.startedAt)}</b>
+      </div>
+      <div class="detail">
+        <span>Fin limpieza</span>
+        <b>${fmtDate(unit.finishedAt)}</b>
+      </div>
+      <div class="detail">
+        <span>Inicio inspección</span>
+        <b>${fmtDate(unit.inspectionStartedAt)}</b>
+      </div>
+      <div class="detail">
+        <span>Ready At</span>
+        <b>${fmtDate(unit.readyAt)}</b>
+      </div>
+      <div class="detail">
+        <span>Arrival</span>
+        <b>${unit.arrival ? "Sí" : "No"}</b>
+      </div>
+      <div class="detail">
+        <span>Urgent</span>
+        <b>${unit.urgent ? "Sí" : "No"}</b>
+      </div>
+      <div class="detail">
+        <span>Guest Out</span>
+        <b>${unit.guestOut ? "Sí" : "No"}</b>
+      </div>
+      <div class="detail">
+        <span>Pre Inspection</span>
+        <b>${
+          unit.preInspection
+            ? "Completa"
+            : unit.preInspectionStarted
+              ? "Iniciada"
+              : "No"
+        }</b>
+      </div>
+    </div>
+  `;
+
+  $("modal").classList.add("show");
+}
+
+function closeModal() {
+  $("modal").classList.remove("show");
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    cache: "no-store",
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.message || `Error HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+async function loadDashboard(force = false) {
+  $("error").classList.remove("show");
+
+  const date = todayChicagoISO();
+  const stamp = Date.now();
+
+  try {
+    const postgresData = await fetchJson(
+      `/api/v2/dashboard?date=${encodeURIComponent(date)}&t=${stamp}`
+    );
+
+    dashboardSource = "postgres";
+    dashboard = normalizeV2Dashboard(postgresData);
+    render();
+    return;
+  } catch (postgresError) {
+    console.warn(
+      "Dashboard PostgreSQL no disponible. Usando fallback:",
+      postgresError.message
+    );
+  }
+
+  try {
+    const separator = force ? "&" : "&";
+    const fallbackUrl =
+      `/dashboard-data?refresh=${force ? "1" : "0"}` +
+      `${separator}t=${stamp}`;
+
+    const fallbackData = await fetchJson(fallbackUrl);
+
+    dashboardSource = "notion";
+    dashboard = fallbackData;
+    render();
+
+    $("error").textContent =
+      "⚠️ PostgreSQL no respondió. Dashboard cargado temporalmente desde Notion.";
+    $("error").classList.add("show");
+  } catch (fallbackError) {
+    $("error").textContent = `Dashboard: ${fallbackError.message}`;
+    $("error").classList.add("show");
+  }
+}
+
+loadDashboard();
+
+setInterval(() => {
+  loadDashboard(false);
+}, 30000);
+
+try {
+  const socket = io();
+
+  socket.on("data-api-updated", (event) => {
+    if (!event?.module || event.module === "rooms") {
+      loadDashboard(false);
+    }
+  });
+
+  socket.on("rooms-postgres-synced", () => loadDashboard(false));
+  socket.on("ops-update", () => loadDashboard(false));
+  socket.on("room-updated", () => loadDashboard(false));
+  socket.on("assignments-updated", () => loadDashboard(false));
+} catch (error) {
+  console.warn("Socket.IO no disponible:", error.message);
+}
 </script>
 </body>
 </html>
