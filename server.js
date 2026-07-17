@@ -26,6 +26,12 @@ const {
   listRoomsPostgres,
   getRoomSyncStatus,
 } = require("./services/roomSyncService");
+const {
+  syncPayrollFromNotion,
+  listPayrollPostgres,
+  getPayrollSummaryPostgres,
+  getPayrollSyncStatus,
+} = require("./services/payrollSyncService");
 
 const server = http.createServer(app);
 
@@ -2332,6 +2338,171 @@ app.get("/api/postgres/rooms", async (req, res) => {
       ok: false,
       message: error.message,
     });
+  }
+});
+
+
+// =========================================================
+// PAYROLL · NOTION → POSTGRESQL
+// =========================================================
+// Modo seguro: los archivos Excel siguen leyendo desde Notion.
+// PostgreSQL recibe una copia semanal para comparar totales y validar datos.
+let payrollSyncTimer = null;
+let payrollSyncRunning = false;
+
+async function runPayrollSync(reason = "manual", weekStart = "", weekEnd = "") {
+  const week = weekStart && weekEnd
+    ? validatePayrollRange(weekStart, weekEnd)
+    : getPayrollWeek(new Date());
+
+  if (!postgresStatus.connected) {
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      ...week,
+      message: "PostgreSQL no está conectado; Payroll continúa operando desde Notion.",
+    };
+  }
+
+  if (payrollSyncRunning) {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      ...week,
+      message: "La sincronización de Payroll ya está en ejecución.",
+    };
+  }
+
+  payrollSyncRunning = true;
+
+  try {
+    const result = await syncPayrollFromNotion({
+      notion,
+      databaseId: NOTION_PAYROLL_DATABASE_ID,
+      queryDatabase: (body) => notion.databases.query(body),
+      weekStart: week.weekStart,
+      weekEnd: week.weekEnd,
+    });
+
+    clearOpsCache();
+
+    const payload = {
+      ...result,
+      reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    io.emit("payroll-postgres-synced", payload);
+
+    console.log("✅ Payroll sincronizado Notion → PostgreSQL:", {
+      reason,
+      weekStart: result.weekStart,
+      weekEnd: result.weekEnd,
+      totalFromNotion: result.totalFromNotion,
+      saved: result.saved,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("PAYROLL SYNC ERROR:", error.message);
+    throw error;
+  } finally {
+    payrollSyncRunning = false;
+  }
+}
+
+function startPayrollSyncSchedule() {
+  const intervalMs = Math.max(
+    60000,
+    Number(process.env.PAYROLL_SYNC_INTERVAL_MS || 300000)
+  );
+
+  if (payrollSyncTimer) clearInterval(payrollSyncTimer);
+
+  payrollSyncTimer = setInterval(() => {
+    const week = getPayrollWeek(new Date());
+    runPayrollSync("scheduled", week.weekStart, week.weekEnd).catch((error) => {
+      console.error("PAYROLL SCHEDULED SYNC ERROR:", error.message);
+    });
+  }, intervalMs);
+
+  if (typeof payrollSyncTimer.unref === "function") payrollSyncTimer.unref();
+
+  console.log(
+    `💵 Payroll sync programado cada ${Math.round(intervalMs / 60000)} minuto(s).`
+  );
+}
+
+app.post("/api/sync/payroll", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.body?.start || req.query?.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.body?.end || req.query?.end || currentWeek.weekEnd).trim();
+    const result = await runPayrollSync("manual", weekStart, weekEnd);
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/sync/payroll/status", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    validatePayrollRange(weekStart, weekEnd);
+
+    const status = postgresStatus.connected
+      ? await getPayrollSyncStatus(weekStart, weekEnd)
+      : null;
+
+    return res.json({
+      ok: true,
+      weekStart,
+      weekEnd,
+      postgresConnected: postgresStatus.connected,
+      running: payrollSyncRunning,
+      scheduled: !!payrollSyncTimer,
+      intervalMs: Math.max(60000, Number(process.env.PAYROLL_SYNC_INTERVAL_MS || 300000)),
+      status,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/postgres/payroll", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({ ok: false, message: "PostgreSQL no está conectado." });
+    }
+
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const employee = String(req.query.employee || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+
+    const [records, summary] = await Promise.all([
+      listPayrollPostgres({ weekStart, weekEnd, employee }),
+      getPayrollSummaryPostgres(weekStart, weekEnd),
+    ]);
+
+    return res.json({
+      ok: true,
+      weekStart,
+      weekEnd,
+      count: records.length,
+      total: Number(records.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(2)),
+      records,
+      summary,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
   }
 });
 
@@ -8093,6 +8264,10 @@ async function startServer() {
 
       await runRoomSync("startup", todayISO());
       startRoomSyncSchedule();
+
+      const payrollWeek = getPayrollWeek(new Date());
+      await runPayrollSync("startup", payrollWeek.weekStart, payrollWeek.weekEnd);
+      startPayrollSyncSchedule();
     } catch (error) {
       // La sincronización no bloquea el panel. Notion sigue disponible.
       console.error(
@@ -8112,6 +8287,18 @@ async function startServer() {
       }
 
       startRoomSyncSchedule();
+
+      try {
+        const payrollWeek = getPayrollWeek(new Date());
+        await runPayrollSync("startup-recovery", payrollWeek.weekStart, payrollWeek.weekEnd);
+      } catch (payrollError) {
+        console.error(
+          "⚠️ El servidor arrancará sin la sincronización inicial de Payroll:",
+          payrollError.message
+        );
+      }
+
+      startPayrollSyncSchedule();
     }
   } else {
     console.warn(
