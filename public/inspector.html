@@ -189,6 +189,90 @@
 <script src="/socket.io/socket.io.js"></script><script src="/js/maid-core.js"></script>
 <script>
 let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",lastUnits=[],activeTab="pre",collapsedBuildings={};
+let inspectorDataSource="postgres";
+
+function todayChicagoISO(){
+  return new Intl.DateTimeFormat("en-CA",{
+    timeZone:"America/Chicago",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit"
+  }).format(new Date());
+}
+
+function normalizePostgresInspectorRooms(data){
+  const rooms=Array.isArray(data?.rooms)?data.rooms:[];
+
+  return rooms.map(room=>({
+    id:room.id,
+    notionId:room.notionId||"",
+    unit:room.unit||room.roomNumber||"",
+    normalizedRoom:room.normalizedRoom||"",
+    roomType:room.roomType||"",
+    building:room.building||"OTHER",
+    status:room.status||"Pending",
+    guestOut:Boolean(room.guestOut),
+    guestOutAt:room.guestOutAt||null,
+    priority:room.urgent?"Urgent":"Normal",
+    urgent:Boolean(room.urgent),
+    arrival:Boolean(room.arrival),
+    assignedCleaner:room.assignedCleaner||"",
+    assignedCleaners:Array.isArray(room.assignedCleaners)?room.assignedCleaners:[],
+    assignedInspector:room.assignedInspector||"",
+    assignedInspectors:Array.isArray(room.assignedInspectors)?room.assignedInspectors:[],
+    startedAt:room.startedAt||null,
+    finishedAt:room.finishedAt||null,
+    inspectionStartedAt:room.inspectionStartedAt||null,
+    readyAt:room.readyAt||null,
+    preInspection:Boolean(room.preInspection),
+    preInspectionStarted:Boolean(room.preInspectionStarted)
+  }));
+}
+
+async function fetchInspectorAssignmentsPostgres(name){
+  const params=new URLSearchParams({
+    date:todayChicagoISO(),
+    employee:name,
+    role:"inspector",
+    t:String(Date.now())
+  });
+
+  const response=await fetch(`/api/v2/rooms?${params.toString()}`,{
+    cache:"no-store",
+    headers:{"Accept":"application/json"}
+  });
+
+  const data=await response.json().catch(()=>({}));
+
+  if(!response.ok||!data.ok){
+    throw new Error(data.message||`PostgreSQL respondió con HTTP ${response.status}`);
+  }
+
+  return{
+    ok:true,
+    source:"postgres",
+    inspector:name,
+    units:normalizePostgresInspectorRooms(data)
+  };
+}
+
+async function fetchInspectorAssignmentsFallback(code){
+  const url=`/inspector-assignments?code=${encodeURIComponent(code)}&t=${Date.now()}`;
+  const data=window.OS?.api?.get
+    ? await OS.api.get(url)
+    : await fetch(url,{cache:"no-store"}).then(async response=>{
+        const body=await response.json();
+        if(!response.ok)throw new Error(body.message||`Error ${response.status}`);
+        return body;
+      });
+
+  if(!data.ok){
+    throw new Error(data.message||"No se pudieron cargar las inspecciones");
+  }
+
+  return{...data,source:"notion"};
+}
+
 let inspectorAssignmentsRequest=null;
 let inspectorHistoryRequest=null;
 let lastAssignmentsLoadedAt=0;
@@ -455,27 +539,45 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
 
   if(!silent){
     document.getElementById("assignments").innerHTML=
-      "<div class='empty'>Cargando inspecciones...</div>";
+      "<div class='empty'>Cargando inspecciones desde PostgreSQL...</div>";
   }
 
   inspectorAssignmentsRequest=(async()=>{
     try{
-      const url=`/inspector-assignments?code=${encodeURIComponent(code)}`;
-      const data=window.OS?.api?.get
-        ? await OS.api.get(url)
-        : await fetch(url).then(async response=>{
-            const body=await response.json();
-            if(!response.ok)throw new Error(body.message||`Error ${response.status}`);
-            return body;
-          });
+      let data=null;
+      let loginName=
+        currentInspectorName||
+        window.OS?.user?.name||
+        localStorage.getItem("employeeName")||
+        "";
 
-      if(!data.ok){
-        throw new Error(data.message||"No se pudieron cargar las inspecciones");
+      if(!loginName){
+        const identity=await fetchInspectorAssignmentsFallback(code);
+        loginName=identity.inspector||"";
+        currentInspectorName=loginName;
+        localStorage.setItem("employeeName",loginName);
       }
 
-      currentInspectorName=data.inspector||currentInspectorName||"";
+      try{
+        data=await fetchInspectorAssignmentsPostgres(loginName);
+        inspectorDataSource="postgres";
+      }catch(postgresError){
+        console.warn("PostgreSQL no disponible. Usando fallback:",postgresError.message);
+        data=await fetchInspectorAssignmentsFallback(code);
+        inspectorDataSource="notion";
+      }
+
+      currentInspectorName=data.inspector||loginName||currentInspectorName||"";
       document.getElementById("name").value=currentInspectorName;
       setInspectorDisplayName(currentInspectorName);
+
+      const nameLabel=document.getElementById("inspectorName");
+      if(nameLabel){
+        nameLabel.innerText=
+          `${currentInspectorName} · ${
+            inspectorDataSource==="postgres"?"PostgreSQL":"Fallback Notion"
+          }`;
+      }
 
       const incomingUnits=data.units||[];
 
@@ -509,6 +611,13 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
 
       updateStats(lastUnits);
       renderAssignments();
+
+      if(inspectorDataSource==="notion"&&!silent){
+        showBigStatus(
+          "PostgreSQL no respondió. Usando Notion temporalmente.",
+          "error"
+        );
+      }
 
       if(!silent){
         loadMyHistory(false);
@@ -899,50 +1008,20 @@ function scheduleInspectorRealtimeRefresh(){
 }
 
 function attachInspectorSocket(){
-  const socket=window.OS?.socket;
+  const socket=window.OS?.socket||window.socket||io();
 
-  if(!socket){
-    setTimeout(attachInspectorSocket,150);
-    return;
-  }
-
-  if(inspectorSocket===socket){
-    return;
-  }
-
-  inspectorSocket=socket;
-  console.log("📡 Panel de inspectores usando Socket.IO compartido");
-
-  inspectorSocket.on("assignments-updated",payload=>{
-    if(payload?.lightweight||payload?.reason==="server-room-update"){
-      return;
-    }
-
+  const refresh=payload=>{
+    if(payload?.date&&payload.date!==todayChicagoISO())return;
     scheduleInspectorRealtimeRefresh();
-  });
+  };
 
-  inspectorSocket.on("room-updated",update=>{
-    const merged=mergeInspectorRoomUpdate(update);
-
-    if(!merged&&currentInspectorCode){
-      scheduleInspectorRealtimeRefresh();
-    }
-  });
-
-  inspectorSocket.on("rooms-updated",payload=>{
-    if(payload?.lightweight||payload?.reason==="server-room-update"){
-      return;
-    }
-
-    scheduleInspectorRealtimeRefresh();
-  });
-
-  inspectorSocket.on("ops-update",payload=>{
-    if(payload?.unit&&payload?.action){
-      return;
-    }
-
-    scheduleInspectorRealtimeRefresh();
+  socket.on("assignments-updated",refreshInspectorRealtime);
+  socket.on("rooms-updated",refreshInspectorRealtime);
+  socket.on("room-updated",mergeInspectorRoomUpdate);
+  socket.on("rooms-postgres-synced",refresh);
+  socket.on("data-api-updated",payload=>{
+    if(payload?.module&&payload.module!=="rooms"&&payload.module!=="assignments")return;
+    refresh(payload);
   });
 }
 
