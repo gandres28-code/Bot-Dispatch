@@ -127,51 +127,9 @@ function shortUnit(name) {
 
 function normalizeV2Dashboard(data) {
   const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-  const originalBuildings = Array.isArray(data.buildings) ? data.buildings : [];
-
-  const buildingMap = new Map();
-
-  for (const original of originalBuildings) {
-    const key = String(original.building || "OTHER");
-    buildingMap.set(key, {
-      building: key,
-      total: Number(original.total || 0),
-      ready: Number(original.ready || 0),
-      urgent: Number(original.urgent || 0),
-      units: [],
-    });
-  }
-
-  for (const room of rooms) {
-    const key = String(room.building || "OTHER");
-
-    if (!buildingMap.has(key)) {
-      buildingMap.set(key, {
-        building: key,
-        total: 0,
-        ready: 0,
-        urgent: 0,
-        units: [],
-      });
-    }
-
-    const building = buildingMap.get(key);
-
-    building.units.push({
-      id: room.id,
-      unit: room.unit,
-      status: room.status,
-      statusGroup: room.statusGroup,
-      urgent: Boolean(room.urgent),
-    });
-
-    if (!originalBuildings.length) {
-      building.total += 1;
-      if (room.statusGroup === "ready") building.ready += 1;
-      if (room.urgent) building.urgent += 1;
-    }
-  }
-
+  const buildings = Array.isArray(data.buildings)
+    ? data.buildings
+    : [];
   const stats = data.stats || {};
 
   return {
@@ -183,35 +141,51 @@ function normalizeV2Dashboard(data) {
       pending: Number(stats.pending || 0),
       inProgress: Number(stats.inProgress || 0),
       awaitingInspection: Number(stats.awaitingInspection || 0),
-      inspectionStarted: Number(stats.inspection || 0),
+      inspectionStarted: Number(
+        stats.inspectionStarted ?? stats.inspection ?? 0
+      ),
       ready: Number(stats.ready || 0),
       arrivals: Number(stats.arrivals || 0),
+      guestOut: Number(stats.guestOut || 0),
       urgent: Number(stats.urgent || 0),
-      problems: 0,
+      problems: Number(stats.problems || 0),
     },
     averages: {
-      averageCleaningMinutes: 0,
-      averageInspectionMinutes: 0,
+      averageCleaningMinutes: Number(
+        data.averages?.averageCleaningMinutes || 0
+      ),
+      averageInspectionMinutes: Number(
+        data.averages?.averageInspectionMinutes || 0
+      ),
+      cleaningSamples: Number(
+        data.averages?.cleaningSamples || 0
+      ),
+      inspectionSamples: Number(
+        data.averages?.inspectionSamples || 0
+      ),
     },
     payroll: {
-      total: 0,
+      total: Number(data.payroll?.total || 0),
     },
     employees: {
-      active: Number(stats.activeEmployees || 0),
-      clockedIn: [],
+      active: Number(
+        data.employees?.active ??
+          stats.activeEmployees ??
+          0
+      ),
+      clockedIn: Array.isArray(data.employees?.clockedIn)
+        ? data.employees.clockedIn
+        : [],
     },
-    alerts: [],
-    timeline: [],
-    buildings: Array.from(buildingMap.values()).sort((a, b) =>
-      a.building.localeCompare(b.building, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    ),
+    alerts: Array.isArray(data.alerts) ? data.alerts : [],
+    timeline: Array.isArray(data.timeline) ? data.timeline : [],
+    buildings,
     units: rooms.map((room) => ({
       id: room.id,
       unit: room.unit,
       status: room.status || "Pending",
+      statusGroup: room.statusGroup || "",
+      building: room.building || "CASAS",
       cleaner:
         room.assignedCleaner ||
         (Array.isArray(room.assignedCleaners)
@@ -334,23 +308,18 @@ function mergeOperationsIntoDashboard(baseDashboard, operationsData) {
     ? operationsData.events
     : [];
 
-  const metrics = calculateOperationalMetrics(events);
-  const alerts = buildOperationalAlerts(events);
+  if (!baseDashboard.timeline?.length) {
+    baseDashboard.timeline = events.slice(0, 40);
+  }
 
-  return {
-    ...baseDashboard,
-    stats: {
-      ...(baseDashboard.stats || {}),
-      problems: alerts.length,
-    },
-    averages: {
-      ...(baseDashboard.averages || {}),
-      ...metrics,
-    },
-    alerts,
-    timeline: events.slice(0, 40),
-  };
+  if (!baseDashboard.alerts?.length) {
+    baseDashboard.alerts = buildOperationalAlerts(events);
+    baseDashboard.stats.problems = baseDashboard.alerts.length;
+  }
+
+  return baseDashboard;
 }
+
 
 function render() {
   const stats = dashboard.stats || {};
@@ -394,9 +363,14 @@ function render() {
     `${dashboardSource === "postgres" ? "PostgreSQL" : "Fallback Notion"}`;
 
   $("cleanAvg").textContent =
-    `${Number(averages.averageCleaningMinutes || 0).toFixed(1)} min`;
+    Number(averages.averageCleaningMinutes || 0) > 0
+      ? `${Number(averages.averageCleaningMinutes).toFixed(1)} min`
+      : "Sin datos";
+
   $("inspectAvg").textContent =
-    `${Number(averages.averageInspectionMinutes || 0).toFixed(1)} min`;
+    Number(averages.averageInspectionMinutes || 0) > 0
+      ? `${Number(averages.averageInspectionMinutes).toFixed(1)} min`
+      : "Sin datos";
   $("payroll").textContent = money(payroll.total);
   $("activeEmployees").textContent = Number(employees.active || 0);
 
@@ -419,9 +393,11 @@ function renderBuildings() {
                 <div>
                   <span class="letter">${esc(building.building)}</span>
                   <b>${
-                    String(building.building).toUpperCase() === "OTHER"
-                      ? "Casas / Other"
-                      : `Building ${esc(building.building)}`
+                    String(building.building).toUpperCase() === "CASAS"
+                      ? "Casas"
+                      : String(building.building).toUpperCase() === "SUITES"
+                        ? "Suites"
+                        : `Building ${esc(building.building)}`
                   }</b>
                 </div>
                 <small>${building.ready}/${building.total} ready</small>
