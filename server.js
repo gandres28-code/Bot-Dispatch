@@ -1969,14 +1969,29 @@ async function getPayrollRecordsWithSource(
       throw new Error("PostgreSQL no está conectado");
     }
 
-    const [postgresRecords, syncStatus] = await Promise.all([
+    let [postgresRecords, syncStatus] = await Promise.all([
       listPayrollPostgres({ weekStart, weekEnd }),
       getPayrollSyncStatus(weekStart, weekEnd),
     ]);
 
-    const hasSuccessfulSync = syncStatus?.status === "success";
+    let hasSuccessfulSync = syncStatus?.status === "success";
 
-    // Una semana vacía es válida solamente cuando existe una sincronización exitosa.
+    // Autorrecuperación: si la semana aún no tiene estado exitoso, intenta sincronizarla
+    // una vez antes de activar el fallback a Notion.
+    if (!hasSuccessfulSync) {
+      const repairResult = await runPayrollSync("auto-read-repair", weekStart, weekEnd);
+
+      if (repairResult?.ok && !repairResult?.skipped) {
+        [postgresRecords, syncStatus] = await Promise.all([
+          listPayrollPostgres({ weekStart, weekEnd }),
+          getPayrollSyncStatus(weekStart, weekEnd),
+        ]);
+        hasSuccessfulSync = syncStatus?.status === "success";
+      }
+    }
+
+    // Si ya existen registros válidos, PostgreSQL puede seguir sirviendo la semana aunque
+    // el estado anterior se haya perdido durante una migración de schema.
     if (!hasSuccessfulSync && postgresRecords.length === 0) {
       throw new Error("La semana todavía no tiene una sincronización exitosa en PostgreSQL");
     }
@@ -1986,7 +2001,9 @@ async function getPayrollRecordsWithSource(
       source: "postgres",
       requestedSource,
       fallback: false,
-      fallbackReason: "",
+      fallbackReason: hasSuccessfulSync
+        ? ""
+        : "Se encontraron registros en PostgreSQL; el estado de sincronización será reparado en la siguiente sincronización.",
       syncStatus,
     };
   } catch (error) {
