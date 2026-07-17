@@ -49,6 +49,60 @@ function classifyRoomStatus(statusValue) {
   return "pending";
 }
 
+
+function normalizeUnitLabel(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function classifyOperationalBuilding(room) {
+  const unit = normalizeUnitLabel(room?.unit || room?.room_number || "");
+  const roomType = String(room?.roomType || room?.room_type || "")
+    .trim()
+    .toLowerCase();
+  const searchable = `${unit} ${roomType}`.toLowerCase();
+
+  if (/\bsuite(?:s)?\b/i.test(searchable)) {
+    return "SUITES";
+  }
+
+  const houseKeywords = [
+    "sundowner", "sunrise", "cabin", "lodge", "house", "home",
+    "villa", "bungalow", "cottage", "condo", "chalet", "retreat",
+    "hideaway", "lakehouse", "farmhouse", "townhouse", "duplex", "triplex"
+  ];
+
+  if (houseKeywords.some((keyword) => searchable.includes(keyword))) {
+    return "CASAS";
+  }
+
+  const cleaned = unit
+    .replace(/\s+URGENTE\s*$/i, "")
+    .replace(/\s*[-–—]\s*URGENTE\s*$/i, "")
+    .trim();
+
+  const finalLetterMatch = cleaned.match(
+    /(?:^|[\s\-–—])([A-Z])(?:\s*(?:\([^)]*\))?)?\s*$/i
+  );
+
+  if (finalLetterMatch) {
+    return finalLetterMatch[1].toUpperCase();
+  }
+
+  return "CASAS";
+}
+
+function averageNumbers(values) {
+  const valid = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!valid.length) return 0;
+
+  return Number(
+    (valid.reduce((total, value) => total + value, 0) / valid.length).toFixed(1)
+  );
+}
+
 async function getDataApiHealth() {
   const result = await query(`
     SELECT
@@ -163,14 +217,71 @@ async function getDataApiDashboard(date) {
     throw new Error("La fecha debe usar formato YYYY-MM-DD.");
   }
 
-  const [rooms, employeeResult, operationsResult] = await Promise.all([
+  const [
+    rooms,
+    activeEmployeeResult,
+    operationsResult,
+    payrollResult,
+    clockedInResult,
+  ] = await Promise.all([
     listDataApiRooms({ date: workDate }),
-    query(`SELECT COUNT(*)::int AS total FROM employees WHERE active = TRUE`),
+
+    query(`
+      SELECT COUNT(*)::int AS total
+      FROM employees
+      WHERE active = TRUE
+    `),
+
     query(
       `
-        SELECT COUNT(*)::int AS total
+        SELECT
+          id,
+          event_time AS "eventTime",
+          unit,
+          normalized_room AS "normalizedRoom",
+          action,
+          cleaner,
+          inspector,
+          employee,
+          role_worked AS role,
+          note,
+          photo_url AS "photoUrl",
+          category,
+          priority,
+          source,
+          created_at AS "createdAt"
         FROM operations_logs
         WHERE work_date = $1::date
+        ORDER BY event_time DESC, id DESC
+        LIMIT 100
+      `,
+      [workDate]
+    ),
+
+    query(
+      `
+        SELECT COALESCE(SUM(amount), 0)::float8 AS total
+        FROM payroll_records
+        WHERE work_date = $1::date
+          AND LOWER(COALESCE(status, '')) <> 'cancelled'
+      `,
+      [workDate]
+    ),
+
+    query(
+      `
+        SELECT DISTINCT ON (normalized_employee)
+          id,
+          employee,
+          role_worked AS role,
+          clock_in AS "clockIn",
+          clock_out AS "clockOut",
+          hourly_rate::float8 AS "hourlyRate",
+          status
+        FROM time_clock_records
+        WHERE clock_out IS NULL
+          AND (clock_in AT TIME ZONE 'America/Chicago')::date = $1::date
+        ORDER BY normalized_employee, clock_in DESC
       `,
       [workDate]
     ),
@@ -186,36 +297,158 @@ async function getDataApiDashboard(date) {
     guestOut: 0,
     arrivals: 0,
     urgent: 0,
-    activeEmployees: employeeResult.rows[0]?.total || 0,
-    operations: operationsResult.rows[0]?.total || 0,
+    problems: 0,
+    activeEmployees: activeEmployeeResult.rows[0]?.total || 0,
+    clockedInEmployees: clockedInResult.rows.length,
+    operations: operationsResult.rows.length,
   };
 
   const buildingMap = new Map();
+  const cleaningDurations = [];
+  const inspectionDurations = [];
 
-  for (const room of rooms) {
+  const enrichedRooms = rooms.map((room) => {
     const group = room.statusGroup || "pending";
     stats[group] = (stats[group] || 0) + 1;
+
     if (room.guestOut) stats.guestOut += 1;
     if (room.arrival) stats.arrivals += 1;
     if (room.urgent) stats.urgent += 1;
 
-    const building = room.building || "OTHER";
-    if (!buildingMap.has(building)) {
-      buildingMap.set(building, {
-        building,
+    if (room.startedAt && room.finishedAt) {
+      const minutes =
+        (new Date(room.finishedAt).getTime() -
+          new Date(room.startedAt).getTime()) /
+        60000;
+
+      if (minutes >= 1 && minutes <= 600) {
+        cleaningDurations.push(minutes);
+      }
+    }
+
+    if (room.inspectionStartedAt && room.readyAt) {
+      const minutes =
+        (new Date(room.readyAt).getTime() -
+          new Date(room.inspectionStartedAt).getTime()) /
+        60000;
+
+      if (minutes >= 1 && minutes <= 300) {
+        inspectionDurations.push(minutes);
+      }
+    }
+
+    const operationalBuilding = classifyOperationalBuilding(room);
+
+    if (!buildingMap.has(operationalBuilding)) {
+      buildingMap.set(operationalBuilding, {
+        building: operationalBuilding,
         total: 0,
         ready: 0,
         pending: 0,
+        inProgress: 0,
+        awaitingInspection: 0,
+        inspection: 0,
         urgent: 0,
+        units: [],
       });
     }
 
-    const item = buildingMap.get(building);
+    const item = buildingMap.get(operationalBuilding);
     item.total += 1;
+    item[group] = (item[group] || 0) + 1;
+
     if (group === "ready") item.ready += 1;
     else item.pending += 1;
+
     if (room.urgent) item.urgent += 1;
-  }
+
+    item.units.push({
+      id: room.id,
+      unit: room.unit,
+      status: room.status,
+      statusGroup: group,
+      urgent: Boolean(room.urgent),
+      guestOut: Boolean(room.guestOut),
+      arrival: Boolean(room.arrival),
+    });
+
+    return {
+      ...room,
+      building: operationalBuilding,
+      originalBuilding: room.building || "",
+    };
+  });
+
+  const problemActions = new Set([
+    "ISSUE",
+    "INSPECTION_REPORT",
+    "LOST_FOUND",
+    "SUPPLIES",
+    "INSPECTION_SUPPLIES",
+  ]);
+
+  const alerts = operationsResult.rows
+    .filter((event) => {
+      const action = String(event.action || "").trim().toUpperCase();
+      const priority = String(event.priority || "").toLowerCase();
+
+      return (
+        problemActions.has(action) ||
+        ["high", "urgent", "blocking"].some((word) =>
+          priority.includes(word)
+        )
+      );
+    })
+    .slice(0, 25)
+    .map((event) => ({
+      id: event.id,
+      unit: event.unit || "Operación",
+      message:
+        event.note ||
+        event.action ||
+        "Situación que requiere atención",
+      severity: /high|urgent|blocking/i.test(
+        String(event.priority || "")
+      )
+        ? "high"
+        : "medium",
+      action: event.action,
+      time: event.eventTime,
+      employee:
+        event.employee ||
+        event.cleaner ||
+        event.inspector ||
+        "",
+    }));
+
+  stats.problems = alerts.length;
+
+  const buildingOrder = (value) => {
+    if (value === "SUITES") return "ZZY";
+    if (value === "CASAS") return "ZZZ";
+    return value;
+  };
+
+  const buildings = Array.from(buildingMap.values())
+    .map((building) => ({
+      ...building,
+      units: building.units.sort((a, b) =>
+        String(a.unit).localeCompare(String(b.unit), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      ),
+    }))
+    .sort((a, b) =>
+      buildingOrder(a.building).localeCompare(
+        buildingOrder(b.building),
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base",
+        }
+      )
+    );
 
   return {
     ok: true,
@@ -223,10 +456,32 @@ async function getDataApiDashboard(date) {
     date: workDate,
     generatedAt: new Date().toISOString(),
     stats,
-    buildings: Array.from(buildingMap.values()).sort((a, b) =>
-      a.building.localeCompare(b.building)
-    ),
-    rooms,
+    averages: {
+      averageCleaningMinutes: averageNumbers(cleaningDurations),
+      averageInspectionMinutes: averageNumbers(inspectionDurations),
+      cleaningSamples: cleaningDurations.length,
+      inspectionSamples: inspectionDurations.length,
+    },
+    payroll: {
+      total: numberValue(payrollResult.rows[0]?.total),
+    },
+    employees: {
+      active: activeEmployeeResult.rows[0]?.total || 0,
+      clockedIn: clockedInResult.rows,
+    },
+    alerts,
+    timeline: operationsResult.rows.slice(0, 40).map((event) => ({
+      ...event,
+      person:
+        event.employee ||
+        event.cleaner ||
+        event.inspector ||
+        "",
+      time: event.eventTime,
+      message: event.note || "",
+    })),
+    buildings,
+    rooms: enrichedRooms,
   };
 }
 
@@ -353,6 +608,7 @@ async function getDataApiBootstrap({
 module.exports = {
   cleanDate,
   classifyRoomStatus,
+  classifyOperationalBuilding,
   getDataApiHealth,
   listDataApiEmployees,
   listDataApiRooms,
