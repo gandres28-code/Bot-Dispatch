@@ -129,7 +129,7 @@ async function upsertPayrollRecord(record) {
       ) VALUES (
         NULLIF($1,''),$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'notion',$17::jsonb,NOW()
       )
-      ON CONFLICT (work_date, normalized_employee, unit, pay_type, role_worked)
+      ON CONFLICT (notion_id)
       DO UPDATE SET
         notion_id = EXCLUDED.notion_id,
         employee = EXCLUDED.employee,
