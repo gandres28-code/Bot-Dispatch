@@ -1674,6 +1674,100 @@ let selectedReportFiles = [];
 let selectedUnit = "";
 let selectedUnitStatus = "";
 let selectedUnitArrival = false;
+let cleanerDataSource = "postgres";
+
+function todayChicagoISO(){
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone:"America/Chicago",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit"
+  }).format(new Date());
+}
+
+function normalizePostgresCleanerRooms(data, cleanerName){
+  const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
+
+  return {
+    ok:true,
+    source:"postgres",
+    cleaner:cleanerName,
+    units:rooms.map(room => ({
+      id:room.id,
+      notionId:room.notionId || "",
+      unit:room.unit || room.roomNumber || "",
+      normalizedRoom:room.normalizedRoom || "",
+      roomType:room.roomType || "",
+      building:room.building || "OTHER",
+      status:room.status || "Pending",
+      statusGroup:room.statusGroup || "pending",
+      guestOut:Boolean(room.guestOut),
+      guestOutAt:room.guestOutAt || null,
+      urgent:Boolean(room.urgent),
+      arrival:Boolean(room.arrival),
+      assignedCleaner:room.assignedCleaner || "",
+      assignedCleaners:Array.isArray(room.assignedCleaners)
+        ? room.assignedCleaners
+        : [],
+      assignedInspector:room.assignedInspector || "",
+      assignedInspectors:Array.isArray(room.assignedInspectors)
+        ? room.assignedInspectors
+        : [],
+      startedAt:room.startedAt || null,
+      finishedAt:room.finishedAt || null,
+      inspectionStartedAt:room.inspectionStartedAt || null,
+      readyAt:room.readyAt || null,
+      preInspection:Boolean(room.preInspection),
+      preInspectionStarted:Boolean(room.preInspectionStarted)
+    }))
+  };
+}
+
+async function fetchCleanerAssignmentsPostgres(name){
+  const params = new URLSearchParams({
+    date:todayChicagoISO(),
+    employee:name,
+    role:"cleaner",
+    t:String(Date.now())
+  });
+
+  const url = `/api/v2/rooms?${params.toString()}`;
+
+  const response = await fetch(url, {
+    cache:"no-store",
+    headers:{
+      "Accept":"application/json"
+    }
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if(!response.ok || !data.ok){
+    throw new Error(
+      data.message ||
+      `PostgreSQL respondió con HTTP ${response.status}`
+    );
+  }
+
+  return normalizePostgresCleanerRooms(data, name);
+}
+
+async function fetchCleanerAssignmentsFallback(name){
+  const url = `/cleaner-assignments?name=${encodeURIComponent(name)}&t=${Date.now()}`;
+
+  const data = window.OS?.api
+    ? await OS.api.get(url)
+    : await fetch(url, { cache:"no-store" }).then(response => response.json());
+
+  if(!data.ok){
+    throw new Error(data.message || "No se pudieron cargar tus unidades");
+  }
+
+  return {
+    ...data,
+    source:"notion"
+  };
+}
 
 function normalizeRole(role){
   return String(role || "").trim().toLowerCase();
@@ -2033,39 +2127,61 @@ async function loadCleanerAssignments(forceRefresh = false){
     return null;
   }
 
-  // Evita que focus, visibilitychange y Socket.IO creen la misma solicitud a la vez.
+  // Evita solicitudes duplicadas desde focus, Socket.IO y visibilitychange.
   if(assignmentsRequest){
     return assignmentsRequest;
   }
 
-  // Durante unos segundos reutilizamos las unidades ya pintadas.
-  // El botón Actualizar y los eventos reales de Socket.IO pueden forzar la lectura.
+  // Conserva una ventana pequeña de caché para no golpear el servidor
+  // varias veces durante el mismo movimiento de la interfaz.
   const cacheAge = Date.now() - lastAssignmentsLoadedAt;
+
   if(!forceRefresh && cachedCleanerUnits.length && cacheAge < 12000){
     return {
       ok:true,
       cleaner:name,
       units:cachedCleanerUnits,
-      cached:true
+      cached:true,
+      source:cleanerDataSource
     };
   }
 
   if(forceRefresh || !cachedCleanerUnits.length){
-    assignmentsBox.innerHTML = "<div class='empty'>Cargando tus unidades...</div>";
+    assignmentsBox.innerHTML =
+      "<div class='empty'>Cargando tus unidades desde PostgreSQL...</div>";
   }
 
   assignmentsRequest = (async () => {
+    let data = null;
+    let postgresError = null;
+
     try{
-      const url = `/cleaner-assignments?name=${encodeURIComponent(name)}`;
-      const data = window.OS?.api
-        ? await OS.api.get(url)
-        : await fetch(url).then(response => response.json());
+      // FUENTE PRINCIPAL: Assignment Engine en PostgreSQL.
+      data = await fetchCleanerAssignmentsPostgres(name);
+      cleanerDataSource = "postgres";
+    }catch(error){
+      postgresError = error;
 
-      if(!data.ok){
-        throw new Error(data.message || "No se pudieron cargar tus unidades");
+      console.warn(
+        "Assignment Engine PostgreSQL no disponible. Usando fallback:",
+        error.message
+      );
+
+      try{
+        // SALVAVIDAS TEMPORAL: endpoint anterior basado en Notion.
+        data = await fetchCleanerAssignmentsFallback(name);
+        cleanerDataSource = "notion";
+      }catch(fallbackError){
+        throw new Error(
+          `PostgreSQL: ${postgresError.message}. ` +
+          `Fallback: ${fallbackError.message}`
+        );
       }
+    }
 
+    try{
       const units = Array.isArray(data.units) ? data.units : [];
+
       cachedCleanerUnits = units;
       lastAssignmentsLoadedAt = Date.now();
 
@@ -2073,13 +2189,33 @@ async function loadCleanerAssignments(forceRefresh = false){
       updateCleanerDashboard(units);
       renderCleanerAssignments(units);
 
-      // El historial se carga una vez al entrar. No se vuelve a pedir por cada refresco.
+      const cleanerLabel = document.getElementById("cleanerName");
+
+      if(cleanerLabel){
+        cleanerLabel.innerText =
+          `Cleaner: ${data.cleaner || name} · ` +
+          `${cleanerDataSource === "postgres" ? "PostgreSQL" : "Fallback Notion"}`;
+      }
+
+      if(cleanerDataSource === "notion"){
+        showBigStatus(
+          "PostgreSQL no respondió. Unidades cargadas temporalmente desde Notion.",
+          "error"
+        );
+      }
+
+      // El historial todavía usa su endpoint actual.
       if(!lastReportsLoadedAt){
         loadMyReports(false);
       }
 
       return data;
     }catch(error){
+      console.error("Error procesando unidades:", error);
+      throw error;
+    }
+  })()
+    .catch(error => {
       console.error("Error cargando unidades:", error);
 
       if(!cachedCleanerUnits.length){
@@ -2089,10 +2225,10 @@ async function loadCleanerAssignments(forceRefresh = false){
 
       showBigStatus(error.message || "Error cargando unidades", "error");
       return null;
-    }finally{
+    })
+    .finally(() => {
       assignmentsRequest = null;
-    }
-  })();
+    });
 
   return assignmentsRequest;
 }
@@ -2791,10 +2927,36 @@ function connectCleanerRealtime(){
   sharedSocket.off("assignments-updated", handleAssignmentsUpdated);
   sharedSocket.off("rooms-updated", handleAssignmentsUpdated);
   sharedSocket.off("room-updated", handleRoomUpdated);
+  sharedSocket.off("rooms-postgres-synced", handlePostgresRoomsSynced);
+  sharedSocket.off("data-api-updated", handleDataApiUpdated);
 
   sharedSocket.on("assignments-updated", handleAssignmentsUpdated);
   sharedSocket.on("rooms-updated", handleAssignmentsUpdated);
   sharedSocket.on("room-updated", handleRoomUpdated);
+  sharedSocket.on("rooms-postgres-synced", handlePostgresRoomsSynced);
+  sharedSocket.on("data-api-updated", handleDataApiUpdated);
+}
+
+function handlePostgresRoomsSynced(payload){
+  console.log("🐘 Rooms sincronizadas en PostgreSQL:", payload);
+
+  if(payload?.date && payload.date !== todayChicagoISO()){
+    return;
+  }
+
+  scheduleCleanerRealtimeRefresh();
+}
+
+function handleDataApiUpdated(payload){
+  if(payload?.module && payload.module !== "rooms" && payload.module !== "assignments"){
+    return;
+  }
+
+  if(payload?.date && payload.date !== todayChicagoISO()){
+    return;
+  }
+
+  scheduleCleanerRealtimeRefresh();
 }
 
 function handleAssignmentsUpdated(payload){
