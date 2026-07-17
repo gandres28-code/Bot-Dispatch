@@ -259,6 +259,103 @@ async function getPayrollSyncStatus(weekStart, weekEnd) {
   return result.rows[0] || null;
 }
 
+
+function mapPayrollPostgresToLegacy(record) {
+  return {
+    date: String(record?.work_date || record?.workDate || "").slice(0, 10),
+    cleaner: String(record?.employee || "").trim(),
+    unit: String(record?.unit || "").trim(),
+    roomType: String(record?.room_type || record?.roomType || "").trim(),
+    amount: roundMoney(record?.amount || 0),
+    notionId: record?.notion_id || record?.notionId || "",
+    payType: record?.pay_type || record?.payType || "unit",
+    roleWorked: record?.role_worked || record?.roleWorked || "Cleaner",
+  };
+}
+
+function payrollComparisonKey(record) {
+  return [
+    String(record?.date || record?.work_date || "").slice(0, 10),
+    normalizeEmployeeName(record?.cleaner || record?.employee || ""),
+    String(record?.unit || "").trim().toUpperCase(),
+    String(record?.payType || record?.pay_type || "unit").trim().toLowerCase(),
+    String(record?.roleWorked || record?.role_worked || "Cleaner").trim().toLowerCase(),
+  ].join("|");
+}
+
+function comparePayrollRecordSets(notionRecords = [], postgresRecords = []) {
+  const notionMap = new Map();
+  const postgresMap = new Map();
+
+  for (const record of notionRecords) {
+    notionMap.set(payrollComparisonKey(record), record);
+  }
+
+  for (const record of postgresRecords) {
+    const legacy = mapPayrollPostgresToLegacy(record);
+    postgresMap.set(payrollComparisonKey(legacy), legacy);
+  }
+
+  const missingInPostgres = [];
+  const extraInPostgres = [];
+  const amountMismatches = [];
+
+  for (const [key, notionRecord] of notionMap.entries()) {
+    const postgresRecord = postgresMap.get(key);
+
+    if (!postgresRecord) {
+      missingInPostgres.push(notionRecord);
+      continue;
+    }
+
+    const notionAmount = roundMoney(notionRecord.amount || 0);
+    const postgresAmount = roundMoney(postgresRecord.amount || 0);
+
+    if (notionAmount !== postgresAmount) {
+      amountMismatches.push({
+        key,
+        notion: notionRecord,
+        postgres: postgresRecord,
+        difference: roundMoney(postgresAmount - notionAmount),
+      });
+    }
+  }
+
+  for (const [key, postgresRecord] of postgresMap.entries()) {
+    if (!notionMap.has(key)) extraInPostgres.push(postgresRecord);
+  }
+
+  const notionTotal = roundMoney(
+    notionRecords.reduce((sum, record) => sum + Number(record.amount || 0), 0)
+  );
+  const postgresTotal = roundMoney(
+    postgresRecords.reduce((sum, record) => sum + Number(record.amount || 0), 0)
+  );
+
+  return {
+    matches:
+      missingInPostgres.length === 0 &&
+      extraInPostgres.length === 0 &&
+      amountMismatches.length === 0 &&
+      notionTotal === postgresTotal,
+    notion: {
+      count: notionRecords.length,
+      total: notionTotal,
+    },
+    postgres: {
+      count: postgresRecords.length,
+      total: postgresTotal,
+    },
+    difference: {
+      count: postgresRecords.length - notionRecords.length,
+      total: roundMoney(postgresTotal - notionTotal),
+    },
+    missingInPostgres,
+    extraInPostgres,
+    amountMismatches,
+  };
+}
+
 module.exports = {
   normalizeEmployeeName,
   getPayrollRecordFromNotionPage,
@@ -266,4 +363,6 @@ module.exports = {
   listPayrollPostgres,
   getPayrollSummaryPostgres,
   getPayrollSyncStatus,
+  mapPayrollPostgresToLegacy,
+  comparePayrollRecordSets,
 };
