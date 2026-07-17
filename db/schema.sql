@@ -446,3 +446,31 @@ VALUES ('004_central_event_engine')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS intelligence_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  work_date DATE NOT NULL UNIQUE,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  version TEXT NOT NULL DEFAULT '1.0.0',
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  total_units INTEGER NOT NULL DEFAULT 0,
+  ready_units INTEGER NOT NULL DEFAULT 0,
+  active_employees INTEGER NOT NULL DEFAULT 0,
+  estimated_remaining_minutes INTEGER NOT NULL DEFAULT 0,
+  payroll_actual NUMERIC(12,2) NOT NULL DEFAULT 0,
+  payroll_estimated NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS intelligence_snapshots_generated_idx
+ON intelligence_snapshots (generated_at DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('005_real_time_intelligence_engine')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
