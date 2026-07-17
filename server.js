@@ -47,6 +47,15 @@ const {
   listPayrollAudit,
 } = require("./services/payrollManagementService");
 
+const {
+  getDataApiHealth,
+  listDataApiEmployees,
+  listDataApiRooms,
+  getDataApiDashboard,
+  getDataApiPayrollWeek,
+  getDataApiBootstrap,
+} = require("./services/dataApiService");
+
 const server = http.createServer(app);
 
 // =========================================================
@@ -2338,6 +2347,12 @@ async function runRoomSync(reason = "manual", date = todayISO()) {
     };
 
     io.emit("rooms-postgres-synced", payload);
+    io.emit("data-api-updated", {
+      module: "rooms",
+      date,
+      reason,
+      updatedAt: payload.updatedAt,
+    });
 
     console.log("✅ Rooms sincronizados Notion → PostgreSQL:", {
       reason,
@@ -8608,6 +8623,128 @@ app.get("/cleaner-profile", (req, res) => {
 
 app.get("/statistics", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "statistics.html"));
+});
+
+
+
+// =========================================================
+// DATA API CENTRAL · POSTGRESQL FIRST · FASE 1
+// =========================================================
+// Estas rutas son la nueva fuente común para Dashboard, Cleaning,
+// Inspectores, Payroll y la futura app móvil. Los paneles anteriores
+// siguen funcionando mientras migramos uno por uno.
+app.get("/api/v2/health", async (req, res) => {
+  try {
+    res.json(await getDataApiHealth());
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      source: "postgres",
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/employees", async (req, res) => {
+  try {
+    const activeOnly = String(req.query.active || "1") !== "0";
+    const employees = await listDataApiEmployees({ activeOnly });
+
+    res.json({
+      ok: true,
+      source: "postgres",
+      count: employees.length,
+      employees,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/rooms", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const employee = String(req.query.employee || "").trim();
+    const role = String(req.query.role || "").trim();
+
+    const rooms = await listDataApiRooms({
+      date,
+      employee,
+      role,
+    });
+
+    res.json({
+      ok: true,
+      source: "postgres",
+      date,
+      count: rooms.length,
+      rooms,
+    });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/dashboard", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    res.json(await getDataApiDashboard(date));
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/payroll", async (req, res) => {
+  try {
+    const start = String(req.query.start || "").trim();
+    const end = String(req.query.end || "").trim();
+
+    res.json(
+      await getDataApiPayrollWeek({
+        start,
+        end,
+      })
+    );
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/bootstrap", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const employee = String(req.query.employee || "").trim();
+    const role = String(req.query.role || "").trim();
+    const weekStart = String(req.query.weekStart || "").trim();
+    const weekEnd = String(req.query.weekEnd || "").trim();
+
+    res.json(
+      await getDataApiBootstrap({
+        date,
+        employee,
+        role,
+        weekStart,
+        weekEnd,
+      })
+    );
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
 });
 
 
