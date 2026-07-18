@@ -788,30 +788,28 @@ function applyLocalInspectorAction(action,unit){
   const item=lastUnits.find(room=>String(room.unit||"")===String(unit||""));
   if(!item)return;
 
+  // Conserva la pestaña actual. Al terminar una unidad, la tarjeta sale de
+  // esa sección, pero el inspector permanece exactamente donde estaba.
+  const tabBeforeAction=activeTab;
+
   if(action==="PRE_INSPECTION_START"){
     item.preInspectionStarted=true;
-    activeTab="pre";
   }
 
   if(action==="PRE_INSPECTION_COMPLETE"){
     item.preInspectionStarted=false;
     item.preInspection=true;
-    // La unidad ya no pertenece a Pre inspección. Muéstrala en Vista general
-    // en vez de dejar una pantalla vacía que parezca que la tarjeta desapareció.
-    activeTab="general";
   }
 
   if(action==="INSPECTION_START"){
     item.status="Inspection Started";
-    activeTab="final";
   }
 
   if(action==="READY_GUEST"){
     item.status="Ready for Guest";
-    // Mantén visible el resultado final en la pestaña Completadas.
-    activeTab="completed";
   }
 
+  activeTab=tabBeforeAction;
   updateStats(lastUnits);
 
   document.querySelectorAll(".tab-btn").forEach(button=>{
