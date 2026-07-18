@@ -62,7 +62,7 @@
       <div class="list-menu">
         <button onclick="openDirectModule('Estadísticas','/statistics')">📈 Estadísticas</button>
         <button onclick="openOSModule('operations')">📄 Daily Report</button>
-        <button onclick="openOSModule('payroll')">💵 Payroll Excel</button>
+        <button onclick="openOSModule('payroll.html')">💵 Payroll Excel</button>
         <button onclick="openOSModule('operations')">🤖 Reportes IA</button>
       </div>
     </section>
@@ -75,7 +75,9 @@
 
       <div class="list-menu">
         <button onclick="openDirectModule('Habitaciones','/rooms-manager')">🏨 Habitaciones</button>
-        <button onclick="showComingSoon('Empleados')">👥 Empleados</button>
+        <button onclick="openDirectModule('Employee Center','/employee-center')">
+  👥 Empleados
+</button>
         <button onclick="showComingSoon('HotSOS')">🛠 HotSOS</button>
         <button onclick="showComingSoon('Configuración')">⚙️ Configuración</button>
         <button onclick="localStorage.clear(); OS.open('launch')">🚪 Cambiar usuario</button>
