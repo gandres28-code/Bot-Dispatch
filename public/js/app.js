@@ -12,7 +12,11 @@ let shellProtected = false;
 const DASHBOARD_CACHE_MS = 15000;
 const DASHBOARD_TIMEOUT_MS = 12000;
 
-async function fetchJsonWithTimeout(url, options = {}, timeoutMs = DASHBOARD_TIMEOUT_MS) {
+async function fetchJsonWithTimeout(
+  url,
+  options = {},
+  timeoutMs = DASHBOARD_TIMEOUT_MS
+) {
   if (window.OS && typeof OS.fetchJson === "function") {
     return OS.fetchJson(url, options);
   }
@@ -30,10 +34,24 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = DASHBOARD_TIM
       },
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    let data = {};
+
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = {
+        ok: false,
+        message: text || "Respuesta inválida del servidor",
+      };
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || `Error del servidor (${response.status})`);
+      throw new Error(
+        data.message ||
+        data.error ||
+        `Error del servidor (${response.status})`
+      );
     }
 
     return data;
@@ -119,20 +137,27 @@ function setFrameSource(frame, url, forceReload = false) {
   frame.src = url;
 }
 
+function setActiveNavButton(navButton = null) {
+  document
+    .querySelectorAll(".os-nav button")
+    .forEach(button => button.classList.remove("active"));
+
+  if (navButton) {
+    navButton.classList.add("active");
+  }
+}
+
 function showPage(pageId, subtitle, navButton) {
   document
     .querySelectorAll(".os-page")
     .forEach(page => page.classList.remove("active"));
 
   const page = document.getElementById(pageId);
-  if (page) page.classList.add("active");
+  if (page) {
+    page.classList.add("active");
+  }
 
-  document
-    .querySelectorAll(".os-nav button")
-    .forEach(button => button.classList.remove("active"));
-
-  if (navButton) navButton.classList.add("active");
-
+  setActiveNavButton(navButton);
   setText("pageSubtitle", subtitle);
   moduleReturnTarget = null;
 
@@ -148,6 +173,20 @@ function getOSModule(moduleName) {
   return OS.modules[moduleName] || null;
 }
 
+function canOpenModule(module) {
+  if (!module) return false;
+
+  if (module.permission === "public") {
+    return true;
+  }
+
+  if (!window.OS || typeof OS.can !== "function") {
+    return true;
+  }
+
+  return OS.can(module.permission) || OS.can("all");
+}
+
 function openOSModule(moduleName) {
   const module = getOSModule(moduleName);
 
@@ -157,17 +196,15 @@ function openOSModule(moduleName) {
     return;
   }
 
-  const hasAccess =
-    module.permission === "public" ||
-    OS.can(module.permission) ||
-    OS.can("all");
+  if (!canOpenModule(module)) {
+    if (window.OS?.notify) {
+      OS.notify({
+        type: "warning",
+        title: "Acceso denegado",
+        message: "No tienes permiso para abrir este módulo.",
+      });
+    }
 
-  if (!hasAccess) {
-    OS.notify({
-      type: "warning",
-      title: "Acceso denegado",
-      message: "No tienes permiso para abrir este módulo.",
-    });
     return;
   }
 
@@ -175,10 +212,20 @@ function openOSModule(moduleName) {
 }
 
 function openDirectModule(title, url) {
+  if (!url || !String(url).startsWith("/")) {
+    console.warn("URL de módulo inválida:", url);
+    return;
+  }
+
   openModule(title, url);
 }
 
 function openModule(title, url, options = {}) {
+  if (!url || !String(url).startsWith("/")) {
+    console.warn("No se pudo abrir el módulo:", title, url);
+    return;
+  }
+
   setText("moduleTitle", title);
   setText("moduleUrl", url);
 
@@ -190,15 +237,18 @@ function openModule(title, url, options = {}) {
     : null;
 
   const frame = document.getElementById("moduleFrame");
-  setFrameSource(frame, url);
+  setFrameSource(frame, url, Boolean(options.forceReload));
 
   document
     .querySelectorAll(".os-page")
     .forEach(page => page.classList.remove("active"));
 
   const modulePage = document.getElementById("modulePage");
-  if (modulePage) modulePage.classList.add("active");
+  if (modulePage) {
+    modulePage.classList.add("active");
+  }
 
+  setActiveNavButton(null);
   setText("pageSubtitle", title);
 }
 
@@ -206,36 +256,40 @@ function backToDashboard() {
   if (moduleReturnTarget) {
     const target = moduleReturnTarget;
     moduleReturnTarget = null;
+
     openModule(target.title, target.url);
     return;
   }
 
   const frame = document.getElementById("moduleFrame");
-  if (frame) frame.src = "about:blank";
+  if (frame) {
+    frame.src = "about:blank";
+  }
 
   document
     .querySelectorAll(".os-page")
     .forEach(page => page.classList.remove("active"));
 
   const dashboard = document.getElementById("dashboardPage");
-  if (dashboard) dashboard.classList.add("active");
+  if (dashboard) {
+    dashboard.classList.add("active");
+  }
 
   const dashboardFrame = document.getElementById("dashboardFrame");
   setFrameSource(dashboardFrame, "/dashboard.html");
 
-  document
-    .querySelectorAll(".os-nav button")
-    .forEach(button => button.classList.remove("active"));
-
   const homeButton = document.querySelector(".os-nav button");
-  if (homeButton) homeButton.classList.add("active");
+  setActiveNavButton(homeButton);
 
   setText("pageSubtitle", "Dashboard");
   scheduleDashboardRefresh(false, 0);
 }
 
 function showComingSoon(name) {
-  if (!window.OS || !OS.notify) return;
+  if (!window.OS || !OS.notify) {
+    alert(`${name} estará disponible próximamente en 417 Maid OS.`);
+    return;
+  }
 
   OS.notify({
     type: "info",
@@ -273,16 +327,25 @@ function protectAppShell() {
 function notifyOpsUpdate(event) {
   if (!window.OS || !OS.notify) return;
 
-  const unit = event?.unit || event?.room || "";
+  const unit =
+    event?.unit ||
+    event?.room ||
+    event?.roomName ||
+    event?.room_name ||
+    "";
+
   const employee =
     event?.employee ||
     event?.person ||
     event?.name ||
+    event?.updatedBy ||
+    event?.updated_by ||
     "Operación";
 
   const action = String(
     event?.action ||
     event?.type ||
+    event?.eventType ||
     "Nueva actividad"
   ).toUpperCase();
 
@@ -304,6 +367,9 @@ function notifyOpsUpdate(event) {
   } else if (action.includes("START")) {
     title = "Actividad iniciada";
     type = "info";
+  } else if (action.includes("ROOM_UPDATED")) {
+    title = "Habitación actualizada";
+    type = "info";
   }
 
   OS.notify({
@@ -321,13 +387,58 @@ function refreshDashboardFrame(event = null) {
 
   if (!contentWindow) return;
 
-  if (typeof contentWindow.applyRealtimeUpdate === "function" && event) {
+  if (
+    typeof contentWindow.applyRealtimeUpdate === "function" &&
+    event
+  ) {
     contentWindow.applyRealtimeUpdate(event);
     return;
   }
 
   if (typeof contentWindow.refreshAll === "function") {
     contentWindow.refreshAll();
+  }
+}
+
+function refreshOpenModule(eventName, payload) {
+  const moduleFrame = document.getElementById("moduleFrame");
+  const moduleUrl = moduleFrame?.getAttribute("src") || "";
+  const contentWindow = moduleFrame?.contentWindow;
+
+  if (!contentWindow || moduleUrl === "about:blank") {
+    return;
+  }
+
+  try {
+    if (
+      typeof contentWindow.applyRealtimeUpdate === "function"
+    ) {
+      contentWindow.applyRealtimeUpdate({
+        type: eventName,
+        ...(payload || {}),
+      });
+      return;
+    }
+
+    if (
+      moduleUrl.startsWith("/rooms-manager") &&
+      typeof contentWindow.loadRooms === "function"
+    ) {
+      contentWindow.loadRooms(false);
+      return;
+    }
+
+    if (typeof contentWindow.refreshAll === "function") {
+      contentWindow.refreshAll();
+    }
+  } catch (error) {
+    console.log("Module refresh error:", error.message);
+  }
+}
+
+function emitLocalEvent(name, payload) {
+  if (window.OSEvents) {
+    OSEvents.emit(name, payload);
   }
 }
 
@@ -348,11 +459,9 @@ function bindSocketEvents() {
       OSStore.push("timeline", event, 300);
     }
 
-    if (window.OSEvents) {
-      OSEvents.emit("ops-update", event);
-    }
-
+    emitLocalEvent("ops-update", event);
     refreshDashboardFrame(event);
+    refreshOpenModule("ops-update", event);
   });
 
   socket.on("system-notification", notification => {
@@ -367,23 +476,36 @@ function bindSocketEvents() {
 
   socket.on("assignments-updated", payload => {
     scheduleDashboardRefresh(true);
-
-    if (window.OSEvents) {
-      OSEvents.emit("assignments-updated", payload);
-    }
+    emitLocalEvent("assignments-updated", payload);
+    refreshOpenModule("assignments-updated", payload);
   });
 
   socket.on("rooms-updated", payload => {
     scheduleDashboardRefresh(true);
-
-    if (window.OSEvents) {
-      OSEvents.emit("rooms-updated", payload);
-    }
+    emitLocalEvent("rooms-updated", payload);
+    refreshDashboardFrame(payload);
+    refreshOpenModule("rooms-updated", payload);
   });
 
   socket.on("room-updated", payload => {
     scheduleDashboardRefresh(true);
+    emitLocalEvent("room-updated", payload);
     refreshDashboardFrame(payload);
+    refreshOpenModule("room-updated", payload);
+  });
+
+  socket.on("room-created", payload => {
+    scheduleDashboardRefresh(true);
+    emitLocalEvent("room-created", payload);
+    refreshDashboardFrame(payload);
+    refreshOpenModule("room-created", payload);
+  });
+
+  socket.on("room-deleted", payload => {
+    scheduleDashboardRefresh(true);
+    emitLocalEvent("room-deleted", payload);
+    refreshDashboardFrame(payload);
+    refreshOpenModule("room-deleted", payload);
   });
 }
 
@@ -402,6 +524,7 @@ window.addEventListener("message", event => {
   openModule(data.title || "Módulo", data.url, {
     returnTitle: data.returnTitle,
     returnUrl: data.returnUrl,
+    forceReload: Boolean(data.forceReload),
   });
 });
 
