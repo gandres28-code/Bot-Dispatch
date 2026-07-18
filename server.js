@@ -16,6 +16,7 @@ const {
   initializeDatabase,
   testDatabaseConnection,
   query: postgresQuery,
+  getPool,
 } = require("./db");
 const {
   syncEmployeesFromNotion,
@@ -9665,6 +9666,459 @@ app.post("/api/sync-queue/retry", async (req, res) => {
       ok: false,
       message: error.message,
     });
+  }
+});
+
+
+// =========================================================
+// ADMIN CENTER · ROOMS MANAGER
+// =========================================================
+app.get("/rooms-manager", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "rooms-manager.html"));
+});
+
+function adminRoomDate(value) {
+  const date = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayISO();
+}
+
+function adminRoomBoolean(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return fallback;
+}
+
+function adminRoomText(value, maxLength = 250) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function adminRoomJsonArray(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => adminRoomText(item, 120)).filter(Boolean))];
+  }
+
+  return [...new Set(
+    String(value || "")
+      .split(/[,;/\n]+/)
+      .map((item) => adminRoomText(item, 120))
+      .filter(Boolean)
+  )];
+}
+
+function adminRoomResponse(row) {
+  if (!row) return null;
+
+  return {
+    id: Number(row.id),
+    notionId: row.notion_id || "",
+    workDate: row.work_date,
+    roomNumber: row.room_number || "",
+    normalizedRoom: row.normalized_room || "",
+    roomType: row.room_type || "",
+    building: row.building || "OTHER",
+    cleaningStatus: row.cleaning_status || "",
+    guestOut: row.guest_out === true,
+    guestOutAt: row.guest_out_at || null,
+    urgent: row.urgent === true,
+    arrival: row.arrival === true,
+    assignedCleaner: row.assigned_cleaner || "",
+    assignedCleaners: Array.isArray(row.assigned_cleaners)
+      ? row.assigned_cleaners
+      : [],
+    assignedInspector: row.assigned_inspector || "",
+    assignedInspectors: Array.isArray(row.assigned_inspectors)
+      ? row.assigned_inspectors
+      : [],
+    startedAt: row.started_at || null,
+    finishedAt: row.finished_at || null,
+    inspectionStartedAt: row.inspection_started_at || null,
+    readyAt: row.ready_at || null,
+    preInspection: row.pre_inspection === true,
+    preInspectionStarted: row.pre_inspection_started === true,
+    preInspectionStartedAt: row.pre_inspection_started_at || null,
+    preInspectionCompletedAt: row.pre_inspection_completed_at || null,
+    source: row.source || "postgres",
+    updatedBy: row.updated_by || "",
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+function adminRoomSqlValue(value) {
+  if (value instanceof Date) return value.toISOString();
+  return value;
+}
+
+app.get("/api/admin/rooms", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado",
+      });
+    }
+
+    const workDate = adminRoomDate(req.query.date || req.query.workDate);
+    const search = adminRoomText(req.query.search, 120);
+    const status = adminRoomText(req.query.status, 120);
+    const building = adminRoomText(req.query.building, 30).toUpperCase();
+    const urgentOnly = adminRoomBoolean(req.query.urgent, false);
+    const arrivalOnly = adminRoomBoolean(req.query.arrival, false);
+
+    const where = ["work_date = $1"];
+    const values = [workDate];
+
+    if (search) {
+      values.push(`%${search}%`);
+      where.push(`(
+        room_number ILIKE $${values.length}
+        OR normalized_room ILIKE $${values.length}
+        OR assigned_cleaner ILIKE $${values.length}
+        OR assigned_inspector ILIKE $${values.length}
+      )`);
+    }
+
+    if (status && status.toLowerCase() !== "all") {
+      values.push(status);
+      where.push(`cleaning_status = $${values.length}`);
+    }
+
+    if (building && building !== "ALL") {
+      values.push(building);
+      where.push(`UPPER(building) = $${values.length}`);
+    }
+
+    if (urgentOnly) where.push("urgent = TRUE");
+    if (arrivalOnly) where.push("arrival = TRUE");
+
+    const result = await postgresQuery(
+      `SELECT *
+       FROM rooms
+       WHERE ${where.join(" AND ")}
+       ORDER BY
+         CASE WHEN urgent THEN 0 ELSE 1 END,
+         building ASC,
+         NULLIF(regexp_replace(normalized_room, '[^0-9]', '', 'g'), '')::INTEGER NULLS LAST,
+         normalized_room ASC`,
+      values
+    );
+
+    const rooms = result.rows.map(adminRoomResponse);
+    const statuses = [...new Set(rooms.map((room) => room.cleaningStatus).filter(Boolean))].sort();
+    const buildings = [...new Set(rooms.map((room) => room.building).filter(Boolean))].sort();
+
+    return res.json({
+      ok: true,
+      workDate,
+      count: rooms.length,
+      rooms,
+      filters: { statuses, buildings },
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("GET /api/admin/rooms ERROR:", error);
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/admin/rooms/:id/history", async (req, res) => {
+  try {
+    const roomId = Number(req.params.id);
+
+    if (!Number.isInteger(roomId) || roomId <= 0) {
+      return res.status(400).json({ ok: false, message: "ID de habitación inválido" });
+    }
+
+    const result = await postgresQuery(
+      `SELECT *
+       FROM admin_audit_logs
+       WHERE entity_type = 'room'
+         AND entity_id = $1
+       ORDER BY created_at DESC
+       LIMIT 200`,
+      [String(roomId)]
+    );
+
+    return res.json({
+      ok: true,
+      roomId,
+      count: result.rows.length,
+      history: result.rows,
+    });
+  } catch (error) {
+    console.error("GET /api/admin/rooms/:id/history ERROR:", error);
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/admin/rooms/:id", async (req, res) => {
+  try {
+    const roomId = Number(req.params.id);
+
+    if (!Number.isInteger(roomId) || roomId <= 0) {
+      return res.status(400).json({ ok: false, message: "ID de habitación inválido" });
+    }
+
+    const result = await postgresQuery(
+      "SELECT * FROM rooms WHERE id = $1 LIMIT 1",
+      [roomId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ ok: false, message: "Habitación no encontrada" });
+    }
+
+    return res.json({
+      ok: true,
+      room: adminRoomResponse(result.rows[0]),
+    });
+  } catch (error) {
+    console.error("GET /api/admin/rooms/:id ERROR:", error);
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.patch("/api/admin/rooms/:id", async (req, res) => {
+  const roomId = Number(req.params.id);
+
+  if (!Number.isInteger(roomId) || roomId <= 0) {
+    return res.status(400).json({ ok: false, message: "ID de habitación inválido" });
+  }
+
+  const allowedFields = {
+    roomNumber: "room_number",
+    roomType: "room_type",
+    building: "building",
+    cleaningStatus: "cleaning_status",
+    guestOut: "guest_out",
+    guestOutAt: "guest_out_at",
+    urgent: "urgent",
+    arrival: "arrival",
+    assignedCleaner: "assigned_cleaner",
+    assignedCleaners: "assigned_cleaners",
+    assignedInspector: "assigned_inspector",
+    assignedInspectors: "assigned_inspectors",
+    preInspection: "pre_inspection",
+    preInspectionStarted: "pre_inspection_started",
+    preInspectionStartedAt: "pre_inspection_started_at",
+    preInspectionCompletedAt: "pre_inspection_completed_at",
+  };
+
+  const booleanFields = new Set([
+    "guestOut",
+    "urgent",
+    "arrival",
+    "preInspection",
+    "preInspectionStarted",
+  ]);
+
+  const dateFields = new Set([
+    "guestOutAt",
+    "preInspectionStartedAt",
+    "preInspectionCompletedAt",
+  ]);
+
+  const arrayFields = new Set(["assignedCleaners", "assignedInspectors"]);
+  const actor = adminRoomText(
+    req.body?.updatedBy || req.body?.changedBy || req.headers["x-admin-name"] || "Admin",
+    120
+  ) || "Admin";
+  const actorId = adminRoomText(
+    req.body?.updatedById || req.body?.changedById || req.headers["x-admin-id"] || "",
+    120
+  );
+
+  const requested = Object.entries(allowedFields).filter(([apiField]) =>
+    Object.prototype.hasOwnProperty.call(req.body || {}, apiField)
+  );
+
+  if (!requested.length) {
+    return res.status(400).json({
+      ok: false,
+      message: "No se recibió ningún campo permitido para actualizar",
+    });
+  }
+
+  let client;
+
+  try {
+    client = await getPool().connect();
+    await client.query("BEGIN");
+
+    const currentResult = await client.query(
+      "SELECT * FROM rooms WHERE id = $1 FOR UPDATE",
+      [roomId]
+    );
+    const current = currentResult.rows[0];
+
+    if (!current) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: "Habitación no encontrada" });
+    }
+
+    const assignments = [];
+    const values = [];
+    const changes = [];
+
+    for (const [apiField, column] of requested) {
+      let nextValue = req.body[apiField];
+
+      if (booleanFields.has(apiField)) {
+        nextValue = adminRoomBoolean(nextValue, current[column] === true);
+      } else if (arrayFields.has(apiField)) {
+        nextValue = adminRoomJsonArray(nextValue);
+      } else if (dateFields.has(apiField)) {
+        const raw = String(nextValue ?? "").trim();
+        if (!raw) {
+          nextValue = null;
+        } else {
+          const parsed = new Date(raw);
+          if (Number.isNaN(parsed.getTime())) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+              ok: false,
+              message: `${apiField} contiene una fecha inválida`,
+            });
+          }
+          nextValue = parsed.toISOString();
+        }
+      } else {
+        nextValue = adminRoomText(nextValue, apiField === "roomNumber" ? 180 : 250);
+        if (apiField === "building") nextValue = nextValue.toUpperCase() || "OTHER";
+      }
+
+      const oldComparable = JSON.stringify(adminRoomSqlValue(current[column]));
+      const newComparable = JSON.stringify(adminRoomSqlValue(nextValue));
+
+      if (oldComparable === newComparable) continue;
+
+      values.push(arrayFields.has(apiField) ? JSON.stringify(nextValue) : nextValue);
+      assignments.push(
+        `${column} = $${values.length}${arrayFields.has(apiField) ? "::jsonb" : ""}`
+      );
+      changes.push({
+        apiField,
+        column,
+        oldValue: current[column],
+        newValue: nextValue,
+      });
+    }
+
+    if (!changes.length) {
+      await client.query("ROLLBACK");
+      return res.json({
+        ok: true,
+        unchanged: true,
+        room: adminRoomResponse(current),
+        message: "No había cambios nuevos para guardar",
+      });
+    }
+
+    values.push(actor);
+    assignments.push(`updated_by = $${values.length}`);
+    assignments.push("updated_at = NOW()");
+    values.push(roomId);
+
+    const updatedResult = await client.query(
+      `UPDATE rooms
+       SET ${assignments.join(", ")}
+       WHERE id = $${values.length}
+       RETURNING *`,
+      values
+    );
+
+    for (const change of changes) {
+      await client.query(
+        `INSERT INTO admin_audit_logs (
+          entity_type,
+          entity_id,
+          action,
+          field_name,
+          old_value,
+          new_value,
+          changed_by,
+          changed_by_id,
+          work_date,
+          metadata
+        ) VALUES (
+          'room', $1, 'update', $2, $3::jsonb, $4::jsonb,
+          $5, $6, $7, $8::jsonb
+        )`,
+        [
+          String(roomId),
+          change.apiField,
+          JSON.stringify(change.oldValue ?? null),
+          JSON.stringify(change.newValue ?? null),
+          actor,
+          actorId,
+          current.work_date,
+          JSON.stringify({
+            column: change.column,
+            source: "rooms-manager",
+          }),
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const room = adminRoomResponse(updatedResult.rows[0]);
+    clearRoomCache(String(room.workDate).slice(0, 10));
+    clearAssignmentCaches(String(room.workDate).slice(0, 10));
+
+    const payload = {
+      reason: "admin-room-update",
+      roomId: room.id,
+      workDate: room.workDate,
+      room,
+      changedFields: changes.map((change) => change.apiField),
+      updatedBy: actor,
+      timestamp: new Date().toISOString(),
+    };
+
+    io.emit("room-updated", payload);
+    io.emit("rooms-updated", payload);
+    io.emit("assignments-updated", payload);
+
+    setImmediate(() => {
+      Promise.resolve()
+        .then(() => IntelligenceEngine.refresh(String(room.workDate).slice(0, 10), "admin-room-update"))
+        .then(() => AIOperationsDirector.generate(String(room.workDate).slice(0, 10), {
+          reason: "admin-room-update",
+        }))
+        .catch((error) => {
+          console.error("ADMIN ROOM BACKGROUND INTELLIGENCE ERROR:", error.message);
+        });
+    });
+
+    return res.json({
+      ok: true,
+      room,
+      changedFields: payload.changedFields,
+      message: "Habitación actualizada correctamente",
+    });
+  } catch (error) {
+    if (client) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+    }
+
+    if (error?.code === "23505") {
+      return res.status(409).json({
+        ok: false,
+        message: "Ya existe otra habitación con ese número para la misma fecha",
+      });
+    }
+
+    console.error("PATCH /api/admin/rooms/:id ERROR:", error);
+    return res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    client?.release?.();
   }
 });
 
