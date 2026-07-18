@@ -474,3 +474,32 @@ VALUES ('005_real_time_intelligence_engine')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS ai_director_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  work_date DATE NOT NULL UNIQUE,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  version TEXT NOT NULL DEFAULT '1.0.0',
+  operation_score INTEGER NOT NULL DEFAULT 0,
+  operation_grade TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  recommendations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ai_director_generated_idx
+ON ai_director_snapshots (generated_at DESC);
+
+CREATE INDEX IF NOT EXISTS ai_director_score_idx
+ON ai_director_snapshots (work_date, operation_score);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('006_ai_operations_director')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
