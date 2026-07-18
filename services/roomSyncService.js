@@ -170,106 +170,193 @@ async function upsertRoom(room) {
     };
   }
 
-  const result = await query(
+  const notionId = String(room.notionId || "").trim();
+
+  const matches = await query(
     `
-      INSERT INTO rooms (
+      SELECT
+        id,
         notion_id,
         work_date,
-        room_number,
-        normalized_room,
-        room_type,
-        building,
-        cleaning_status,
-        guest_out,
-        guest_out_at,
-        urgent,
-        arrival,
-        assigned_cleaner,
-        assigned_cleaners,
-        assigned_inspector,
-        assigned_inspectors,
-        started_at,
-        finished_at,
-        inspection_started_at,
-        ready_at,
-        source,
-        raw_data,
-        updated_at
-      )
-      VALUES (
-        NULLIF($1, ''),
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8,
-        $9,
-        $10,
-        $11,
-        $12,
-        $13::jsonb,
-        $14,
-        $15::jsonb,
-        $16,
-        $17,
-        $18,
-        $19,
-        'notion',
-        $20::jsonb,
-        NOW()
-      )
-      ON CONFLICT (work_date, normalized_room)
-      DO UPDATE SET
-        notion_id = EXCLUDED.notion_id,
-        room_number = EXCLUDED.room_number,
-        room_type = EXCLUDED.room_type,
-        building = EXCLUDED.building,
-        cleaning_status = EXCLUDED.cleaning_status,
-        guest_out = EXCLUDED.guest_out,
-        guest_out_at = EXCLUDED.guest_out_at,
-        urgent = EXCLUDED.urgent,
-        arrival = EXCLUDED.arrival,
-        assigned_cleaner = EXCLUDED.assigned_cleaner,
-        assigned_cleaners = EXCLUDED.assigned_cleaners,
-        assigned_inspector = EXCLUDED.assigned_inspector,
-        assigned_inspectors = EXCLUDED.assigned_inspectors,
-        started_at = EXCLUDED.started_at,
-        finished_at = EXCLUDED.finished_at,
-        inspection_started_at = EXCLUDED.inspection_started_at,
-        ready_at = EXCLUDED.ready_at,
-        source = 'notion',
-        raw_data = EXCLUDED.raw_data,
-        updated_at = NOW()
-      RETURNING *
+        normalized_room
+      FROM rooms
+      WHERE
+        (
+          $1 <> ''
+          AND notion_id = $1
+        )
+        OR (
+          work_date = $2::date
+          AND normalized_room = $3
+        )
+      ORDER BY
+        CASE
+          WHEN $1 <> '' AND notion_id = $1 THEN 0
+          ELSE 1
+        END,
+        id
     `,
     [
-      room.notionId,
+      notionId,
       room.workDate,
-      room.roomNumber,
       room.normalizedRoom,
-      room.roomType,
-      room.building,
-      room.cleaningStatus,
-      room.guestOut,
-      room.guestOutAt,
-      room.urgent,
-      room.arrival,
-      room.assignedCleaner,
-      JSON.stringify(room.assignedCleaners),
-      room.assignedInspector,
-      JSON.stringify(room.assignedInspectors),
-      room.startedAt,
-      room.finishedAt,
-      room.inspectionStartedAt,
-      room.readyAt,
-      JSON.stringify(room.rawData || {}),
     ]
   );
 
+  let target = matches.rows[0] || null;
+  const duplicateRows = target
+    ? matches.rows.filter(
+        (candidate) => String(candidate.id) !== String(target.id)
+      )
+    : [];
+
+  /*
+   * Puede existir un registro viejo con el mismo notion_id y otro
+   * registro con la misma fecha + habitación. Antes, el UPSERT por
+   * fecha intentaba copiar el notion_id y PostgreSQL rechazaba el
+   * cambio por rooms_notion_id_key.
+   *
+   * Conservamos un solo registro canónico y eliminamos únicamente
+   * los duplicados de Rooms. Assignments usa ON DELETE CASCADE y se
+   * reconstruye inmediatamente después de este UPSERT.
+   */
+  if (duplicateRows.length) {
+    const duplicateIds = duplicateRows.map((item) => item.id);
+
+    console.warn("ROOM SYNC DUPLICATE MERGE:", {
+      unit: room.roomNumber,
+      workDate: room.workDate,
+      notionId,
+      keepingRoomId: target.id,
+      removingRoomIds: duplicateIds,
+    });
+
+    await query(
+      `
+        DELETE FROM rooms
+        WHERE id = ANY($1::bigint[])
+      `,
+      [duplicateIds]
+    );
+  }
+
+  const values = [
+    notionId,
+    room.workDate,
+    room.roomNumber,
+    room.normalizedRoom,
+    room.roomType,
+    room.building,
+    room.cleaningStatus,
+    room.guestOut,
+    room.guestOutAt,
+    room.urgent,
+    room.arrival,
+    room.assignedCleaner,
+    JSON.stringify(room.assignedCleaners),
+    room.assignedInspector,
+    JSON.stringify(room.assignedInspectors),
+    room.startedAt,
+    room.finishedAt,
+    room.inspectionStartedAt,
+    room.readyAt,
+    JSON.stringify(room.rawData || {}),
+  ];
+
+  let result;
+
+  if (target) {
+    result = await query(
+      `
+        UPDATE rooms
+        SET
+          notion_id = NULLIF($1, ''),
+          work_date = $2::date,
+          room_number = $3,
+          normalized_room = $4,
+          room_type = $5,
+          building = $6,
+          cleaning_status = $7,
+          guest_out = $8,
+          guest_out_at = $9,
+          urgent = $10,
+          arrival = $11,
+          assigned_cleaner = $12,
+          assigned_cleaners = $13::jsonb,
+          assigned_inspector = $14,
+          assigned_inspectors = $15::jsonb,
+          started_at = $16,
+          finished_at = $17,
+          inspection_started_at = $18,
+          ready_at = $19,
+          source = 'notion',
+          raw_data = $20::jsonb,
+          updated_at = NOW()
+        WHERE id = $21
+        RETURNING *
+      `,
+      [...values, target.id]
+    );
+  } else {
+    result = await query(
+      `
+        INSERT INTO rooms (
+          notion_id,
+          work_date,
+          room_number,
+          normalized_room,
+          room_type,
+          building,
+          cleaning_status,
+          guest_out,
+          guest_out_at,
+          urgent,
+          arrival,
+          assigned_cleaner,
+          assigned_cleaners,
+          assigned_inspector,
+          assigned_inspectors,
+          started_at,
+          finished_at,
+          inspection_started_at,
+          ready_at,
+          source,
+          raw_data,
+          updated_at
+        )
+        VALUES (
+          NULLIF($1, ''),
+          $2::date,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13::jsonb,
+          $14,
+          $15::jsonb,
+          $16,
+          $17,
+          $18,
+          $19,
+          'notion',
+          $20::jsonb,
+          NOW()
+        )
+        RETURNING *
+      `,
+      values
+    );
+  }
+
   return {
     saved: true,
+    mergedDuplicates: duplicateRows.length,
     room: result.rows[0],
   };
 }
@@ -405,18 +492,41 @@ async function syncRoomsFromNotion({
 
     let saved = 0;
     let skipped = 0;
+    let mergedDuplicates = 0;
+    const errors = [];
 
     for (const page of pages) {
       const room = getRoomFromNotionPage(page, date);
-      const result = await upsertRoom(room);
 
-      if (!result.saved) {
-        skipped += 1;
-        continue;
+      try {
+        const result = await upsertRoom(room);
+
+        if (!result.saved) {
+          skipped += 1;
+          continue;
+        }
+
+        await replaceAssignmentsForRoom(result.room, room);
+
+        saved += 1;
+        mergedDuplicates += Number(
+          result.mergedDuplicates || 0
+        );
+      } catch (roomError) {
+        errors.push({
+          notionId: room.notionId,
+          unit: room.roomNumber,
+          normalizedRoom: room.normalizedRoom,
+          message: roomError.message,
+        });
+
+        console.error("ROOM SYNC ITEM ERROR:", {
+          notionId: room.notionId,
+          unit: room.roomNumber,
+          normalizedRoom: room.normalizedRoom,
+          message: roomError.message,
+        });
       }
-
-      await replaceAssignmentsForRoom(result.room, room);
-      saved += 1;
     }
 
     await query(
@@ -440,6 +550,8 @@ async function syncRoomsFromNotion({
           totalFromNotion: pages.length,
           saved,
           skipped,
+          mergedDuplicates,
+          errors,
           durationMs: Date.now() - startedAt,
         }),
       ]
@@ -451,6 +563,8 @@ async function syncRoomsFromNotion({
       totalFromNotion: pages.length,
       saved,
       skipped,
+      mergedDuplicates,
+      errors,
       durationMs: Date.now() - startedAt,
     };
   } catch (error) {
