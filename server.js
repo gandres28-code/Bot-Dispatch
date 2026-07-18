@@ -933,6 +933,9 @@ app.get("/app", (req, res) => {
 app.get("/employee-center", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "employee-center.html"));
 });
+app.get("/employee-profile", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "employee-profile.html"));
+});
 app.get("/payroll", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "payroll.html"));
 });
