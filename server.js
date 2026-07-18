@@ -929,6 +929,9 @@ app.get("/launch", (req, res) => {
 });
 app.get("/app", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "app.html"));
+ }); 
+app.get("/employee-center", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "employee-center.html"));
 });
 app.get("/payroll", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "payroll.html"));
