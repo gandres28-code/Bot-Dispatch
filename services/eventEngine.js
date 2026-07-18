@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { getPool, query } = require("../db");
 
-const EVENT_ENGINE_VERSION = "1.0.0";
+const EVENT_ENGINE_VERSION = "1.1.0-ultra";
 
 const ROOM_STATUS_BY_ACTION = {
   START: "In Progress",
@@ -646,6 +646,9 @@ function createEventEngine({
 
     try {
       await client.query("BEGIN");
+      // Fail fast instead of freezing a phone while PostgreSQL waits on a locked room.
+      await client.query("SET LOCAL lock_timeout = '1500ms'");
+      await client.query("SET LOCAL statement_timeout = '5000ms'");
 
       const existingResult = await client.query(
         `
@@ -927,36 +930,30 @@ function createEventEngine({
         }
       }
 
-      try {
-        await Promise.resolve(
+      // Never keep the HTTP request open for dashboard, AI, notifications or other hooks.
+      // PostgreSQL is already committed at this point, so callbacks run safely in background.
+      setImmediate(() => {
+        Promise.resolve(
           onPublished({
             event: eventResult.rows[0],
             payload: eventPayload,
             room: updatedRoom,
           })
-        );
-      } catch (callbackError) {
-        console.error(
-          "EVENT ENGINE onPublished ERROR:",
-          callbackError.message
-        );
-      }
+        ).catch((callbackError) => {
+          console.error("EVENT ENGINE onPublished ERROR:", callbackError.message);
+        });
 
-      try {
-        await Promise.resolve(
+        Promise.resolve(
           onEventCommitted({
             event: eventResult.rows[0],
             payload: eventPayload,
             room: updatedRoom,
             workDate,
           })
-        );
-      } catch (callbackError) {
-        console.error(
-          "EVENT ENGINE onEventCommitted ERROR:",
-          callbackError.message
-        );
-      }
+        ).catch((callbackError) => {
+          console.error("EVENT ENGINE onEventCommitted ERROR:", callbackError.message);
+        });
+      });
 
       return {
         ok: true,
