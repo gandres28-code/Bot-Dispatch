@@ -4916,6 +4916,77 @@ console.log(
   EventEngine.version
 );
 
+// =========================================================
+// ULTRA PERFORMANCE · NON-BLOCKING BACKGROUND WORK
+// =========================================================
+function runDetached(label, task) {
+  setImmediate(() => {
+    Promise.resolve()
+      .then(task)
+      .catch((error) => {
+        console.error(`BACKGROUND ${label} ERROR:`, error.message);
+      });
+  });
+}
+
+function queueLegacyActionFallback({
+  action,
+  unit,
+  name,
+  note = "",
+  photoUrl = "",
+  role = "Cleaner",
+}) {
+  runDetached(`${role}:${action}:${unit}`, async () => {
+    await updateNotionRoom(
+      unit,
+      action,
+      name,
+      note,
+      role.toLowerCase(),
+      photoUrl
+    );
+
+    try {
+      await insertOperationalEventPostgres({
+        action,
+        unit,
+        employee: name,
+        role,
+        note,
+        photoUrl,
+        category: ["ISSUE", "INSPECTION_REPORT", "LOST_FOUND"].includes(action)
+          ? "Problem"
+          : ["SUPPLIES", "INSPECTION_SUPPLIES"].includes(action)
+            ? "Supplies"
+            : role === "Inspector"
+              ? "Inspection"
+              : "Other",
+        priority: ["ISSUE", "INSPECTION_REPORT"].includes(action)
+          ? "High"
+          : "Normal",
+        source: "notion-fallback-background",
+      });
+    } catch (logError) {
+      console.error("POSTGRES BACKGROUND FALLBACK LOG ERROR:", logError.message);
+    }
+
+    runRoomSync("background-action-fallback", todayISO()).catch((error) => {
+      console.error("ROOM SYNC AFTER BACKGROUND FALLBACK ERROR:", error.message);
+    });
+
+    broadcastOpsUpdate({
+      type: "action",
+      action,
+      unit,
+      employee: name,
+      message: note || "",
+      source: "notion-fallback-background",
+    });
+  });
+}
+
+
 app.get("/api/event-engine/status", async (req, res) => {
   try {
     return res.json(await EventEngine.getStatus());
@@ -5275,15 +5346,7 @@ function syncOperationalActionToNotionInBackground({
 
 app.post("/action", async (req, res) => {
   try {
-    const {
-      action,
-      unit,
-      note,
-      name,
-      photoUrl,
-      eventId,
-      requestId,
-    } = req.body;
+    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -5292,21 +5355,12 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    if (
-      ["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(action) &&
-      !String(note || "").trim()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Debes escribir una nota",
-      });
+    if (["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(action) && !String(note || "").trim()) {
+      return res.status(400).json({ success: false, message: "Debes escribir una nota" });
     }
 
-    let eventResult = null;
-    let source = "postgres";
-
     try {
-      eventResult = await EventEngine.publish({
+      const eventResult = await EventEngine.publish({
         eventId,
         requestId,
         action,
@@ -5316,12 +5370,24 @@ app.post("/action", async (req, res) => {
         note,
         photoUrl,
       });
+
+      if (action === "DONE") {
+        runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
+      }
+
+      return res.json({
+        success: true,
+        source: "postgres",
+        eventId: eventResult?.eventId || "",
+        duplicate: Boolean(eventResult?.duplicate),
+        postgresUpdated: true,
+        notionSync: "queued",
+        payroll: eventResult?.payroll || null,
+        status: eventResult?.status || notionStatusFromAction(action) || "",
+        message: `Enviado correctamente: ${actionLabel(action)} - ${unit}`,
+      });
     } catch (postgresError) {
-      source = "notion";
-      console.error(
-        "⚠️ Event Engine falló. Usando fallback Notion:",
-        postgresError.message
-      );
+      console.error("⚠️ Event Engine cleaner falló; fallback en background:", postgresError.message);
 
       if (isDuplicateAction(action, unit, name)) {
         return res.status(400).json({
@@ -5330,99 +5396,29 @@ app.post("/action", async (req, res) => {
         });
       }
 
-      await updateNotionRoom(
-        unit,
-        action,
-        name,
-        note,
-        "cleaner",
-        photoUrl
-      );
+      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Cleaner" });
 
-      try {
-        await insertOperationalEventPostgres({
-          action,
-          unit,
-          employee: name,
-          role: "Cleaner",
-          note,
-          photoUrl,
-          category: ["ISSUE", "LOST_FOUND"].includes(action)
-            ? "Problem"
-            : action === "SUPPLIES"
-              ? "Supplies"
-              : "Other",
-          priority: action === "ISSUE" ? "High" : "Normal",
-          source: "notion-fallback",
-        });
-      } catch (logError) {
-        console.error(
-          "POSTGRES OPERATIONS LOG FALLBACK ERROR:",
-          logError.message
-        );
-      }
-
-      runRoomSync("action-fallback", todayISO()).catch((error) => {
-        console.error(
-          "ROOM SYNC AFTER FALLBACK ERROR:",
-          error.message
-        );
-      });
-
-      broadcastOpsUpdate({
-        type: "action",
-        action,
-        unit,
-        employee: name,
-        message: note || "",
-        source,
+      return res.status(202).json({
+        success: true,
+        accepted: true,
+        source: "background-fallback",
+        eventId: eventId || requestId || "",
+        duplicate: false,
+        postgresUpdated: false,
+        notionSync: "processing",
+        status: notionStatusFromAction(action) || "",
+        message: `Acción recibida y procesándose: ${actionLabel(action)} - ${unit}`,
       });
     }
-
-    if (action === "DONE") {
-      notifyInspectors(unit).catch((error) => {
-        console.error(
-          "Error notificando inspectores:",
-          error.message
-        );
-      });
-    }
-
-    return res.json({
-      success: true,
-      source,
-      eventId: eventResult?.eventId || "",
-      duplicate: Boolean(eventResult?.duplicate),
-      postgresUpdated: source === "postgres",
-      notionSync:
-        source === "postgres" ? "queued" : "completed",
-      payroll: eventResult?.payroll || null,
-      status:
-        eventResult?.status ||
-        notionStatusFromAction(action) ||
-        "",
-      message: `Enviado correctamente: ${actionLabel(action)} - ${unit}`,
-    });
   } catch (error) {
     console.error("Error en /action:", error.message);
-    return res.status(500).json({
-      success: false,
-      message: `Error: ${error.message}`,
-    });
+    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
   }
 });
 
 app.post("/inspector-action", async (req, res) => {
   try {
-    const {
-      action,
-      unit,
-      note,
-      name,
-      photoUrl,
-      eventId,
-      requestId,
-    } = req.body;
+    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -5431,25 +5427,12 @@ app.post("/inspector-action", async (req, res) => {
       });
     }
 
-    if (
-      [
-        "INSPECTION_REPORT",
-        "INSPECTION_SUPPLIES",
-        "LOST_FOUND",
-      ].includes(action) &&
-      !String(note || "").trim()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Debes escribir una nota",
-      });
+    if (["INSPECTION_REPORT", "INSPECTION_SUPPLIES", "LOST_FOUND"].includes(action) && !String(note || "").trim()) {
+      return res.status(400).json({ success: false, message: "Debes escribir una nota" });
     }
 
-    let eventResult = null;
-    let source = "postgres";
-
     try {
-      eventResult = await EventEngine.publish({
+      const eventResult = await EventEngine.publish({
         eventId,
         requestId,
         action,
@@ -5459,12 +5442,19 @@ app.post("/inspector-action", async (req, res) => {
         note,
         photoUrl,
       });
+
+      return res.json({
+        success: true,
+        source: "postgres",
+        eventId: eventResult?.eventId || "",
+        duplicate: Boolean(eventResult?.duplicate),
+        postgresUpdated: true,
+        notionSync: "queued",
+        status: eventResult?.status || notionStatusFromAction(action) || "",
+        message: `Inspector: ${actionLabel(action)} - ${unit}`,
+      });
     } catch (postgresError) {
-      source = "notion";
-      console.error(
-        "⚠️ Event Engine inspector falló. Usando fallback Notion:",
-        postgresError.message
-      );
+      console.error("⚠️ Event Engine inspector falló; fallback en background:", postgresError.message);
 
       if (isDuplicateAction(action, unit, name)) {
         return res.status(400).json({
@@ -5473,84 +5463,23 @@ app.post("/inspector-action", async (req, res) => {
         });
       }
 
-      await updateNotionRoom(
-        unit,
-        action,
-        name,
-        note,
-        "inspector",
-        photoUrl
-      );
+      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Inspector" });
 
-      try {
-        await insertOperationalEventPostgres({
-          action,
-          unit,
-          employee: name,
-          role: "Inspector",
-          note,
-          photoUrl,
-          category: [
-            "INSPECTION_REPORT",
-            "LOST_FOUND",
-          ].includes(action)
-            ? "Problem"
-            : action === "INSPECTION_SUPPLIES"
-              ? "Supplies"
-              : "Inspection",
-          priority:
-            action === "INSPECTION_REPORT"
-              ? "High"
-              : "Normal",
-          source: "notion-fallback",
-        });
-      } catch (logError) {
-        console.error(
-          "POSTGRES INSPECTOR LOG FALLBACK ERROR:",
-          logError.message
-        );
-      }
-
-      runRoomSync(
-        "inspector-action-fallback",
-        todayISO()
-      ).catch((error) => {
-        console.error(
-          "ROOM SYNC AFTER INSPECTOR FALLBACK ERROR:",
-          error.message
-        );
-      });
-
-      broadcastOpsUpdate({
-        type: "action",
-        action,
-        unit,
-        employee: name,
-        message: note || "",
-        source,
+      return res.status(202).json({
+        success: true,
+        accepted: true,
+        source: "background-fallback",
+        eventId: eventId || requestId || "",
+        duplicate: false,
+        postgresUpdated: false,
+        notionSync: "processing",
+        status: notionStatusFromAction(action) || "",
+        message: `Inspector: acción recibida y procesándose - ${unit}`,
       });
     }
-
-    return res.json({
-      success: true,
-      source,
-      eventId: eventResult?.eventId || "",
-      duplicate: Boolean(eventResult?.duplicate),
-      postgresUpdated: source === "postgres",
-      notionSync:
-        source === "postgres" ? "queued" : "completed",
-      status:
-        eventResult?.status ||
-        notionStatusFromAction(action) ||
-        "",
-      message: `Inspector: ${actionLabel(action)} - ${unit}`,
-    });
   } catch (error) {
     console.error("Error inspector:", error.message);
-    return res.status(500).json({
-      success: false,
-      message: `Error: ${error.message}`,
-    });
+    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
   }
 });
 
