@@ -36,6 +36,28 @@
 .alert.low .alert-severity{background:var(--blue)}
 .source-chip{display:inline-flex;align-items:center;gap:5px}
 .source-chip:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(31,167,116,.12)}
+
+.director-panel{background:linear-gradient(135deg,#111a30,#253761 55%,#4c68e9);color:#fff;border:0}
+.director-panel .head{border-bottom-color:rgba(255,255,255,.14)}
+.director-panel .head p{color:#cbd5ff}
+.director-score{display:flex;align-items:center;gap:12px}
+.score-ring{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#fff var(--score-angle,0deg),rgba(255,255,255,.16) 0);position:relative}
+.score-ring:after{content:"";position:absolute;inset:6px;border-radius:50%;background:#22345d}
+.score-ring b{position:relative;z-index:1;font-size:14px}
+.director-body{padding:17px 19px}
+.director-summary{font-size:13px;line-height:1.55;color:#eef2ff;margin-bottom:14px}
+.recommendations{display:grid;gap:10px}
+.recommendation{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px}
+.recommendation-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.recommendation h3{font-size:12px;margin:0}
+.recommendation p{font-size:10px;line-height:1.45;color:#d9e1ff;margin:6px 0}
+.recommendation-action{font-size:10px;font-weight:800;color:#fff}
+.priority{font-size:8px;font-weight:900;text-transform:uppercase;padding:5px 7px;border-radius:999px;background:rgba(255,255,255,.16)}
+.priority.critical{background:#ff6477}
+.priority.high{background:#ff984f}
+.priority.medium{background:#f3c95a;color:#4b3900}
+.priority.low{background:#6dc8ff;color:#12324c}
+.director-empty{padding:18px;text-align:center;color:#dce4ff;font-size:12px}
 @media(max-width:1200px){.intelligence-strip{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:780px){.intelligence-strip{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.intelligence-strip{grid-template-columns:1fr}.building-intel{grid-template-columns:repeat(2,1fr)}}
@@ -59,6 +81,25 @@
 </section>
 <section class="grid"><div class="stack">
 <section class="panel"><div class="head"><div><h2>Vista del hotel</h2><p>Toca cualquier habitación para ver sus detalles.</p></div><span id="buildingCount" class="pill">0 edificios</span></div><div id="buildings" class="buildings"></div></section>
+<section class="panel director-panel">
+  <div class="head">
+    <div>
+      <h2>🧠 AI Operations Director</h2>
+      <p>Recomendaciones concretas para dirigir la operación.</p>
+    </div>
+    <div class="director-score">
+      <div id="directorScoreRing" class="score-ring"><b id="directorScore">--</b></div>
+      <div>
+        <div id="directorGrade" class="title">Analizando</div>
+        <div id="directorCounts" class="sub">0 recomendaciones</div>
+      </div>
+    </div>
+  </div>
+  <div class="director-body">
+    <div id="directorSummary" class="director-summary">Preparando diagnóstico operacional...</div>
+    <div id="directorRecommendations" class="recommendations"></div>
+  </div>
+</section>
 <section class="panel"><div class="head"><div><h2>Indicadores ejecutivos</h2><p>Datos reales calculados por el servidor.</p></div></div><div class="metrics"><div class="metric"><strong id="cleanAvg">0 min</strong><span>Limpieza promedio</span></div><div class="metric"><strong id="inspectAvg">0 min</strong><span>Inspección promedio</span></div><div class="metric"><strong id="payroll">$0</strong><span>Payroll del día</span></div><div class="metric"><strong id="activeEmployees">0</strong><span>Empleados activos</span></div></div></section>
 </div><aside class="stack">
 <section class="panel"><div class="head"><div><h2>Employee Intelligence</h2><p>Actividad, productividad y ubicación operacional.</p></div><span id="employeeCount" class="pill">0</span></div><div id="employees" class="employees"></div></section>
@@ -71,6 +112,7 @@
 <script>
 let dashboard = {};
 let intelligence = null;
+let aiDirector = null;
 let dashboardSource = "postgres";
 let socket = null;
 let refreshTimer = null;
@@ -525,6 +567,7 @@ function render() {
     Number(employees.active || 0);
 
   renderIntelligence();
+  renderAIDirector();
   renderBuildings();
   renderEmployees();
   renderAlerts();
@@ -605,6 +648,56 @@ function buildingLabel(value) {
   if (text === "SUITES") return "Suites";
 
   return `Building ${text}`;
+}
+
+function renderAIDirector() {
+  const result = aiDirector;
+  const recommendations = result?.recommendations || [];
+  const operation = result?.operation || {};
+  const score = Number(operation.score || 0);
+
+  $("directorScore").textContent =
+    result ? score : "--";
+
+  $("directorScoreRing").style.setProperty(
+    "--score-angle",
+    `${Math.round((score / 100) * 360)}deg`
+  );
+
+  $("directorGrade").textContent =
+    result ? operation.grade || "Sin evaluación" : "Sin datos";
+
+  $("directorCounts").textContent =
+    `${recommendations.length} recomendación(es)`;
+
+  $("directorSummary").textContent =
+    result?.summary ||
+    "El AI Operations Director aún no tiene una evaluación reciente.";
+
+  $("directorRecommendations").innerHTML =
+    recommendations.length
+      ? recommendations
+          .slice(0, 8)
+          .map(
+            (item) => `
+              <article class="recommendation">
+                <div class="recommendation-top">
+                  <h3>${esc(item.title)}</h3>
+                  <span class="priority ${esc(
+                    item.priority || "medium"
+                  )}">
+                    ${esc(item.priority || "medium")}
+                  </span>
+                </div>
+                <p>${esc(item.message)}</p>
+                <div class="recommendation-action">
+                  → ${esc(item.action)}
+                </div>
+              </article>
+            `
+          )
+          .join("")
+      : '<div class="director-empty">✅ No hay recomendaciones urgentes. La operación está bajo control.</div>';
 }
 
 function renderBuildings() {
@@ -943,8 +1036,12 @@ async function loadDashboard(force = false) {
   const stamp = Date.now();
 
   try {
-    const [postgresData, operationsData, intelligenceData] =
-      await Promise.all([
+    const [
+      postgresData,
+      operationsData,
+      intelligenceData,
+      directorData,
+    ] = await Promise.all([
         fetchJson(
           `/api/v2/dashboard?date=${encodeURIComponent(
             date
@@ -966,10 +1063,22 @@ async function loadDashboard(force = false) {
           );
           return null;
         }),
+        fetchJson(
+          `/api/ai-director?date=${encodeURIComponent(
+            date
+          )}${force ? "&fresh=true" : ""}&t=${stamp}`
+        ).catch((error) => {
+          console.warn(
+            "AI Operations Director no disponible:",
+            error.message
+          );
+          return null;
+        }),
       ]);
 
     dashboardSource = "postgres";
     intelligence = normalizeIntelligence(intelligenceData);
+    aiDirector = directorData?.ok ? directorData : null;
 
     dashboard = mergeOperationsIntoDashboard(
       mergeIntelligenceIntoDashboard(
@@ -997,6 +1106,7 @@ async function loadDashboard(force = false) {
 
     dashboardSource = "notion";
     intelligence = null;
+    aiDirector = null;
     dashboard = fallbackData;
 
     render();
@@ -1039,6 +1149,7 @@ try {
   });
 
   [
+    "ai-director-updated",
     "intelligence-updated",
     "data-api-updated",
     "rooms-postgres-synced",
