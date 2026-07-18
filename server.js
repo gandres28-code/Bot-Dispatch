@@ -69,6 +69,9 @@ const {
 const {
   createIntelligenceEngine,
 } = require("./services/intelligenceEngine");
+const {
+  createAIOperationsDirector,
+} = require("./services/aiOperationsDirector");
 
 const server = http.createServer(app);
 
@@ -4815,6 +4818,69 @@ app.post("/api/intelligence/refresh", async (req, res) => {
 });
 
 // =========================================================
+// AI OPERATIONS DIRECTOR · FASE 9
+// =========================================================
+const AIOperationsDirector = createAIOperationsDirector({
+  intelligenceEngine: IntelligenceEngine,
+  io,
+});
+
+console.log(
+  "✅ AI Operations Director iniciado:",
+  AIOperationsDirector.version
+);
+
+app.get("/api/ai-director/status", async (req, res) => {
+  try {
+    return res.json(await AIOperationsDirector.status());
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/ai-director", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const fresh =
+      String(req.query.fresh || "").toLowerCase() === "true";
+
+    const result = await AIOperationsDirector.get(date, {
+      fresh,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/ai-director/refresh", async (req, res) => {
+  try {
+    const date = String(
+      req.body?.date || req.query.date || todayISO()
+    ).trim();
+
+    const result = await AIOperationsDirector.generate(date, {
+      freshIntelligence: true,
+      reason: "manual-api",
+    });
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+// =========================================================
 // MOTOR CENTRAL DE EVENTOS · FASE 7
 // =========================================================
 const EventEngine = createEventEngine({
@@ -4834,6 +4900,11 @@ const EventEngine = createEventEngine({
   },
   onEventCommitted({ workDate, payload }) {
     IntelligenceEngine.scheduleRefresh(
+      workDate,
+      `event:${payload.action}`
+    );
+
+    AIOperationsDirector.schedule(
       workDate,
       `event:${payload.action}`
     );
@@ -9677,9 +9748,14 @@ async function startServer() {
   if (databaseStatus.connected) {
     setTimeout(() => {
       IntelligenceEngine.refresh(todayISO(), "server-start")
+        .then(() =>
+          AIOperationsDirector.generate(todayISO(), {
+            reason: "server-start",
+          })
+        )
         .catch((error) => {
           console.error(
-            "INITIAL INTELLIGENCE REFRESH ERROR:",
+            "INITIAL INTELLIGENCE / AI DIRECTOR ERROR:",
             error.message
           );
         });
