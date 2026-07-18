@@ -187,7 +187,10 @@ async function updateRoomForEvent(
   if (!room) return null;
 
   let sql = "";
-  const values = [room.id, occurredAt, employee || ""];
+  // Estas consultas sólo usan $1 y $2.
+  // Enviar employee como tercer parámetro provoca:
+  // "bind message supplies 3 parameters, but prepared statement requires 2"
+  const values = [room.id, occurredAt];
 
   switch (action) {
     case "START":
