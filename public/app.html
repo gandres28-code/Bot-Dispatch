@@ -10,7 +10,14 @@
 <body>
   <main class="os-shell">
     <header class="os-topbar">
-      <div class="brand"><div class="brand-icon">🏨</div><div><strong>417 Maid OS</strong><span id="pageSubtitle">Dashboard</span></div></div>
+      <div class="brand">
+        <div class="brand-icon">🏨</div>
+        <div>
+          <strong>417 Maid OS</strong>
+          <span id="pageSubtitle">Dashboard</span>
+        </div>
+      </div>
+
       <a class="switch-user" href="/launch" onclick="localStorage.clear()">Cambiar</a>
     </header>
 
@@ -19,7 +26,11 @@
     </section>
 
     <section id="operationsPage" class="os-page">
-      <section class="mini-hero"><h1>Operaciones</h1><p>Cleaning, inspections, master list, activity feed y clock.</p></section>
+      <section class="mini-hero">
+        <h1>Operaciones</h1>
+        <p>Cleaning, inspections, master list, activity feed y clock.</p>
+      </section>
+
       <div class="list-menu">
         <button onclick="openOSModule('cleaning')">🧹 Limpieza</button>
         <button onclick="openOSModule('inspection')">🔍 Inspecciones</button>
@@ -30,7 +41,11 @@
     </section>
 
     <section id="communicationsPage" class="os-page">
-      <section class="mini-hero"><h1>Comunicación</h1><p>Notificaciones, chat interno y anuncios del equipo.</p></section>
+      <section class="mini-hero">
+        <h1>Comunicación</h1>
+        <p>Notificaciones, chat interno y anuncios del equipo.</p>
+      </section>
+
       <div class="list-menu">
         <button onclick="openDirectModule('Notificaciones','/notifications')">🔔 Notificaciones</button>
         <button onclick="showComingSoon('Chat interno')">💬 Chat interno</button>
@@ -39,7 +54,11 @@
     </section>
 
     <section id="reportsPage" class="os-page">
-      <section class="mini-hero"><h1>Reportes y estadísticas</h1><p>Rendimiento, calidad, tendencias, daily report y nómina.</p></section>
+      <section class="mini-hero">
+        <h1>Reportes y estadísticas</h1>
+        <p>Rendimiento, calidad, tendencias, daily report y nómina.</p>
+      </section>
+
       <div class="list-menu">
         <button onclick="openDirectModule('Estadísticas','/statistics')">📈 Estadísticas</button>
         <button onclick="openOSModule('operations')">📄 Daily Report</button>
@@ -49,8 +68,13 @@
     </section>
 
     <section id="morePage" class="os-page">
-      <section class="mini-hero"><h1>Más</h1><p>Configuración, empleados, integraciones y herramientas del sistema.</p></section>
+      <section class="mini-hero">
+        <h1>Más</h1>
+        <p>Administración, empleados, integraciones y herramientas del sistema.</p>
+      </section>
+
       <div class="list-menu">
+        <button onclick="openDirectModule('Habitaciones','/rooms-manager')">🏨 Habitaciones</button>
         <button onclick="showComingSoon('Empleados')">👥 Empleados</button>
         <button onclick="showComingSoon('HotSOS')">🛠 HotSOS</button>
         <button onclick="showComingSoon('Configuración')">⚙️ Configuración</button>
@@ -59,17 +83,43 @@
     </section>
 
     <section id="modulePage" class="os-page module-page">
-      <div class="module-header"><button onclick="backToDashboard()">←</button><div><strong id="moduleTitle">Módulo</strong><span id="moduleUrl"></span></div></div>
+      <div class="module-header">
+        <button onclick="backToDashboard()">←</button>
+        <div>
+          <strong id="moduleTitle">Módulo</strong>
+          <span id="moduleUrl"></span>
+        </div>
+      </div>
+
       <iframe id="moduleFrame" src="about:blank"></iframe>
     </section>
   </main>
 
   <nav class="os-nav">
-    <button class="active" onclick="showPage('dashboardPage','Dashboard',this)">🏠<span>Dashboard</span></button>
-    <button onclick="showPage('operationsPage','Operaciones',this)">🧹<span>Ops</span></button>
-    <button onclick="showPage('communicationsPage','Comunicación',this)">💬<span>Comms</span></button>
-    <button onclick="showPage('reportsPage','Estadísticas',this)">📈<span>Stats</span></button>
-    <button onclick="showPage('morePage','Más',this)">⚙️<span>Más</span></button>
+    <button class="active" onclick="showPage('dashboardPage','Dashboard',this)">
+      🏠
+      <span>Dashboard</span>
+    </button>
+
+    <button onclick="showPage('operationsPage','Operaciones',this)">
+      🧹
+      <span>Ops</span>
+    </button>
+
+    <button onclick="showPage('communicationsPage','Comunicación',this)">
+      💬
+      <span>Comms</span>
+    </button>
+
+    <button onclick="showPage('reportsPage','Estadísticas',this)">
+      📈
+      <span>Stats</span>
+    </button>
+
+    <button onclick="showPage('morePage','Más',this)">
+      ⚙️
+      <span>Más</span>
+    </button>
   </nav>
 
   <script src="/socket.io/socket.io.js"></script>
