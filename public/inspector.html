@@ -282,6 +282,71 @@ let lastHistoryLoadedAt=0;
 const ASSIGNMENTS_FRESH_MS=15000;
 const HISTORY_FRESH_MS=15000;
 const PAGE_REFRESH_AFTER_MS=60000;
+
+// Estado local autoritativo durante la reconciliación PostgreSQL.
+// Evita que una respuesta vieja cambie TERMINAR de vuelta a COMENZAR.
+const pendingInspectorActions=new Map();
+const PENDING_ACTION_TTL_MS=20000;
+
+function inspectorUnitKey(unit){
+  return String(unit||"").trim().toUpperCase();
+}
+
+function rememberInspectorAction(action,unit){
+  pendingInspectorActions.set(inspectorUnitKey(unit),{
+    action,
+    savedAt:Date.now()
+  });
+}
+
+function reconcilePendingInspectorAction(incoming){
+  const key=inspectorUnitKey(incoming?.unit);
+  const pending=pendingInspectorActions.get(key);
+  if(!pending)return incoming;
+
+  if(Date.now()-pending.savedAt>PENDING_ACTION_TTL_MS){
+    pendingInspectorActions.delete(key);
+    return incoming;
+  }
+
+  const status=String(incoming?.status||"").toLowerCase();
+
+  if(pending.action==="PRE_INSPECTION_START"){
+    if(incoming.preInspectionStarted===true){
+      pendingInspectorActions.delete(key);
+    }else if(!incoming.preInspection){
+      incoming.preInspectionStarted=true;
+    }
+  }
+
+  if(pending.action==="PRE_INSPECTION_COMPLETE"){
+    if(incoming.preInspection===true){
+      pendingInspectorActions.delete(key);
+    }else{
+      incoming.preInspectionStarted=false;
+      incoming.preInspection=true;
+    }
+  }
+
+  if(pending.action==="INSPECTION_START"){
+    if(status.includes("inspection started")){
+      pendingInspectorActions.delete(key);
+    }else if(!status.includes("ready")){
+      incoming.status="Inspection Started";
+    }
+  }
+
+  if(pending.action==="READY_GUEST"){
+    if(status.includes("ready")){
+      pendingInspectorActions.delete(key);
+    }else{
+      incoming.status="Ready for Guest";
+    }
+  }
+
+  return incoming;
+}
+
 function normalizeRole(role){return String(role||"").trim().toLowerCase()}function canInspect(role){return["inspector","cleaner / inspector","inspector / cleaner","dispatch / inspector","admin","manager","owner","company owner"].includes(normalizeRole(role))}
 function setupDate(){const now=new Date(),day=String(now.getDate()).padStart(2,"0"),text=now.toLocaleDateString("es-US",{month:"short",day:"numeric",year:"numeric"});document.getElementById("dateDay").innerText=day;document.getElementById("dateText").innerText=text}
 async function waitForOSUser(){return new Promise(resolve=>{let tries=0;const timer=setInterval(()=>{tries++;if(window.OS&&OS.user){clearInterval(timer);resolve(OS.user);return}if(tries>30){clearInterval(timer);resolve(null)}},100)})}
@@ -583,7 +648,7 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
           }`;
       }
 
-      const incomingUnits=data.units||[];
+      const incomingUnits=(data.units||[]).map(reconcilePendingInspectorAction);
 
       incomingUnits.forEach(incoming=>{
         const local=lastUnits.find(existing=>
@@ -822,7 +887,8 @@ async function sendInspectionAction(action){
 
     // Evita que los eventos duplicados del servidor vuelvan a dibujar
     // la pantalla mientras aplicamos el cambio local.
-    suppressInspectorRealtimeUntil=Date.now()+2200;
+    suppressInspectorRealtimeUntil=Date.now()+5000;
+    rememberInspectorAction(action,unit);
     applyLocalInspectorAction(action,unit);
     lastAssignmentsLoadedAt=Date.now();
 
@@ -831,7 +897,7 @@ async function sendInspectionAction(action){
 
     // Una sola reconciliación silenciosa después de que PostgreSQL tenga tiempo
     // de recibir el cambio, sin vaciar ni parpadear la lista.
-    setTimeout(()=>scheduleInspectorRealtimeRefresh(0),2400);
+    setTimeout(()=>scheduleInspectorRealtimeRefresh(0),5200);
   }catch(error){
     document.getElementById("status").innerText="Error: "+error.message;
     showBigStatus("Error: "+error.message,"error");
@@ -1043,9 +1109,13 @@ function attachInspectorSocket(){
   inspectorSocketAttached=true;
   inspectorSocket=socket;
 
+  let lastRealtimeSignalAt=0;
   const refresh=payload=>{
     if(payload?.date&&payload.date!==todayChicagoISO())return;
-    scheduleInspectorRealtimeRefresh();
+    const now=Date.now();
+    if(now-lastRealtimeSignalAt<900)return;
+    lastRealtimeSignalAt=now;
+    scheduleInspectorRealtimeRefresh(900);
   };
 
   // Quita listeners anteriores por seguridad y registra exactamente uno.
