@@ -62,11 +62,309 @@
 @media(max-width:780px){.intelligence-strip{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.intelligence-strip{grid-template-columns:1fr}.building-intel{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:1200px){.kpis{grid-template-columns:repeat(4,1fr)}.buildings{grid-template-columns:repeat(2,1fr)}}@media(max-width:900px){.grid{grid-template-columns:1fr}.hero-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.shell{padding:12px}.kpis{grid-template-columns:repeat(2,1fr)}.buildings{grid-template-columns:1fr}.details{grid-template-columns:1fr}.hero{padding:20px}}
+
+/* ===== 417 Maid OS Design System · Dashboard 2.0 ===== */
+:root{
+  --surface:#ffffff;
+  --surface-soft:#f8fafc;
+  --surface-strong:#eef2ff;
+  --sidebar:#0f172a;
+  --radius-sm:12px;
+  --radius-md:18px;
+  --radius-lg:26px;
+  --transition:180ms ease;
+}
+
+body{
+  background:
+    radial-gradient(circle at 0% 0%,rgba(80,108,245,.10),transparent 30%),
+    radial-gradient(circle at 100% 0%,rgba(128,88,216,.08),transparent 28%),
+    var(--bg);
+}
+
+.shell{
+  max-width:none;
+  width:100%;
+  padding:22px;
+}
+
+.top{
+  position:sticky;
+  top:0;
+  z-index:15;
+  margin:-22px -22px 18px;
+  padding:14px 22px;
+  background:rgba(244,246,251,.88);
+  backdrop-filter:blur(18px);
+  border-bottom:1px solid rgba(231,234,241,.88);
+}
+
+.top-actions{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.theme-toggle{
+  width:42px;
+  height:42px;
+  border:1px solid var(--line);
+  background:var(--card);
+  color:var(--text);
+  border-radius:13px;
+}
+
+.panel,.kpi,.intel-card,.metric,.building{
+  transition:transform var(--transition),box-shadow var(--transition),border-color var(--transition);
+}
+
+.kpi:hover,.intel-card:hover,.building:hover{
+  transform:translateY(-2px);
+  box-shadow:0 16px 34px rgba(28,39,63,.10);
+}
+
+.hero{
+  position:relative;
+  isolation:isolate;
+}
+
+.hero:after{
+  content:"";
+  position:absolute;
+  width:360px;
+  height:360px;
+  right:-150px;
+  top:-180px;
+  border-radius:50%;
+  background:rgba(255,255,255,.10);
+  z-index:-1;
+}
+
+.room-table-panel{
+  margin-top:17px;
+}
+
+.room-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.room-controls{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.room-search,
+.room-filter{
+  min-height:40px;
+  border:1px solid var(--line);
+  background:var(--card);
+  color:var(--text);
+  border-radius:12px;
+  padding:9px 12px;
+  outline:none;
+}
+
+.room-search{
+  width:min(320px,72vw);
+}
+
+.room-search:focus,
+.room-filter:focus{
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(80,108,245,.12);
+}
+
+.table-wrap{
+  overflow:auto;
+  max-height:560px;
+}
+
+.rooms-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width:980px;
+}
+
+.rooms-table th{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:#f8fafc;
+  color:var(--muted);
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  text-align:left;
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+}
+
+.rooms-table td{
+  padding:13px 14px;
+  border-bottom:1px solid var(--line);
+  font-size:12px;
+  vertical-align:middle;
+}
+
+.rooms-table tbody tr{
+  cursor:pointer;
+  transition:background var(--transition);
+}
+
+.rooms-table tbody tr:hover{
+  background:#f8faff;
+}
+
+.unit-name{
+  font-weight:900;
+  color:var(--text);
+}
+
+.status-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 9px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.status-chip.ready{background:#e8f7f1;color:#12805a}
+.status-chip.inspection{background:#fff0e2;color:#b45e17}
+.status-chip.progress{background:#f1ebff;color:#6840bd}
+.status-chip.pending{background:#fff7dc;color:#976d06}
+
+.flag-chip{
+  display:inline-flex;
+  padding:5px 8px;
+  margin:2px;
+  border-radius:999px;
+  background:#f2f4f8;
+  color:var(--muted);
+  font-size:9px;
+  font-weight:850;
+}
+
+.flag-chip.urgent-flag{background:#ffedf0;color:#b53d4b}
+.flag-chip.arrival-flag{background:#eef1ff;color:#405ad3}
+.flag-chip.guest-flag{background:#e8f7f1;color:#12805a}
+
+.room-open{
+  border:0;
+  background:#eef1ff;
+  color:var(--blue);
+  border-radius:10px;
+  padding:7px 10px;
+  font-weight:900;
+}
+
+html.dark{
+  --bg:#0b1220;
+  --card:#111a2d;
+  --text:#e5ecf8;
+  --muted:#93a0b8;
+  --line:#26324a;
+  --shadow:0 14px 38px rgba(0,0,0,.25);
+}
+
+html.dark body{
+  background:
+    radial-gradient(circle at 0% 0%,rgba(80,108,245,.16),transparent 28%),
+    radial-gradient(circle at 100% 0%,rgba(128,88,216,.11),transparent 25%),
+    var(--bg);
+}
+
+html.dark .top{
+  background:rgba(11,18,32,.88);
+  border-bottom-color:rgba(38,50,74,.9);
+}
+
+html.dark .refresh,
+html.dark .theme-toggle,
+html.dark .room-search,
+html.dark .room-filter{
+  background:var(--card);
+  color:var(--text);
+}
+
+html.dark .building,
+html.dark .metric{
+  background:#0f1829;
+}
+
+html.dark .building-stat,
+html.dark .detail,
+html.dark .pill{
+  background:#172238;
+}
+
+html.dark .rooms-table th{
+  background:#0f1829;
+}
+
+html.dark .rooms-table tbody tr:hover{
+  background:#172238;
+}
+
+html.dark .modal-card{
+  background:var(--card);
+  color:var(--text);
+}
+
+@media(min-width:1400px){
+  .grid{
+    grid-template-columns:minmax(0,1.8fr) minmax(360px,.72fr);
+  }
+
+  .kpis{
+    grid-template-columns:repeat(8,minmax(130px,1fr));
+  }
+
+  .buildings{
+    grid-template-columns:repeat(4,1fr);
+  }
+}
+
+@media(max-width:780px){
+  .shell{padding:12px}
+  .top{
+    margin:-12px -12px 14px;
+    padding:12px;
+  }
+  .top-actions{
+    width:100%;
+    justify-content:space-between;
+  }
+  .refresh{
+    flex:1;
+  }
+  .room-toolbar{
+    align-items:stretch;
+  }
+  .room-controls{
+    width:100%;
+  }
+  .room-search,
+  .room-filter{
+    width:100%;
+  }
+}
+
 </style>
 </head>
 <body>
 <main class="shell">
-<header class="top"><div class="brand"><div class="logo">417</div><div><b>Dashboard Ejecutivo</b><span id="dateLabel">Cargando operación...</span></div></div><div style="display:flex;align-items:center;gap:9px"><span id="liveStatus" class="pill">Conectando…</span><button class="refresh" onclick="loadDashboard(true)">↻ Actualizar</button></div></header>
+<header class="top"><div class="brand"><div class="logo">417</div><div><b>Dashboard Ejecutivo</b><span id="dateLabel">Cargando operación...</span></div></div><div class="top-actions"><span id="liveStatus" class="pill">Conectando…</span><button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Cambiar tema">🌙</button><button class="refresh" onclick="loadDashboard(true)">↻ Actualizar</button></div></header>
 <div id="error" class="error"></div>
 <section class="hero"><div class="hero-grid"><div><small>COMMAND CENTER · HOUSEKEEPING</small><h1>Estado de la operación</h1><p id="summary">Leyendo habitaciones, empleados, payroll y alertas.</p><div id="aiSummary" class="ai-summary">🧠 Preparando inteligencia operativa...</div></div><div class="progress-card"><div class="progress-top"><span>Progreso del día</span><strong id="percent">0%</strong></div><div class="bar"><div id="fill" class="fill"></div></div><div class="meta"><span id="readyMeta">0 listas</span><span id="remainingMeta">0 restantes</span></div></div></div></section>
 <section class="intelligence-strip">
@@ -106,6 +404,46 @@
 <section class="panel"><div class="head"><div><h2>Centro de alertas</h2><p>Situaciones que requieren atención.</p></div><span id="alertCount" class="pill">0</span></div><div id="alerts" class="alerts"></div></section>
 <section class="panel"><div class="head"><div><h2>Actividad en vivo</h2><p>Últimos movimientos del sistema.</p></div></div><div id="timeline" class="timeline"></div></section>
 </aside></section>
+
+<section class="panel room-table-panel">
+  <div class="head room-toolbar">
+    <div>
+      <h2>Habitaciones de hoy</h2>
+      <p>Busca, filtra y abre cualquier unidad sin abandonar el Dashboard.</p>
+    </div>
+    <div class="room-controls">
+      <input id="roomSearch" class="room-search" type="search" placeholder="Buscar unidad, cleaner o inspector..." oninput="renderRoomsTable()">
+      <select id="roomStatusFilter" class="room-filter" onchange="renderRoomsTable()">
+        <option value="">Todos los estados</option>
+        <option value="pending">Pendientes</option>
+        <option value="progress">En limpieza</option>
+        <option value="inspection">Inspección</option>
+        <option value="ready">Ready</option>
+      </select>
+      <select id="roomBuildingFilter" class="room-filter" onchange="renderRoomsTable()">
+        <option value="">Todos los edificios</option>
+      </select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="rooms-table">
+      <thead>
+        <tr>
+          <th>Unidad</th>
+          <th>Edificio</th>
+          <th>Cleaner</th>
+          <th>Inspector</th>
+          <th>Estado</th>
+          <th>Indicadores</th>
+          <th>Tiempo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="roomsTableBody"></tbody>
+    </table>
+  </div>
+</section>
+
 </main>
 <div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="modal-card"><div class="modal-head"><div><b id="modalTitle">Habitación</b><div id="modalStatus" class="sub"></div></div><button class="close" onclick="closeModal()">✕</button></div><div id="modalBody" class="modal-body"></div></div></div>
 <script src="/socket.io/socket.io.js"></script>
@@ -572,6 +910,7 @@ function render() {
   renderEmployees();
   renderAlerts();
   renderTimeline();
+  renderRoomsTable();
 }
 
 function renderIntelligence() {
@@ -1129,6 +1468,90 @@ function scheduleDashboardRefresh(delay = 250) {
     loadDashboard(false).catch(console.error);
   }, delay);
 }
+
+
+function setTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.classList.toggle("dark", dark);
+  localStorage.setItem("maidOsTheme", dark ? "dark" : "light");
+  const button = $("themeToggle");
+  if (button) button.textContent = dark ? "☀️" : "🌙";
+}
+
+function toggleTheme() {
+  setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
+}
+
+function initializeTheme() {
+  const saved = localStorage.getItem("maidOsTheme");
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
+  setTheme(saved || (prefersDark ? "dark" : "light"));
+}
+
+function renderRoomsTable() {
+  const body = $("roomsTableBody");
+  if (!body) return;
+
+  const units = Array.isArray(dashboard.units) ? dashboard.units : [];
+  const search = String($("roomSearch")?.value || "").trim().toLowerCase();
+  const statusFilter = String($("roomStatusFilter")?.value || "");
+  const buildingFilter = String($("roomBuildingFilter")?.value || "");
+
+  const buildings = [...new Set(units.map((unit) => String(unit.building || "CASAS")))]
+    .sort((a, b) => a.localeCompare(b));
+
+  const buildingSelect = $("roomBuildingFilter");
+  if (buildingSelect) {
+    const current = buildingSelect.value;
+    buildingSelect.innerHTML =
+      '<option value="">Todos los edificios</option>' +
+      buildings.map((building) =>
+        `<option value="${esc(building)}">${esc(buildingLabel(building))}</option>`
+      ).join("");
+    buildingSelect.value = buildings.includes(current) ? current : "";
+  }
+
+  const filtered = units.filter((unit) => {
+    const group = statusClass(unit.status, unit.statusGroup);
+    const haystack = [
+      unit.unit,
+      unit.cleaner,
+      unit.inspector,
+      unit.building,
+      unit.status
+    ].join(" ").toLowerCase();
+
+    return (!search || haystack.includes(search)) &&
+      (!statusFilter || group === statusFilter) &&
+      (!buildingFilter || String(unit.building || "CASAS") === buildingFilter);
+  });
+
+  body.innerHTML = filtered.length
+    ? filtered.map((unit) => {
+        const group = statusClass(unit.status, unit.statusGroup);
+        const flags = [
+          unit.arrival ? '<span class="flag-chip arrival-flag">Arrival</span>' : "",
+          unit.guestOut ? '<span class="flag-chip guest-flag">Guest Out</span>' : "",
+          unit.urgent ? '<span class="flag-chip urgent-flag">Urgente</span>' : ""
+        ].join("");
+
+        return `
+          <tr onclick='openRoom(${JSON.stringify(unit.id)})'>
+            <td><span class="unit-name">${esc(unit.unit || "Sin unidad")}</span></td>
+            <td>${esc(buildingLabel(unit.building || "CASAS"))}</td>
+            <td>${esc(unit.cleaner || "Sin asignar")}</td>
+            <td>${esc(unit.inspector || "Sin asignar")}</td>
+            <td><span class="status-chip ${group}">${esc(unit.status || "Pending")}</span></td>
+            <td>${flags || '<span class="flag-chip">Normal</span>'}</td>
+            <td>${fmtMinutes(unit.currentDurationMinutes || 0)}</td>
+            <td><button class="room-open" onclick="event.stopPropagation();openRoom('${esc(unit.id)}')">Abrir</button></td>
+          </tr>
+        `;
+      }).join("")
+    : '<tr><td colspan="8"><div class="empty">No hay habitaciones que coincidan con los filtros.</div></td></tr>';
+}
+
+initializeTheme();
 
 loadDashboard();
 
