@@ -1,6 +1,6 @@
 const { query } = require("../db");
 
-const AI_OPERATIONS_DIRECTOR_VERSION = "1.0.0";
+const AI_OPERATIONS_DIRECTOR_VERSION = "1.1.0-ultra";
 
 function normalizeText(value) {
   return String(value || "")
@@ -585,7 +585,7 @@ function createAIOperationsDirector({
   intelligenceEngine,
   io = null,
   debounceMs = Number(
-    process.env.AI_DIRECTOR_REFRESH_DEBOUNCE_MS || 1200
+    process.env.AI_DIRECTOR_REFRESH_DEBOUNCE_MS || 5000
   ),
 } = {}) {
   if (!intelligenceEngine) {
@@ -708,6 +708,8 @@ function createAIOperationsDirector({
         );
       });
     }, debounceMs);
+
+    timer.unref?.();
   }
 
   async function get(date, { fresh = false } = {}) {
