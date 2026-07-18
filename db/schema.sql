@@ -503,3 +503,50 @@ VALUES ('006_ai_operations_director')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+BEGIN;
+
+ALTER TABLE rooms
+ADD COLUMN IF NOT EXISTS pre_inspection BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE rooms
+ADD COLUMN IF NOT EXISTS pre_inspection_started BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE rooms
+ADD COLUMN IF NOT EXISTS pre_inspection_started_at TIMESTAMPTZ;
+
+ALTER TABLE rooms
+ADD COLUMN IF NOT EXISTS pre_inspection_completed_at TIMESTAMPTZ;
+
+ALTER TABLE rooms
+ADD COLUMN IF NOT EXISTS updated_by TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  field_name TEXT NOT NULL DEFAULT '',
+  old_value JSONB,
+  new_value JSONB,
+  changed_by TEXT NOT NULL DEFAULT 'Admin',
+  changed_by_id TEXT NOT NULL DEFAULT '',
+  work_date DATE,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS admin_audit_entity_idx
+ON admin_audit_logs (entity_type, entity_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS admin_audit_date_idx
+ON admin_audit_logs (work_date, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS admin_audit_actor_idx
+ON admin_audit_logs (changed_by, created_at DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('007_admin_center_foundation')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
