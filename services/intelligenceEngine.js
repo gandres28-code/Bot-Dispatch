@@ -1,6 +1,6 @@
 const { query } = require("../db");
 
-const INTELLIGENCE_ENGINE_VERSION = "1.0.0";
+const INTELLIGENCE_ENGINE_VERSION = "1.1.0-ultra";
 
 function chicagoDate(value = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -895,7 +895,7 @@ async function getLatestSnapshot(date = chicagoDate()) {
 function createIntelligenceEngine({
   io = null,
   refreshDebounceMs = Number(
-    process.env.INTELLIGENCE_REFRESH_DEBOUNCE_MS || 800
+    process.env.INTELLIGENCE_REFRESH_DEBOUNCE_MS || 2500
   ),
 } = {}) {
   let timer = null;
@@ -955,6 +955,8 @@ function createIntelligenceEngine({
         );
       });
     }, refreshDebounceMs);
+
+    timer.unref?.();
   }
 
   async function get(date = chicagoDate(), { fresh = false } = {}) {
