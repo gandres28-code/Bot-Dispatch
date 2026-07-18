@@ -9322,12 +9322,61 @@ app.get("/api/v2/rooms", async (req, res) => {
       role,
     });
 
+    // Pre-inspection is currently event-backed in PostgreSQL.
+    // The rooms table does not yet expose these fields, so derive the latest
+    // authoritative state from operations_logs instead of falling back to Notion.
+    const preInspectionResult = await postgresQuery(
+      `
+        SELECT DISTINCT ON (normalized_room)
+          normalized_room,
+          action,
+          event_time
+        FROM operations_logs
+        WHERE work_date = $1::date
+          AND action IN ('PRE_INSPECTION_START', 'PRE_INSPECTION_COMPLETE')
+        ORDER BY normalized_room, event_time DESC, id DESC
+      `,
+      [date]
+    );
+
+    const preInspectionByRoom = new Map(
+      preInspectionResult.rows.map((row) => [
+        String(row.normalized_room || ""),
+        row
+      ])
+    );
+
+    const enrichedRooms = rooms.map((room) => {
+      const latest = preInspectionByRoom.get(
+        String(room.normalizedRoom || "")
+      );
+
+      if (!latest) {
+        return {
+          ...room,
+          preInspection: Boolean(room.preInspection),
+          preInspectionStarted: Boolean(room.preInspectionStarted),
+        };
+      }
+
+      const completed = latest.action === "PRE_INSPECTION_COMPLETE";
+
+      return {
+        ...room,
+        preInspection: completed,
+        preInspectionStarted: !completed,
+        preInspectionStartedAt: !completed ? latest.event_time : null,
+        preInspectionCompletedAt: completed ? latest.event_time : null,
+      };
+    });
+
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     res.json({
       ok: true,
       source: "postgres",
       date,
-      count: rooms.length,
-      rooms,
+      count: enrichedRooms.length,
+      rooms: enrichedRooms,
     });
   } catch (error) {
     res.status(400).json({
