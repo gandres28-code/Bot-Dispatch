@@ -190,6 +190,8 @@
 <script>
 let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",lastUnits=[],activeTab="pre",collapsedBuildings={};
 let inspectorDataSource="postgres";
+let suppressInspectorRealtimeUntil=0;
+let inspectorSocketAttached=false;
 
 function todayChicagoISO(){
   return new Intl.DateTimeFormat("en-CA",{
@@ -537,7 +539,9 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
     return;
   }
 
-  if(!silent){
+  // No borres las tarjetas durante una actualización. Mostrar "Cargando..."
+  // solamente en la primera entrada evita el parpadeo de toda la pantalla.
+  if(!silent && lastUnits.length===0){
     document.getElementById("assignments").innerHTML=
       "<div class='empty'>Cargando inspecciones desde PostgreSQL...</div>";
   }
@@ -727,7 +731,9 @@ function applyLocalInspectorAction(action,unit){
   if(action==="PRE_INSPECTION_COMPLETE"){
     item.preInspectionStarted=false;
     item.preInspection=true;
-    activeTab="pre";
+    // La unidad ya no pertenece a Pre inspección. Muéstrala en Vista general
+    // en vez de dejar una pantalla vacía que parezca que la tarjeta desapareció.
+    activeTab="general";
   }
 
   if(action==="INSPECTION_START"){
@@ -737,7 +743,8 @@ function applyLocalInspectorAction(action,unit){
 
   if(action==="READY_GUEST"){
     item.status="Ready for Guest";
-    activeTab="final";
+    // Mantén visible el resultado final en la pestaña Completadas.
+    activeTab="completed";
   }
 
   updateStats(lastUnits);
@@ -813,12 +820,18 @@ async function sendInspectionAction(action){
     playBeep("success");
     vibratePhone("success");
 
+    // Evita que los eventos duplicados del servidor vuelvan a dibujar
+    // la pantalla mientras aplicamos el cambio local.
+    suppressInspectorRealtimeUntil=Date.now()+2200;
     applyLocalInspectorAction(action,unit);
     lastAssignmentsLoadedAt=Date.now();
 
-    // Actualiza solo el historial. Las habitaciones se mantienen localmente
-    // y Socket.IO traerá cualquier cambio externo.
+    // Actualiza solo el historial. Las habitaciones se mantienen localmente.
     loadMyHistory(true,true);
+
+    // Una sola reconciliación silenciosa después de que PostgreSQL tenga tiempo
+    // de recibir el cambio, sin vaciar ni parpadear la lista.
+    setTimeout(()=>scheduleInspectorRealtimeRefresh(0),2400);
   }catch(error){
     document.getElementById("status").innerText="Error: "+error.message;
     showBigStatus("Error: "+error.message,"error");
@@ -984,7 +997,12 @@ let inspectorRealtimeTimer=null;
 let inspectorRealtimeRunning=false;
 
 async function refreshInspectorRealtime(){
-  if(!currentInspectorCode||isSending||inspectorRealtimeRunning){
+  if(
+    !currentInspectorCode||
+    isSending||
+    inspectorRealtimeRunning||
+    Date.now()<suppressInspectorRealtimeUntil
+  ){
     return;
   }
 
@@ -999,25 +1017,46 @@ async function refreshInspectorRealtime(){
   }
 }
 
-function scheduleInspectorRealtimeRefresh(){
+function scheduleInspectorRealtimeRefresh(delay=700){
   clearTimeout(inspectorRealtimeTimer);
 
   inspectorRealtimeTimer=setTimeout(()=>{
     refreshInspectorRealtime();
-  },250);
+  },delay);
+}
+
+function handleInspectorRoomUpdate(update){
+  if(Date.now()<suppressInspectorRealtimeUntil)return;
+
+  // Los cambios pequeños se mezclan localmente sin reconstruir toda la pantalla.
+  if(!mergeInspectorRoomUpdate(update)){
+    scheduleInspectorRealtimeRefresh();
+  }
 }
 
 function attachInspectorSocket(){
+  if(inspectorSocketAttached)return;
+
   const socket=window.OS?.socket||window.socket||io();
+  if(!socket)return;
+
+  inspectorSocketAttached=true;
+  inspectorSocket=socket;
 
   const refresh=payload=>{
     if(payload?.date&&payload.date!==todayChicagoISO())return;
     scheduleInspectorRealtimeRefresh();
   };
 
-  socket.on("assignments-updated",refreshInspectorRealtime);
-  socket.on("rooms-updated",refreshInspectorRealtime);
-  socket.on("room-updated",mergeInspectorRoomUpdate);
+  // Quita listeners anteriores por seguridad y registra exactamente uno.
+  socket.off?.("assignments-updated",refresh);
+  socket.off?.("rooms-updated",refresh);
+  socket.off?.("room-updated",handleInspectorRoomUpdate);
+  socket.off?.("rooms-postgres-synced",refresh);
+
+  socket.on("assignments-updated",refresh);
+  socket.on("rooms-updated",refresh);
+  socket.on("room-updated",handleInspectorRoomUpdate);
   socket.on("rooms-postgres-synced",refresh);
   socket.on("data-api-updated",payload=>{
     if(payload?.module&&payload.module!=="rooms"&&payload.module!=="assignments")return;
@@ -1026,7 +1065,11 @@ function attachInspectorSocket(){
 }
 
 window.addEventListener("os-ready",attachInspectorSocket,{once:true});
-attachInspectorSocket();
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",attachInspectorSocket,{once:true});
+}else{
+  attachInspectorSocket();
+}
 </script>
 </body>
 </html>
