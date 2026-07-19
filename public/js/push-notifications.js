@@ -55,9 +55,14 @@
 
     localStorage.setItem("push417Enabled", "true");
     localStorage.setItem("push417Token", token);
+    await fetch("/api/push/test", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ employeeName:person.name })
+    }).catch(()=>null);
     const button=document.getElementById(BUTTON_ID);
-    if (button) { button.textContent="🔔 Notificaciones activadas"; button.disabled=true; button.style.opacity=".72"; }
-    alert("Notificaciones push activadas en este dispositivo.");
+    if (button) { button.textContent="🔔"; button.disabled=true; button.style.background="#16a34a"; button.style.opacity="1"; }
+    window.OS?.notify?.({type:"success",title:"Notificaciones activadas",message:"Enviaremos una prueba a este teléfono."});
   }
 
   function boot() {
