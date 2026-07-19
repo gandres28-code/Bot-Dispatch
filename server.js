@@ -12,8 +12,129 @@ const http = require("http");
 const { Server } = require("socket.io");
 const EmployeeService = require("./services/employeeService");
 const { createOSCore } = require("./services/osCore/index.js");
+const {
+  initializeDatabase,
+  testDatabaseConnection,
+  query: postgresQuery,
+  getPool,
+} = require("./db");
+const {
+  syncEmployeesFromNotion,
+  listEmployeesPostgres,
+  getEmployeeSyncStatus,
+} = require("./services/employeeSyncService");
+const {
+  syncRoomsFromNotion,
+  listRoomsPostgres,
+  getRoomSyncStatus,
+} = require("./services/roomSyncService");
+const {
+  syncPayrollFromNotion,
+  listPayrollPostgres,
+  getPayrollSummaryPostgres,
+  getPayrollSyncStatus,
+  mapPayrollPostgresToLegacy,
+  comparePayrollRecordSets,
+  getPayrollRecordsFromNotionPage,
+} = require("./services/payrollSyncService");
+const {
+  getPayrollWeekState,
+  listPayrollRates,
+  savePayrollRate,
+  updatePayrollRecordAmount,
+  resetPayrollRecordAmount,
+  validatePayrollWeek,
+  closePayrollWeek,
+  reopenPayrollWeek,
+  listPayrollAudit,
+} = require("./services/payrollManagementService");
+
+const {
+  getDataApiHealth,
+  listDataApiEmployees,
+  listDataApiRooms,
+  getDataApiDashboard,
+  getDataApiPayrollWeek,
+  getDataApiBootstrap,
+} = require("./services/dataApiService");
+const {
+  enqueueSyncJob,
+  recoverStaleJobs,
+  processNextSyncJob,
+  getSyncQueueStatus,
+  retryFailedJobs,
+} = require("./services/syncQueueService");
+const {
+  createEventEngine,
+} = require("./services/eventEngine");
+const {
+  createIntelligenceEngine,
+} = require("./services/intelligenceEngine");
+const {
+  createAIOperationsDirector,
+} = require("./services/aiOperationsDirector");
 
 const server = http.createServer(app);
+
+// =========================================================
+// POSTGRESQL · 417 MAID OS
+// =========================================================
+// En esta primera etapa PostgreSQL se prepara al arrancar, pero Notion
+// continúa funcionando como fuente operativa. Si PostgreSQL no responde,
+// el servidor no se cae y la operación diaria puede continuar.
+let postgresStatus = {
+  configured: !!process.env.DATABASENEW_URL,
+  connected: false,
+  database: "",
+  databaseTime: null,
+  lastCheckedAt: null,
+  error: "",
+};
+
+async function startPostgres() {
+  postgresStatus.configured = !!process.env.DATABASENEW_URL;
+  postgresStatus.lastCheckedAt = new Date().toISOString();
+
+  if (!postgresStatus.configured) {
+    postgresStatus.connected = false;
+    postgresStatus.error =
+      "Falta DATABASENEW_URL en las variables de entorno de Render.";
+
+    console.warn("⚠️ PostgreSQL sin configurar:", postgresStatus.error);
+    return postgresStatus;
+  }
+
+  try {
+    const database = await initializeDatabase();
+
+    postgresStatus = {
+      configured: true,
+      connected: true,
+      database: database.database_name || "",
+      databaseTime: database.database_time || null,
+      lastCheckedAt: new Date().toISOString(),
+      error: "",
+    };
+
+    console.log("✅ PostgreSQL conectado:", {
+      database: postgresStatus.database,
+      time: postgresStatus.databaseTime,
+    });
+  } catch (error) {
+    postgresStatus = {
+      configured: true,
+      connected: false,
+      database: "",
+      databaseTime: null,
+      lastCheckedAt: new Date().toISOString(),
+      error: error.message,
+    };
+
+    console.error("⚠️ PostgreSQL no pudo iniciar:", error.message);
+  }
+
+  return postgresStatus;
+}
 
 const io = new Server(server, {
   cors: {
@@ -353,6 +474,43 @@ const cors = require("cors");
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
+
+// Diagnóstico seguro de PostgreSQL. No expone DATABASENEW_URL.
+app.get("/api/database-status", async (req, res) => {
+  try {
+    if (!process.env.DATABASENEW_URL) {
+      return res.status(503).json({
+        ok: false,
+        ...postgresStatus,
+      });
+    }
+
+    const database = await testDatabaseConnection();
+
+    postgresStatus = {
+      configured: true,
+      connected: true,
+      database: database.database_name || "",
+      databaseTime: database.database_time || null,
+      lastCheckedAt: new Date().toISOString(),
+      error: "",
+    };
+
+    return res.json({
+      ok: true,
+      ...postgresStatus,
+    });
+  } catch (error) {
+    postgresStatus.connected = false;
+    postgresStatus.error = error.message;
+    postgresStatus.lastCheckedAt = new Date().toISOString();
+
+    return res.status(503).json({
+      ok: false,
+      ...postgresStatus,
+    });
+  }
+});
 // ■ Carpeta para PDFs
 const reportsDir = path.join(__dirname, "reports");
 if (!fs.existsSync(reportsDir)) {
@@ -771,6 +929,12 @@ app.get("/launch", (req, res) => {
 });
 app.get("/app", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "app.html"));
+ }); 
+app.get("/employee-center", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "employee-center.html"));
+});
+app.get("/employee-profile", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "employee-profile.html"));
 });
 app.get("/payroll", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "payroll.html"));
@@ -1755,58 +1919,151 @@ async function createPayrollRecord({ cleaner, unit, date }) {
 
   return result;
 }
-// ■ Leer Payroll Records desde Notion
-async function getPayrollRecords(weekStart, weekEnd) {
-if (!NOTION_PAYROLL_DATABASE_ID) {
-throw new Error("Falta NOTION_PAYROLL_DATABASE_ID");
+// ■ Leer Payroll Records directamente desde Notion.
+// Se conserva como fallback y para comparar ambas fuentes.
+async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
+  if (!NOTION_PAYROLL_DATABASE_ID) {
+    throw new Error("Falta NOTION_PAYROLL_DATABASE_ID");
+  }
+
+  let results = [];
+  let cursor;
+
+  do {
+    const body = {
+      database_id: NOTION_PAYROLL_DATABASE_ID,
+      page_size: 100,
+      filter: {
+        and: [
+          { property: "Date", date: { on_or_after: weekStart } },
+          { property: "Date", date: { on_or_before: weekEnd } },
+        ],
+      },
+      sorts: [{ property: "Date", direction: "ascending" }],
+    };
+
+    if (cursor) body.start_cursor = cursor;
+
+    const response = await notion.databases.query(body);
+    results = results.concat(response.results || []);
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+
+  const expanded = await Promise.all(
+    results.map((page) => getPayrollRecordsFromNotionPage(page))
+  );
+
+  return expanded.flat().map((record) => ({
+    id: null,
+    date: record.workDate,
+    cleaner: normalizeCleaner(record.employee),
+    unit: record.unit,
+    roomType: record.roomType,
+    propertyName: record.propertyName,
+    grossUnitAmount: record.grossUnitAmount,
+    splitCount: record.splitCount,
+    splitPercent: record.splitPercent,
+    amount: roundMoney(record.amount),
+    notionId: record.notionId,
+    payType: record.payType,
+    roleWorked: record.roleWorked,
+    manualOverride: false,
+    adjustmentReason: "",
+    status: record.status,
+  }));
 }
-let results = [];
-let cursor = undefined;
-do {
-const body = {
-database_id: NOTION_PAYROLL_DATABASE_ID,
-page_size: 100,
-filter: {
-and: [
-{
-property: "Date",
-date: {
-on_or_after: weekStart,
-},
-},
-{
-property: "Date",
-date: {
-on_or_before: weekEnd,
-},
-},
-],
-},
-sorts: [
-{
-property: "Date",
-direction: "ascending",
-},
-],
-};
-if (cursor) body.start_cursor = cursor;
-const response = await notion.databases.query(body);
-results = results.concat(response.results);
-cursor = response.has_more ? response.next_cursor : undefined;
-} while (cursor);
-return results.map((page) => {
-const p = page.properties;
-return {
-  date: p.Date?.date?.start || "",
-  cleaner: normalizeCleaner(
-  p.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || ""
-),
-unit: p.Unit?.rich_text?.map((t) => t.plain_text).join("") || "",
-roomType: p["Room Type"]?.select?.name || "",
-amount: p.Amount?.number || 0,
-};
-});
+
+async function getPayrollRecordsWithSource(
+  weekStart,
+  weekEnd,
+  { source = "auto", allowFallback = true } = {}
+) {
+  validatePayrollRange(weekStart, weekEnd);
+
+  const requestedSource = String(source || "auto").toLowerCase();
+  const validSources = new Set(["auto", "postgres", "notion"]);
+
+  if (!validSources.has(requestedSource)) {
+    throw new Error("source debe ser auto, postgres o notion");
+  }
+
+  if (requestedSource === "notion") {
+    return {
+      records: await getPayrollRecordsFromNotion(weekStart, weekEnd),
+      source: "notion",
+      requestedSource,
+      fallback: false,
+      fallbackReason: "",
+    };
+  }
+
+  try {
+    if (!postgresStatus.connected) {
+      throw new Error("PostgreSQL no está conectado");
+    }
+
+    let [postgresRecords, syncStatus] = await Promise.all([
+      listPayrollPostgres({ weekStart, weekEnd }),
+      getPayrollSyncStatus(weekStart, weekEnd),
+    ]);
+
+    let hasSuccessfulSync = syncStatus?.status === "success";
+
+    // Autorrecuperación: si la semana aún no tiene estado exitoso, intenta sincronizarla
+    // una vez antes de activar el fallback a Notion.
+    if (!hasSuccessfulSync) {
+      const repairResult = await runPayrollSync("auto-read-repair", weekStart, weekEnd);
+
+      if (repairResult?.ok && !repairResult?.skipped) {
+        [postgresRecords, syncStatus] = await Promise.all([
+          listPayrollPostgres({ weekStart, weekEnd }),
+          getPayrollSyncStatus(weekStart, weekEnd),
+        ]);
+        hasSuccessfulSync = syncStatus?.status === "success";
+      }
+    }
+
+    // Si ya existen registros válidos, PostgreSQL puede seguir sirviendo la semana aunque
+    // el estado anterior se haya perdido durante una migración de schema.
+    if (!hasSuccessfulSync && postgresRecords.length === 0) {
+      throw new Error("La semana todavía no tiene una sincronización exitosa en PostgreSQL");
+    }
+
+    return {
+      records: postgresRecords.map(mapPayrollPostgresToLegacy),
+      source: "postgres",
+      requestedSource,
+      fallback: false,
+      fallbackReason: hasSuccessfulSync
+        ? ""
+        : "Se encontraron registros en PostgreSQL; el estado de sincronización será reparado en la siguiente sincronización.",
+      syncStatus,
+    };
+  } catch (error) {
+    if (requestedSource === "postgres" || !allowFallback) {
+      throw error;
+    }
+
+    console.warn(
+      `⚠️ Payroll PostgreSQL fallback → Notion (${weekStart} a ${weekEnd}):`,
+      error.message
+    );
+
+    return {
+      records: await getPayrollRecordsFromNotion(weekStart, weekEnd),
+      source: "notion",
+      requestedSource,
+      fallback: true,
+      fallbackReason: error.message,
+    };
+  }
 }
+
+async function getPayrollRecords(weekStart, weekEnd, options = {}) {
+  const result = await getPayrollRecordsWithSource(weekStart, weekEnd, options);
+  return result.records;
+}
+
 // ■ Generar / actualizar Excel semanal con hoja por limpiador
 async function getHourlyPayrollRecords(weekStart, weekEnd) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
@@ -1907,6 +2164,598 @@ function clearEmployeesCache() {
     ServerCache.clear("employees", "active");
   }
 }
+
+// =========================================================
+// EMPLOYEES · NOTION → POSTGRESQL
+// =========================================================
+// Notion sigue siendo la fuente administrativa durante esta etapa.
+// PostgreSQL recibe una copia rápida de Employees para preparar login,
+// permisos, nómina, notificaciones y la futura aplicación móvil.
+let employeeSyncTimer = null;
+let employeeSyncRunning = false;
+
+async function runEmployeeSync(reason = "manual") {
+  if (!postgresStatus.connected) {
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      message: "PostgreSQL no está conectado; Employees continúa operando desde Notion.",
+    };
+  }
+
+  if (employeeSyncRunning) {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      message: "La sincronización de Employees ya está en ejecución.",
+    };
+  }
+
+  if (!NOTION_EMPLOYEES_DATABASE_ID) {
+    throw new Error("Falta NOTION_EMPLOYEES_DATABASE_ID en Render.");
+  }
+
+  employeeSyncRunning = true;
+
+  try {
+    const result = await syncEmployeesFromNotion({
+      notion,
+      databaseId: NOTION_EMPLOYEES_DATABASE_ID,
+      queryDatabase: (body) => notion.databases.query(body),
+    });
+
+    clearEmployeesCache();
+
+    const payload = {
+      ...result,
+      reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    io.emit("employees-updated", payload);
+
+    console.log("✅ Employees sincronizados Notion → PostgreSQL:", {
+      reason,
+      totalFromNotion: result.totalFromNotion,
+      saved: result.saved,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("EMPLOYEE SYNC ERROR:", error.message);
+    throw error;
+  } finally {
+    employeeSyncRunning = false;
+  }
+}
+
+function startEmployeeSyncSchedule() {
+  const intervalMs = Math.max(
+    60000,
+    Number(process.env.EMPLOYEE_SYNC_INTERVAL_MS || 300000)
+  );
+
+  if (employeeSyncTimer) {
+    clearInterval(employeeSyncTimer);
+  }
+
+  employeeSyncTimer = setInterval(() => {
+    runEmployeeSync("scheduled").catch((error) => {
+      console.error("EMPLOYEE SCHEDULED SYNC ERROR:", error.message);
+    });
+  }, intervalMs);
+
+  // Evita que este temporizador impida un apagado limpio del proceso.
+  if (typeof employeeSyncTimer.unref === "function") {
+    employeeSyncTimer.unref();
+  }
+
+  console.log(
+    `🔄 Employee sync programado cada ${Math.round(intervalMs / 60000)} minuto(s).`
+  );
+}
+
+app.post("/api/sync/employees", async (req, res) => {
+  try {
+    const result = await runEmployeeSync("manual");
+
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/sync/employees/status", async (req, res) => {
+  try {
+    const status = postgresStatus.connected
+      ? await getEmployeeSyncStatus()
+      : null;
+
+    return res.json({
+      ok: true,
+      postgresConnected: postgresStatus.connected,
+      running: employeeSyncRunning,
+      scheduled: !!employeeSyncTimer,
+      intervalMs: Math.max(
+        60000,
+        Number(process.env.EMPLOYEE_SYNC_INTERVAL_MS || 300000)
+      ),
+      status,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/postgres/employees", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado.",
+      });
+    }
+
+    const employees = await listEmployeesPostgres({
+      activeOnly: String(req.query.all || "").toLowerCase() !== "true",
+    });
+
+    return res.json({
+      ok: true,
+      count: employees.length,
+      employees,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+// =========================================================
+// ROOMS · NOTION → POSTGRESQL
+// =========================================================
+// Modo seguro: Notion continúa siendo la fuente operativa.
+// PostgreSQL recibe una copia de las habitaciones para validar datos
+// antes de que los paneles comiencen a leer desde la nueva base.
+let roomSyncTimer = null;
+let roomSyncRunning = false;
+
+async function runRoomSync(reason = "manual", date = todayISO()) {
+  if (!postgresStatus.connected) {
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      date,
+      message: "PostgreSQL no está conectado; Rooms continúa operando desde Notion.",
+    };
+  }
+
+  if (roomSyncRunning) {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      date,
+      message: "La sincronización de Rooms ya está en ejecución.",
+    };
+  }
+
+  roomSyncRunning = true;
+
+  try {
+    const result = await syncRoomsFromNotion({
+      notion,
+      databaseId: NOTION_DATABASE_ID,
+      queryDatabase: (body) => notion.databases.query(body),
+      date,
+    });
+
+    const payload = {
+      ...result,
+      reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    io.emit("rooms-postgres-synced", payload);
+    io.emit("data-api-updated", {
+      module: "rooms",
+      date,
+      reason,
+      updatedAt: payload.updatedAt,
+    });
+
+    console.log("✅ Rooms sincronizados Notion → PostgreSQL:", {
+      reason,
+      date,
+      totalFromNotion: result.totalFromNotion,
+      saved: result.saved,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("ROOM SYNC ERROR:", error.message);
+    throw error;
+  } finally {
+    roomSyncRunning = false;
+  }
+}
+
+function startRoomSyncSchedule() {
+  const intervalMs = Math.max(
+    60000,
+    Number(process.env.ROOM_SYNC_INTERVAL_MS || 120000)
+  );
+
+  if (roomSyncTimer) {
+    clearInterval(roomSyncTimer);
+  }
+
+  roomSyncTimer = setInterval(() => {
+    runRoomSync("scheduled", todayISO()).catch((error) => {
+      console.error("ROOM SCHEDULED SYNC ERROR:", error.message);
+    });
+  }, intervalMs);
+
+  if (typeof roomSyncTimer.unref === "function") {
+    roomSyncTimer.unref();
+  }
+
+  console.log(
+    `🏨 Rooms sync programado cada ${Math.round(intervalMs / 60000)} minuto(s).`
+  );
+}
+
+app.post("/api/sync/rooms", async (req, res) => {
+  try {
+    const date = String(req.body?.date || req.query?.date || todayISO()).trim();
+    const result = await runRoomSync("manual", date);
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/sync/rooms/status", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const status = postgresStatus.connected
+      ? await getRoomSyncStatus(date)
+      : null;
+
+    return res.json({
+      ok: true,
+      date,
+      postgresConnected: postgresStatus.connected,
+      running: roomSyncRunning,
+      scheduled: !!roomSyncTimer,
+      intervalMs: Math.max(
+        60000,
+        Number(process.env.ROOM_SYNC_INTERVAL_MS || 120000)
+      ),
+      status,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/postgres/rooms", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado.",
+      });
+    }
+
+    const date = String(req.query.date || todayISO()).trim();
+    const rooms = await listRoomsPostgres(date);
+
+    return res.json({
+      ok: true,
+      date,
+      count: rooms.length,
+      rooms,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+// =========================================================
+// PAYROLL · NOTION → POSTGRESQL
+// =========================================================
+// PostgreSQL es la fuente principal de lectura para Preview y Excel.
+// Notion permanece como fallback automático y fuente de comparación.
+let payrollSyncTimer = null;
+let payrollSyncRunning = false;
+
+async function runPayrollSync(reason = "manual", weekStart = "", weekEnd = "") {
+  const week = weekStart && weekEnd
+    ? validatePayrollRange(weekStart, weekEnd)
+    : getPayrollWeek(new Date());
+
+  if (!postgresStatus.connected) {
+    return {
+      ok: false,
+      skipped: true,
+      reason,
+      ...week,
+      message: "PostgreSQL no está conectado; Payroll continúa operando desde Notion.",
+    };
+  }
+
+  const weekState = await getPayrollWeekState(week.weekStart, week.weekEnd);
+  if (weekState?.status === "closed") {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      ...week,
+      weekState,
+      message: "La semana está cerrada y no se volvió a sincronizar.",
+    };
+  }
+
+  if (payrollSyncRunning) {
+    return {
+      ok: true,
+      skipped: true,
+      reason,
+      ...week,
+      message: "La sincronización de Payroll ya está en ejecución.",
+    };
+  }
+
+  payrollSyncRunning = true;
+
+  try {
+    const result = await syncPayrollFromNotion({
+      notion,
+      databaseId: NOTION_PAYROLL_DATABASE_ID,
+      queryDatabase: (body) => notion.databases.query(body),
+      weekStart: week.weekStart,
+      weekEnd: week.weekEnd,
+    });
+
+    clearOpsCache();
+
+    const payload = {
+      ...result,
+      reason,
+      updatedAt: new Date().toISOString(),
+    };
+
+    io.emit("payroll-postgres-synced", payload);
+
+    console.log("✅ Payroll sincronizado Notion → PostgreSQL:", {
+      reason,
+      weekStart: result.weekStart,
+      weekEnd: result.weekEnd,
+      totalFromNotion: result.totalFromNotion,
+      saved: result.saved,
+      skipped: result.skipped,
+      durationMs: result.durationMs,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("PAYROLL SYNC ERROR:", error.message);
+    throw error;
+  } finally {
+    payrollSyncRunning = false;
+  }
+}
+
+function startPayrollSyncSchedule() {
+  const intervalMs = Math.max(
+    60000,
+    Number(process.env.PAYROLL_SYNC_INTERVAL_MS || 300000)
+  );
+
+  if (payrollSyncTimer) clearInterval(payrollSyncTimer);
+
+  payrollSyncTimer = setInterval(() => {
+    const week = getPayrollWeek(new Date());
+    runPayrollSync("scheduled", week.weekStart, week.weekEnd).catch((error) => {
+      console.error("PAYROLL SCHEDULED SYNC ERROR:", error.message);
+    });
+  }, intervalMs);
+
+  if (typeof payrollSyncTimer.unref === "function") payrollSyncTimer.unref();
+
+  console.log(
+    `💵 Payroll sync programado cada ${Math.round(intervalMs / 60000)} minuto(s).`
+  );
+}
+
+app.post("/api/sync/payroll", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.body?.start || req.query?.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.body?.end || req.query?.end || currentWeek.weekEnd).trim();
+    const result = await runPayrollSync("manual", weekStart, weekEnd);
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/sync/payroll/status", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    validatePayrollRange(weekStart, weekEnd);
+
+    const status = postgresStatus.connected
+      ? await getPayrollSyncStatus(weekStart, weekEnd)
+      : null;
+
+    return res.json({
+      ok: true,
+      weekStart,
+      weekEnd,
+      postgresConnected: postgresStatus.connected,
+      running: payrollSyncRunning,
+      scheduled: !!payrollSyncTimer,
+      intervalMs: Math.max(60000, Number(process.env.PAYROLL_SYNC_INTERVAL_MS || 300000)),
+      status,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/postgres/payroll", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({ ok: false, message: "PostgreSQL no está conectado." });
+    }
+
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const employee = String(req.query.employee || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+
+    const [records, summary] = await Promise.all([
+      listPayrollPostgres({ weekStart, weekEnd, employee }),
+      getPayrollSummaryPostgres(weekStart, weekEnd),
+    ]);
+
+    return res.json({
+      ok: true,
+      weekStart,
+      weekEnd,
+      count: records.length,
+      total: Number(records.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(2)),
+      records,
+      summary,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/payroll/compare", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const shouldSync = String(req.query.sync || "false").toLowerCase() === "true";
+
+    validatePayrollRange(weekStart, weekEnd);
+
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado; no se pueden comparar las dos fuentes.",
+      });
+    }
+
+    let syncResult = null;
+    if (shouldSync) {
+      syncResult = await runPayrollSync("compare", weekStart, weekEnd);
+    }
+
+    const [notionRecords, postgresRecords, syncStatus] = await Promise.all([
+      getPayrollRecordsFromNotion(weekStart, weekEnd),
+      listPayrollPostgres({ weekStart, weekEnd }),
+      getPayrollSyncStatus(weekStart, weekEnd),
+    ]);
+
+    const comparison = comparePayrollRecordSets(notionRecords, postgresRecords);
+
+    return res.status(comparison.matches ? 200 : 409).json({
+      ok: comparison.matches,
+      weekStart,
+      weekEnd,
+      syncRequested: shouldSync,
+      syncResult,
+      syncStatus,
+      ...comparison,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/payroll/preview", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const source = String(req.query.source || "auto").trim().toLowerCase();
+
+    const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
+      source,
+      allowFallback: source === "auto",
+    });
+
+    const records = payrollRead.records;
+    const summaryMap = new Map();
+
+    for (const record of records) {
+      const employee = normalizeCleaner(record.cleaner || "Unknown");
+      const key = cleanEmployeeText(employee);
+      const current = summaryMap.get(key) || {
+        employee,
+        records: 0,
+        units: 0,
+        total: 0,
+      };
+
+      current.records += 1;
+      current.units += String(record.payType || "unit").toLowerCase() === "unit" ? 1 : 0;
+      current.total = roundMoney(current.total + Number(record.amount || 0));
+      summaryMap.set(key, current);
+    }
+
+    return res.json({
+      ok: true,
+      weekStart,
+      weekEnd,
+      requestedSource: payrollRead.requestedSource,
+      source: payrollRead.source,
+      fallback: payrollRead.fallback,
+      fallbackReason: payrollRead.fallbackReason || "",
+      count: records.length,
+      total: roundMoney(records.reduce((sum, record) => sum + Number(record.amount || 0), 0)),
+      summary: [...summaryMap.values()].sort((a, b) => a.employee.localeCompare(b.employee)),
+      records,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 
 
 function cleanEmployeeText(value) {
@@ -2202,7 +3051,11 @@ app.get("/test-mobile-code-login", async (req, res) => {
 
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   validatePayrollRange(weekStart, weekEnd);
-  const records = await getPayrollRecords(weekStart, weekEnd);
+  const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
+    source: "auto",
+    allowFallback: true,
+  });
+  const records = payrollRead.records;
   const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
 
   const workbook = new ExcelJS.Workbook();
@@ -2394,6 +3247,9 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     totalRecords: records.length + hourlyRecords.length,
     employees: sortedPeople.length,
     warnings: warnings.length,
+    payrollSource: payrollRead.source,
+    payrollFallback: payrollRead.fallback,
+    payrollFallbackReason: payrollRead.fallbackReason || "",
   };
 }
 // ■ Actualizar habitación principal
@@ -3904,9 +4760,728 @@ app.get("/unit-history", async (req, res) => {
   }
 });
 
+
+
+// =========================================================
+// REAL-TIME INTELLIGENCE ENGINE · FASE 8
+// =========================================================
+const IntelligenceEngine = createIntelligenceEngine({
+  io,
+});
+
+console.log(
+  "✅ Intelligence Engine iniciado:",
+  IntelligenceEngine.version
+);
+
+app.get("/api/intelligence/status", async (req, res) => {
+  try {
+    return res.json(await IntelligenceEngine.status());
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/intelligence", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const fresh =
+      String(req.query.fresh || "").toLowerCase() === "true";
+
+    const snapshot = await IntelligenceEngine.get(date, {
+      fresh,
+    });
+
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/intelligence/refresh", async (req, res) => {
+  try {
+    const date = String(
+      req.body?.date || req.query.date || todayISO()
+    ).trim();
+
+    const snapshot = await IntelligenceEngine.refresh(
+      date,
+      "manual-api"
+    );
+
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+// =========================================================
+// AI OPERATIONS DIRECTOR · FASE 9
+// =========================================================
+const AIOperationsDirector = createAIOperationsDirector({
+  intelligenceEngine: IntelligenceEngine,
+  io,
+});
+
+console.log(
+  "✅ AI Operations Director iniciado:",
+  AIOperationsDirector.version
+);
+
+app.get("/api/ai-director/status", async (req, res) => {
+  try {
+    return res.json(await AIOperationsDirector.status());
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/ai-director", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const fresh =
+      String(req.query.fresh || "").toLowerCase() === "true";
+
+    const result = await AIOperationsDirector.get(date, {
+      fresh,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/ai-director/refresh", async (req, res) => {
+  try {
+    const date = String(
+      req.body?.date || req.query.date || todayISO()
+    ).trim();
+
+    const result = await AIOperationsDirector.generate(date, {
+      freshIntelligence: true,
+      reason: "manual-api",
+    });
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+// =========================================================
+// MOTOR CENTRAL DE EVENTOS · FASE 7
+// =========================================================
+const EventEngine = createEventEngine({
+  io,
+  clearRoomCache,
+  clearAssignmentCaches,
+  onPublished({ payload }) {
+    broadcastOpsUpdate({
+      type: "action",
+      action: payload.action,
+      unit: payload.unit,
+      employee: payload.employee,
+      message: payload.note || "",
+      source: "event-engine",
+      eventId: payload.eventId,
+    });
+  },
+  onEventCommitted({ workDate, payload }) {
+    IntelligenceEngine.scheduleRefresh(
+      workDate,
+      `event:${payload.action}`
+    );
+
+    AIOperationsDirector.schedule(
+      workDate,
+      `event:${payload.action}`
+    );
+  },
+});
+
+console.log(
+  "✅ Event Engine iniciado:",
+  EventEngine.version
+);
+
+// =========================================================
+// ROOM ENGINE · CONTROL CENTRAL DE ACCIONES DE HABITACIONES
+// =========================================================
+// Este motor evita que los endpoints conozcan la lógica de cada acción.
+// PostgreSQL y EventEngine siguen siendo la fuente operativa inmediata;
+// Notion se sincroniza en segundo plano por medio de la cola existente.
+const CLEANER_ROOM_ACTIONS = new Set([
+  "START",
+  "DONE",
+  "ISSUE",
+  "SUPPLIES",
+  "LOST_FOUND",
+]);
+
+const INSPECTOR_ROOM_ACTIONS = new Set([
+  "INSPECTION_START",
+  "READY_GUEST",
+  "INSPECTION_REPORT",
+  "INSPECTION_SUPPLIES",
+  "PRE_INSPECTION_START",
+  "PRE_INSPECTION_COMPLETE",
+  "LOST_FOUND",
+]);
+
+function createOperationalRoomEngine({ eventEngine }) {
+  async function publishCleanerAction({
+    action,
+    unit,
+    cleaner,
+    note = "",
+    photoUrl = "",
+    eventId = "",
+    requestId = "",
+  }) {
+    const normalizedAction = String(action || "").trim().toUpperCase();
+    const normalizedUnit = String(unit || "").trim();
+    const normalizedCleaner = String(cleaner || "").trim();
+    const normalizedNote = String(note || "").trim();
+
+    if (!CLEANER_ROOM_ACTIONS.has(normalizedAction)) {
+      throw new Error(`Acción de limpieza no soportada: ${normalizedAction || "vacía"}`);
+    }
+
+    if (!normalizedUnit || !normalizedCleaner) {
+      throw new Error("La unidad y el limpiador son obligatorios");
+    }
+
+    if (["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(normalizedAction) && !normalizedNote) {
+      throw new Error("Debes escribir una nota");
+    }
+
+    return eventEngine.publish({
+      eventId,
+      requestId,
+      action: normalizedAction,
+      unit: normalizedUnit,
+      employee: normalizedCleaner,
+      role: "Cleaner",
+      note: normalizedNote,
+      photoUrl: String(photoUrl || "").trim(),
+    });
+  }
+
+  async function publishInspectorAction({
+    action,
+    unit,
+    inspector,
+    note = "",
+    photoUrl = "",
+    eventId = "",
+    requestId = "",
+  }) {
+    const normalizedAction = String(action || "").trim().toUpperCase();
+    const normalizedUnit = String(unit || "").trim();
+    const normalizedInspector = String(inspector || "").trim();
+    const normalizedNote = String(note || "").trim();
+
+    if (!INSPECTOR_ROOM_ACTIONS.has(normalizedAction)) {
+      throw new Error(`Acción de inspección no soportada: ${normalizedAction || "vacía"}`);
+    }
+
+    if (!normalizedUnit || !normalizedInspector) {
+      throw new Error("La unidad y el inspector son obligatorios");
+    }
+
+    if (
+      ["INSPECTION_REPORT", "INSPECTION_SUPPLIES", "LOST_FOUND"].includes(normalizedAction) &&
+      !normalizedNote
+    ) {
+      throw new Error("Debes escribir una nota");
+    }
+
+    return eventEngine.publish({
+      eventId,
+      requestId,
+      action: normalizedAction,
+      unit: normalizedUnit,
+      employee: normalizedInspector,
+      role: "Inspector",
+      note: normalizedNote,
+      photoUrl: String(photoUrl || "").trim(),
+    });
+  }
+
+  return {
+    version: "1.1.0",
+    handleCleanerAction: publishCleanerAction,
+    handleInspectorAction: publishInspectorAction,
+    startCleaning: (input) => publishCleanerAction({ ...input, action: "START" }),
+    finishCleaning: (input) => publishCleanerAction({ ...input, action: "DONE" }),
+    reportIssue: (input) => publishCleanerAction({ ...input, action: "ISSUE" }),
+    requestSupplies: (input) => publishCleanerAction({ ...input, action: "SUPPLIES" }),
+    reportLostAndFound: (input) => publishCleanerAction({ ...input, action: "LOST_FOUND" }),
+    startInspection: (input) => publishInspectorAction({ ...input, action: "INSPECTION_START" }),
+    finishInspection: (input) => publishInspectorAction({ ...input, action: "READY_GUEST" }),
+    reportInspectionIssue: (input) => publishInspectorAction({ ...input, action: "INSPECTION_REPORT" }),
+    requestInspectionSupplies: (input) => publishInspectorAction({ ...input, action: "INSPECTION_SUPPLIES" }),
+    startPreInspection: (input) => publishInspectorAction({ ...input, action: "PRE_INSPECTION_START" }),
+    finishPreInspection: (input) => publishInspectorAction({ ...input, action: "PRE_INSPECTION_COMPLETE" }),
+  };
+}
+
+const RoomEngine = createOperationalRoomEngine({
+  eventEngine: EventEngine,
+});
+
+console.log("✅ Room Engine iniciado:", RoomEngine.version);
+
+// =========================================================
+// ULTRA PERFORMANCE · NON-BLOCKING BACKGROUND WORK
+// =========================================================
+function runDetached(label, task) {
+  setImmediate(() => {
+    Promise.resolve()
+      .then(task)
+      .catch((error) => {
+        console.error(`BACKGROUND ${label} ERROR:`, error.message);
+      });
+  });
+}
+
+function queueLegacyActionFallback({
+  action,
+  unit,
+  name,
+  note = "",
+  photoUrl = "",
+  role = "Cleaner",
+}) {
+  runDetached(`${role}:${action}:${unit}`, async () => {
+    await updateNotionRoom(
+      unit,
+      action,
+      name,
+      note,
+      role.toLowerCase(),
+      photoUrl
+    );
+
+    try {
+      await insertOperationalEventPostgres({
+        action,
+        unit,
+        employee: name,
+        role,
+        note,
+        photoUrl,
+        category: ["ISSUE", "INSPECTION_REPORT", "LOST_FOUND"].includes(action)
+          ? "Problem"
+          : ["SUPPLIES", "INSPECTION_SUPPLIES"].includes(action)
+            ? "Supplies"
+            : role === "Inspector"
+              ? "Inspection"
+              : "Other",
+        priority: ["ISSUE", "INSPECTION_REPORT"].includes(action)
+          ? "High"
+          : "Normal",
+        source: "notion-fallback-background",
+      });
+    } catch (logError) {
+      console.error("POSTGRES BACKGROUND FALLBACK LOG ERROR:", logError.message);
+    }
+
+    runRoomSync("background-action-fallback", todayISO()).catch((error) => {
+      console.error("ROOM SYNC AFTER BACKGROUND FALLBACK ERROR:", error.message);
+    });
+
+    broadcastOpsUpdate({
+      type: "action",
+      action,
+      unit,
+      employee: name,
+      message: note || "",
+      source: "notion-fallback-background",
+    });
+  });
+}
+
+
+app.get("/api/event-engine/status", async (req, res) => {
+  try {
+    return res.json(await EventEngine.getStatus());
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/event-engine/events", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const limit = Number(req.query.limit || 100);
+    const events = await EventEngine.listEvents({ date, limit });
+
+    return res.json({
+      ok: true,
+      source: "postgres",
+      date,
+      count: events.length,
+      events,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+      events: [],
+    });
+  }
+});
+
+// =========================================================
+// OPERACIONES EN VIVO · POSTGRESQL FIRST
+// =========================================================
+function postgresStatusFromAction(action) {
+  if (action === "START") return "In Progress";
+  if (action === "DONE") return "Cleaned - Awaiting Inspection";
+  if (action === "INSPECTION_START") return "Inspection Started";
+  if (action === "READY_GUEST") return "Ready for Guest";
+  return "";
+}
+
+async function updateOperationalRoomPostgres({
+  action,
+  unit,
+  employee,
+  role,
+  note = "",
+  photoUrl = "",
+}) {
+  if (!postgresStatus.connected) {
+    throw new Error("PostgreSQL no está conectado");
+  }
+
+  const workDate = todayISO();
+  const normalizedRoom = normalizeRoom(unit);
+  const eventTime = new Date().toISOString();
+
+  if (!normalizedRoom) {
+    throw new Error(`No pude normalizar la unidad ${unit}`);
+  }
+
+  let sql = "";
+
+  if (action === "START") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'In Progress',
+          started_at = COALESCE(started_at, $3::timestamptz),
+          finished_at = NULL,
+          inspection_started_at = NULL,
+          ready_at = NULL,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else if (action === "DONE") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'Cleaned - Awaiting Inspection',
+          started_at = COALESCE(started_at, $3::timestamptz),
+          finished_at = $3::timestamptz,
+          inspection_started_at = NULL,
+          ready_at = NULL,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else if (action === "INSPECTION_START") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'Inspection Started',
+          inspection_started_at = COALESCE(inspection_started_at, $3::timestamptz),
+          ready_at = NULL,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else if (action === "READY_GUEST") {
+    sql = `
+      UPDATE rooms
+      SET cleaning_status = 'Ready for Guest',
+          inspection_started_at = COALESCE(inspection_started_at, $3::timestamptz),
+          ready_at = $3::timestamptz,
+          source = '417-maid-live',
+          updated_at = NOW()
+      WHERE work_date = $1::date AND normalized_room = $2
+      RETURNING *
+    `;
+  } else {
+    return { updated: false, status: "" };
+  }
+
+  const result = await postgresQuery(sql, [workDate, normalizedRoom, eventTime]);
+
+  if (!result.rows.length) {
+    throw new Error(`La unidad ${unit} no existe en PostgreSQL para ${workDate}`);
+  }
+
+  const room = result.rows[0];
+  const status = postgresStatusFromAction(action);
+  const externalEventId = `live:${workDate}:${normalizedRoom}:${action}:${Date.now()}`;
+
+  await postgresQuery(
+    `
+      INSERT INTO operations_logs (
+        external_event_id, work_date, event_time, unit, normalized_room,
+        action, cleaner, inspector, employee, role_worked, note,
+        photo_url, category, priority, source, raw_data
+      )
+      VALUES (
+        $1, $2::date, $3::timestamptz, $4, $5,
+        $6, $7, $8, $9, $10, $11,
+        $12, 'Other', 'Normal', '417-maid-live', $13::jsonb
+      )
+      ON CONFLICT (external_event_id) DO NOTHING
+    `,
+    [
+      externalEventId,
+      workDate,
+      eventTime,
+      room.room_number || unit,
+      normalizedRoom,
+      action,
+      String(role).toLowerCase().includes("cleaner") ? employee : "",
+      String(role).toLowerCase().includes("inspector") ? employee : "",
+      employee,
+      role,
+      note || "",
+      photoUrl || "",
+      JSON.stringify({ roomId: room.id, source: "postgres-first" }),
+    ]
+  );
+
+  clearRoomCache(workDate);
+  clearAssignmentCaches(workDate);
+
+  const payload = {
+    module: "rooms",
+    date: workDate,
+    reason: "operational-action",
+    action,
+    unit: room.room_number || unit,
+    normalizedRoom,
+    status,
+    employee,
+    role,
+    startedAt: room.started_at || null,
+    finishedAt: room.finished_at || null,
+    inspectionStartedAt: room.inspection_started_at || null,
+    readyAt: room.ready_at || null,
+    updatedAt: new Date().toISOString(),
+    source: "postgres",
+  };
+
+  io.emit("room-updated", payload);
+  io.emit("rooms-updated", payload);
+  io.emit("assignments-updated", payload);
+  io.emit("data-api-updated", payload);
+
+  return { updated: true, status, room, payload };
+}
+
+
+async function insertOperationalEventPostgres({
+  action,
+  unit,
+  employee = "",
+  role = "",
+  note = "",
+  photoUrl = "",
+  category = "Other",
+  priority = "Normal",
+  source = "417-maid-live",
+  externalEventId = "",
+}) {
+  const workDate = todayISO();
+  const normalizedRoom = normalizeRoom(unit);
+  const eventTime = new Date().toISOString();
+  const normalizedRole = String(role || "").toLowerCase();
+
+  const result = await postgresQuery(
+    `
+      INSERT INTO operations_logs (
+        external_event_id,
+        work_date,
+        event_time,
+        unit,
+        normalized_room,
+        action,
+        cleaner,
+        inspector,
+        employee,
+        role_worked,
+        note,
+        photo_url,
+        category,
+        priority,
+        source,
+        raw_data
+      )
+      VALUES (
+        NULLIF($1, ''),
+        $2::date,
+        $3::timestamptz,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15,
+        $16::jsonb
+      )
+      ON CONFLICT (external_event_id)
+      WHERE external_event_id IS NOT NULL
+        AND external_event_id <> ''
+      DO NOTHING
+      RETURNING *
+    `,
+    [
+      externalEventId ||
+        `ops:${workDate}:${normalizedRoom}:${action}:${Date.now()}`,
+      workDate,
+      eventTime,
+      unit || "",
+      normalizedRoom,
+      action || "UPDATE",
+      normalizedRole.includes("cleaner") ? employee : "",
+      normalizedRole.includes("inspector") ? employee : "",
+      employee || "",
+      role || "",
+      note || "",
+      photoUrl || "",
+      category || "Other",
+      priority || "Normal",
+      source || "417-maid-live",
+      JSON.stringify({
+        source,
+        capturedBy: "operations-postgres-first",
+      }),
+    ]
+  );
+
+  const event = result.rows[0] || null;
+
+  if (event) {
+    io.emit("operations-log-created", {
+      id: event.id,
+      date: event.work_date,
+      eventTime: event.event_time,
+      unit: event.unit,
+      normalizedRoom: event.normalized_room,
+      action: event.action,
+      employee: event.employee,
+      person: event.employee,
+      role: event.role_worked,
+      note: event.note,
+      photoUrl: event.photo_url,
+      category: event.category,
+      priority: event.priority,
+      source: "postgres",
+    });
+  }
+
+  return event;
+}
+
+function syncOperationalActionToNotionInBackground({
+  action,
+  unit,
+  note,
+  name,
+  role,
+  photoUrl,
+}) {
+  const dedupeKey = [
+    "notion-room-action",
+    todayISO(),
+    normalizeRoom(unit),
+    action,
+    cleanEmployeeText(name),
+    Date.now(),
+  ].join(":");
+
+  enqueueSyncJob({
+    jobType: "notion-room-action",
+    destination: "notion",
+    dedupeKey,
+    priority: action === "READY_GUEST" ? 10 : 50,
+    payload: {
+      action,
+      unit,
+      note: note || "",
+      name,
+      role,
+      photoUrl: photoUrl || "",
+      queuedAt: new Date().toISOString(),
+    },
+  })
+    .then((job) => {
+      console.log("📥 Acción guardada en sync_queue:", {
+        id: job.id,
+        action,
+        unit,
+        employee: name,
+      });
+
+      io.emit("notion-action-queued", {
+        ok: true,
+        queueId: job.id,
+        action,
+        unit,
+        employee: name,
+        updatedAt: new Date().toISOString(),
+      });
+    })
+    .catch((error) => {
+      console.error("🔴 No se pudo guardar en sync_queue:", error.message);
+
+      addNotification(
+        "🔴 No se pudo crear trabajo de sincronización",
+        `${action} · ${unit} · ${name}: ${error.message}`
+      );
+    });
+}
+
 app.post("/action", async (req, res) => {
   try {
-    const { action, unit, note, name, photoUrl } = req.body;
+    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -3915,49 +5490,69 @@ app.post("/action", async (req, res) => {
       });
     }
 
-    if (isDuplicateAction(action, unit, name)) {
-      return res.status(400).json({
-        success: false,
-        message: "Acción ya registrada recientemente",
+    if (["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(action) && !String(note || "").trim()) {
+      return res.status(400).json({ success: false, message: "Debes escribir una nota" });
+    }
+
+    try {
+      const eventResult = await RoomEngine.handleCleanerAction({
+        eventId,
+        requestId,
+        action,
+        unit,
+        cleaner: name,
+        note,
+        photoUrl,
+      });
+
+      if (action === "DONE") {
+        runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
+      }
+
+      return res.json({
+        success: true,
+        source: "postgres",
+        eventId: eventResult?.eventId || "",
+        duplicate: Boolean(eventResult?.duplicate),
+        postgresUpdated: true,
+        notionSync: "queued",
+        payroll: eventResult?.payroll || null,
+        status: eventResult?.status || notionStatusFromAction(action) || "",
+        message: `Enviado correctamente: ${actionLabel(action)} - ${unit}`,
+      });
+    } catch (postgresError) {
+      console.error("⚠️ Event Engine cleaner falló; fallback en background:", postgresError.message);
+
+      if (isDuplicateAction(action, unit, name)) {
+        return res.status(400).json({
+          success: false,
+          message: "Acción ya registrada recientemente",
+        });
+      }
+
+      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Cleaner" });
+
+      return res.status(202).json({
+        success: true,
+        accepted: true,
+        source: "background-fallback",
+        eventId: eventId || requestId || "",
+        duplicate: false,
+        postgresUpdated: false,
+        notionSync: "processing",
+        status: notionStatusFromAction(action) || "",
+        message: `Acción recibida y procesándose: ${actionLabel(action)} - ${unit}`,
       });
     }
-
-    if ((action === "ISSUE" || action === "SUPPLIES" || action === "LOST_FOUND") && !String(note || "").trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Debes escribir una nota",
-      });
-    }
-
-    const result = await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl);
-
-    if (action === "DONE") {
-      await notifyInspectors(unit);
-    }
-    broadcastOpsUpdate({
-      type: "action",
-      action,
-      unit,
-      employee: name,
-      message: note || "",
-    });
-    res.json({
-      success: true,
-      message: `Enviado correctamente: ${result.label} - ${unit}`,
-    });
   } catch (error) {
     console.error("Error en /action:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: `Error: ${error.message}`,
-    });
+    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
   }
 });
 
 app.post("/inspector-action", async (req, res) => {
   try {
-    const { action, unit, note, name, photoUrl } = req.body;
+    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -3966,42 +5561,58 @@ app.post("/inspector-action", async (req, res) => {
       });
     }
 
-    if (isDuplicateAction(action, unit, name)) {
-      return res.status(400).json({
-        success: false,
-        message: "Acción ya registrada recientemente",
-      });
+    if (["INSPECTION_REPORT", "INSPECTION_SUPPLIES", "LOST_FOUND"].includes(action) && !String(note || "").trim()) {
+      return res.status(400).json({ success: false, message: "Debes escribir una nota" });
     }
 
-    if (
-      (action === "INSPECTION_REPORT" || action === "INSPECTION_SUPPLIES" || action === "LOST_FOUND") &&
-      !String(note || "").trim()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Debes escribir una nota",
+    try {
+      const eventResult = await RoomEngine.handleInspectorAction({
+        eventId,
+        requestId,
+        action,
+        unit,
+        inspector: name,
+        note,
+        photoUrl,
+      });
+
+      return res.json({
+        success: true,
+        source: "postgres",
+        eventId: eventResult?.eventId || "",
+        duplicate: Boolean(eventResult?.duplicate),
+        postgresUpdated: true,
+        notionSync: "queued",
+        status: eventResult?.status || notionStatusFromAction(action) || "",
+        message: `Inspector: ${actionLabel(action)} - ${unit}`,
+      });
+    } catch (postgresError) {
+      console.error("⚠️ Event Engine inspector falló; fallback en background:", postgresError.message);
+
+      if (isDuplicateAction(action, unit, name)) {
+        return res.status(400).json({
+          success: false,
+          message: "Acción ya registrada recientemente",
+        });
+      }
+
+      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Inspector" });
+
+      return res.status(202).json({
+        success: true,
+        accepted: true,
+        source: "background-fallback",
+        eventId: eventId || requestId || "",
+        duplicate: false,
+        postgresUpdated: false,
+        notionSync: "processing",
+        status: notionStatusFromAction(action) || "",
+        message: `Inspector: acción recibida y procesándose - ${unit}`,
       });
     }
-
-    const result = await updateNotionRoom(unit, action, name, note, "inspector", photoUrl);
-    broadcastOpsUpdate({
-      type: "action",
-      action,
-      unit,
-      employee: name,
-      message: note || "",
-    });
-    res.json({
-      success: true,
-      message: `Inspector: ${result.label} - ${unit}`,
-    });
   } catch (error) {
     console.error("Error inspector:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: `Error: ${error.message}`,
-    });
+    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
   }
 });
 
@@ -4284,6 +5895,132 @@ app.post("/api/hotsos/guest-out", async (req, res) => {
   }
 });
 
+
+// =========================================================
+// PAYROLL 2.0 · TARIFAS, AJUSTES, BLOQUEO Y AUDITORÍA
+// =========================================================
+app.get("/api/payroll/week", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const [week, validation] = await Promise.all([
+      getPayrollWeekState(weekStart, weekEnd),
+      validatePayrollWeek(weekStart, weekEnd),
+    ]);
+    res.json({ ok: true, weekStart, weekEnd, status: week?.status || "open", week, validation });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/payroll/rates", async (req, res) => {
+  try {
+    const rates = await listPayrollRates({ includeInactive: req.query.all === "true" });
+    res.json({ ok: true, rates });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/rates", async (req, res) => {
+  try {
+    const result = await savePayrollRate({
+      propertyName: req.body.propertyName,
+      roomType: req.body.roomType,
+      amount: req.body.amount,
+      effectiveFrom: req.body.effectiveFrom,
+      changedBy: req.body.changedBy || "Admin",
+      reason: req.body.reason || "Rate updated from Payroll 2.0",
+      weekStart: req.body.weekStart || "",
+      weekEnd: req.body.weekEnd || "",
+      applyToWeek: Boolean(req.body.applyToWeek),
+    });
+    io.emit("payroll-rates-updated", result);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.patch("/api/payroll/records/:id", async (req, res) => {
+  try {
+    const record = await updatePayrollRecordAmount({
+      recordId: Number(req.params.id),
+      amount: req.body.amount,
+      reason: req.body.reason,
+      changedBy: req.body.changedBy || "Admin",
+    });
+    io.emit("payroll-record-updated", record);
+    res.json({ ok: true, record });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/records/:id/reset", async (req, res) => {
+  try {
+    const record = await resetPayrollRecordAmount({
+      recordId: Number(req.params.id),
+      reason: req.body.reason,
+      changedBy: req.body.changedBy || "Admin",
+    });
+    io.emit("payroll-record-updated", record);
+    res.json({ ok: true, record });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/week/close", async (req, res) => {
+  try {
+    const weekStart = String(req.body.start || "").trim();
+    const weekEnd = String(req.body.end || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const week = await closePayrollWeek({
+      weekStart,
+      weekEnd,
+      changedBy: req.body.changedBy || "Admin",
+      reason: req.body.reason || "Payroll reviewed and approved",
+    });
+    io.emit("payroll-week-closed", week);
+    res.json({ ok: true, week });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/week/reopen", async (req, res) => {
+  try {
+    const weekStart = String(req.body.start || "").trim();
+    const weekEnd = String(req.body.end || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const week = await reopenPayrollWeek({
+      weekStart,
+      weekEnd,
+      changedBy: req.body.changedBy || "Admin",
+      reason: req.body.reason,
+    });
+    io.emit("payroll-week-reopened", week);
+    res.json({ ok: true, week });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/payroll/audit", async (req, res) => {
+  try {
+    const currentWeek = getPayrollWeek(new Date());
+    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
+    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const audit = await listPayrollAudit(weekStart, weekEnd, req.query.limit || 100);
+    res.json({ ok: true, weekStart, weekEnd, audit });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 app.post("/api/room-alert", async (req, res) => {
   try {
     const unit = String(req.body.unit || "").trim();
@@ -4328,10 +6065,15 @@ app.get("/payroll-preview", async (req, res) => {
     const weekEnd = String(req.query.end || "").trim();
     validatePayrollRange(weekStart, weekEnd);
 
-    const [records, hourlyRecords] = await Promise.all([
-      getPayrollRecords(weekStart, weekEnd),
+    const requestedSource = String(req.query.source || "auto").trim().toLowerCase();
+    const [payrollRead, hourlyRecords] = await Promise.all([
+      getPayrollRecordsWithSource(weekStart, weekEnd, {
+        source: requestedSource,
+        allowFallback: requestedSource === "auto",
+      }),
       getHourlyPayrollRecords(weekStart, weekEnd),
     ]);
+    const records = payrollRead.records;
 
     const employees = new Map();
     const warnings = [];
@@ -4382,6 +6124,10 @@ app.get("/payroll-preview", async (req, res) => {
       ok: true,
       weekStart,
       weekEnd,
+      requestedSource: payrollRead.requestedSource,
+      source: payrollRead.source,
+      fallback: payrollRead.fallback,
+      fallbackReason: payrollRead.fallbackReason || "",
       totals: {
         employees: people.length,
         units: records.length,
@@ -4423,6 +6169,9 @@ app.post("/generate-payroll-excel", async (req, res) => {
       weekStart,
       weekEnd,
       totalRecords: payroll.totalRecords,
+      payrollSource: payroll.payrollSource,
+      payrollFallback: payroll.payrollFallback,
+      payrollFallbackReason: payroll.payrollFallbackReason,
       file: payroll.fileName,
       url: payroll.fileUrl,
       fullUrl: `${req.protocol}://${req.get("host")}${payroll.fileUrl}`,
@@ -7656,6 +9405,937 @@ app.get("/statistics", (req, res) => {
 });
 
 
-server.listen(PORT, () => {
-  console.log(`Panel web activo en puerto ${PORT}`);
+
+// =========================================================
+// DATA API CENTRAL · POSTGRESQL FIRST · FASE 1
+// =========================================================
+// Estas rutas son la nueva fuente común para Dashboard, Cleaning,
+// Inspectores, Payroll y la futura app móvil. Los paneles anteriores
+// siguen funcionando mientras migramos uno por uno.
+app.get("/api/v2/health", async (req, res) => {
+  try {
+    res.json(await getDataApiHealth());
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      source: "postgres",
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/employees", async (req, res) => {
+  try {
+    const activeOnly = String(req.query.active || "1") !== "0";
+    const employees = await listDataApiEmployees({ activeOnly });
+
+    res.json({
+      ok: true,
+      source: "postgres",
+      count: employees.length,
+      employees,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/rooms", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const employee = String(req.query.employee || "").trim();
+    const role = String(req.query.role || "").trim();
+
+    const rooms = await listDataApiRooms({
+      date,
+      employee,
+      role,
+    });
+
+    // Pre-inspection is currently event-backed in PostgreSQL.
+    // The rooms table does not yet expose these fields, so derive the latest
+    // authoritative state from operations_logs instead of falling back to Notion.
+    const preInspectionResult = await postgresQuery(
+      `
+        SELECT DISTINCT ON (normalized_room)
+          normalized_room,
+          action,
+          event_time
+        FROM operations_logs
+        WHERE work_date = $1::date
+          AND action IN ('PRE_INSPECTION_START', 'PRE_INSPECTION_COMPLETE')
+        ORDER BY normalized_room, event_time DESC, id DESC
+      `,
+      [date]
+    );
+
+    const preInspectionByRoom = new Map(
+      preInspectionResult.rows.map((row) => [
+        String(row.normalized_room || ""),
+        row
+      ])
+    );
+
+    const enrichedRooms = rooms.map((room) => {
+      const latest = preInspectionByRoom.get(
+        String(room.normalizedRoom || "")
+      );
+
+      if (!latest) {
+        return {
+          ...room,
+          preInspection: Boolean(room.preInspection),
+          preInspectionStarted: Boolean(room.preInspectionStarted),
+        };
+      }
+
+      const completed = latest.action === "PRE_INSPECTION_COMPLETE";
+
+      return {
+        ...room,
+        preInspection: completed,
+        preInspectionStarted: !completed,
+        preInspectionStartedAt: !completed ? latest.event_time : null,
+        preInspectionCompletedAt: completed ? latest.event_time : null,
+      };
+    });
+
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.json({
+      ok: true,
+      source: "postgres",
+      date,
+      count: enrichedRooms.length,
+      rooms: enrichedRooms,
+    });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+app.get("/api/v2/operations", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const requestedLimit = Number(req.query.limit || 250);
+    const limit = Math.min(Math.max(requestedLimit, 1), 500);
+
+    const result = await postgresQuery(
+      `
+        SELECT
+          id,
+          notion_id,
+          external_event_id,
+          work_date,
+          event_time,
+          unit,
+          normalized_room,
+          action,
+          cleaner,
+          inspector,
+          employee,
+          role_worked,
+          note,
+          photo_url,
+          category,
+          priority,
+          source,
+          created_at
+        FROM operations_logs
+        WHERE work_date = $1::date
+        ORDER BY event_time DESC, id DESC
+        LIMIT $2
+      `,
+      [date, limit]
+    );
+
+    const events = result.rows.map((row) => ({
+      id: String(row.id),
+      notionId: row.notion_id || "",
+      externalEventId: row.external_event_id || "",
+      date: row.work_date,
+      eventTime: row.event_time,
+      time: row.event_time
+        ? new Date(row.event_time).toLocaleString("en-US", {
+            timeZone: "America/Chicago",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : "",
+      unit: row.unit || "",
+      normalizedRoom: row.normalized_room || "",
+      action: row.action || "",
+      cleaner: row.cleaner || "",
+      inspector: row.inspector || "",
+      employee:
+        row.employee ||
+        row.cleaner ||
+        row.inspector ||
+        "",
+      person:
+        row.employee ||
+        row.cleaner ||
+        row.inspector ||
+        "",
+      role: row.role_worked || "",
+      note: row.note || "",
+      photoUrl: row.photo_url || "",
+      category: row.category || "Other",
+      priority: row.priority || "Normal",
+      source: row.source || "postgres",
+      createdAt: row.created_at,
+    }));
+
+    return res.json({
+      ok: true,
+      source: "postgres",
+      date,
+      count: events.length,
+      events,
+    });
+  } catch (error) {
+    console.error("Error en /api/v2/operations:", error.message);
+
+    return res.status(500).json({
+      ok: false,
+      source: "postgres",
+      count: 0,
+      events: [],
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/dashboard", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    res.json(await getDataApiDashboard(date));
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/payroll", async (req, res) => {
+  try {
+    const start = String(req.query.start || "").trim();
+    const end = String(req.query.end || "").trim();
+
+    res.json(
+      await getDataApiPayrollWeek({
+        start,
+        end,
+      })
+    );
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/v2/bootstrap", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const employee = String(req.query.employee || "").trim();
+    const role = String(req.query.role || "").trim();
+    const weekStart = String(req.query.weekStart || "").trim();
+    const weekEnd = String(req.query.weekEnd || "").trim();
+
+    res.json(
+      await getDataApiBootstrap({
+        date,
+        employee,
+        role,
+        weekStart,
+        weekEnd,
+      })
+    );
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+// =========================================================
+// SYNC QUEUE WORKER · NOTION
+// =========================================================
+let syncQueueTimer = null;
+let syncQueueBusy = false;
+
+async function processNotionQueueOnce() {
+  if (syncQueueBusy || !postgresStatus.connected) {
+    return;
+  }
+
+  syncQueueBusy = true;
+
+  try {
+    const result = await processNextSyncJob({
+      destination: "notion",
+      processors: {
+        "notion-room-action": async (payload) => {
+          const result = await updateNotionRoom(
+            payload.unit,
+            payload.action,
+            payload.name,
+            payload.note || "",
+            payload.role || "",
+            payload.photoUrl || ""
+          );
+
+          io.emit("notion-action-synced", {
+            ok: true,
+            action: payload.action,
+            unit: payload.unit,
+            employee: payload.name,
+            updatedAt: new Date().toISOString(),
+          });
+
+          return result;
+        },
+      },
+    });
+
+    if (result.processed && !result.ok) {
+      const payload = result.job?.payload || {};
+
+      console.error("⚠️ sync_queue reintentará trabajo:", {
+        id: result.job?.id,
+        action: payload.action,
+        unit: payload.unit,
+        attempts: result.job?.attempts,
+        error: result.error?.message || result.job?.last_error,
+      });
+
+      if (result.exhausted) {
+        addNotification(
+          "🔴 Sincronización con Notion agotada",
+          `${payload.action || "ACTION"} · ${payload.unit || ""}: ${
+            result.error?.message || result.job?.last_error || "Error desconocido"
+          }`
+        );
+      }
+    }
+  } catch (error) {
+    console.error("SYNC QUEUE WORKER ERROR:", error.message);
+  } finally {
+    syncQueueBusy = false;
+  }
+}
+
+function startSyncQueueWorker() {
+  if (syncQueueTimer) {
+    return;
+  }
+
+  const intervalMs = Math.max(
+    2000,
+    Number(process.env.SYNC_QUEUE_INTERVAL_MS || 5000)
+  );
+
+  recoverStaleJobs(
+    Number(process.env.SYNC_QUEUE_STALE_MINUTES || 10)
+  ).catch((error) => {
+    console.error("SYNC QUEUE RECOVERY ERROR:", error.message);
+  });
+
+  processNotionQueueOnce();
+
+  syncQueueTimer = setInterval(
+    processNotionQueueOnce,
+    intervalMs
+  );
+
+  console.log(`✅ Sync Queue Worker activo cada ${intervalMs}ms`);
+}
+
+app.get("/api/sync-queue/status", async (req, res) => {
+  try {
+    const status = await getSyncQueueStatus();
+
+    return res.json({
+      ok: true,
+      ...status,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/api/sync-queue/retry", async (req, res) => {
+  try {
+    const retried = await retryFailedJobs();
+
+    setImmediate(() => {
+      processNotionQueueOnce();
+    });
+
+    return res.json({
+      ok: true,
+      retried,
+      message: `${retried} trabajos enviados de nuevo a la cola`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+
+// =========================================================
+// ADMIN CENTER · ROOMS MANAGER
+// =========================================================
+app.get("/rooms-manager", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "rooms-manager.html"));
+});
+
+function adminRoomDate(value) {
+  const date = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayISO();
+}
+
+function adminRoomBoolean(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return fallback;
+}
+
+function adminRoomText(value, maxLength = 250) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function adminRoomJsonArray(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => adminRoomText(item, 120)).filter(Boolean))];
+  }
+
+  return [...new Set(
+    String(value || "")
+      .split(/[,;/\n]+/)
+      .map((item) => adminRoomText(item, 120))
+      .filter(Boolean)
+  )];
+}
+
+function adminRoomResponse(row) {
+  if (!row) return null;
+
+  return {
+    id: Number(row.id),
+    notionId: row.notion_id || "",
+    workDate: row.work_date,
+    roomNumber: row.room_number || "",
+    normalizedRoom: row.normalized_room || "",
+    roomType: row.room_type || "",
+    building: row.building || "OTHER",
+    cleaningStatus: row.cleaning_status || "",
+    guestOut: row.guest_out === true,
+    guestOutAt: row.guest_out_at || null,
+    urgent: row.urgent === true,
+    arrival: row.arrival === true,
+    assignedCleaner: row.assigned_cleaner || "",
+    assignedCleaners: Array.isArray(row.assigned_cleaners)
+      ? row.assigned_cleaners
+      : [],
+    assignedInspector: row.assigned_inspector || "",
+    assignedInspectors: Array.isArray(row.assigned_inspectors)
+      ? row.assigned_inspectors
+      : [],
+    startedAt: row.started_at || null,
+    finishedAt: row.finished_at || null,
+    inspectionStartedAt: row.inspection_started_at || null,
+    readyAt: row.ready_at || null,
+    preInspection: row.pre_inspection === true,
+    preInspectionStarted: row.pre_inspection_started === true,
+    preInspectionStartedAt: row.pre_inspection_started_at || null,
+    preInspectionCompletedAt: row.pre_inspection_completed_at || null,
+    source: row.source || "postgres",
+    updatedBy: row.updated_by || "",
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+function adminRoomSqlValue(value) {
+  if (value instanceof Date) return value.toISOString();
+  return value;
+}
+
+app.get("/api/admin/rooms", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado",
+      });
+    }
+
+    const workDate = adminRoomDate(req.query.date || req.query.workDate);
+    const search = adminRoomText(req.query.search, 120);
+    const status = adminRoomText(req.query.status, 120);
+    const building = adminRoomText(req.query.building, 30).toUpperCase();
+    const urgentOnly = adminRoomBoolean(req.query.urgent, false);
+    const arrivalOnly = adminRoomBoolean(req.query.arrival, false);
+
+    const where = ["work_date = $1"];
+    const values = [workDate];
+
+    if (search) {
+      values.push(`%${search}%`);
+      where.push(`(
+        room_number ILIKE $${values.length}
+        OR normalized_room ILIKE $${values.length}
+        OR assigned_cleaner ILIKE $${values.length}
+        OR assigned_inspector ILIKE $${values.length}
+      )`);
+    }
+
+    if (status && status.toLowerCase() !== "all") {
+      values.push(status);
+      where.push(`cleaning_status = $${values.length}`);
+    }
+
+    if (building && building !== "ALL") {
+      values.push(building);
+      where.push(`UPPER(building) = $${values.length}`);
+    }
+
+    if (urgentOnly) where.push("urgent = TRUE");
+    if (arrivalOnly) where.push("arrival = TRUE");
+
+    const result = await postgresQuery(
+      `SELECT *
+       FROM rooms
+       WHERE ${where.join(" AND ")}
+       ORDER BY
+         CASE WHEN urgent THEN 0 ELSE 1 END,
+         building ASC,
+         NULLIF(regexp_replace(normalized_room, '[^0-9]', '', 'g'), '')::INTEGER NULLS LAST,
+         normalized_room ASC`,
+      values
+    );
+
+    const rooms = result.rows.map(adminRoomResponse);
+    const statuses = [...new Set(rooms.map((room) => room.cleaningStatus).filter(Boolean))].sort();
+    const buildings = [...new Set(rooms.map((room) => room.building).filter(Boolean))].sort();
+
+    return res.json({
+      ok: true,
+      workDate,
+      count: rooms.length,
+      rooms,
+      filters: { statuses, buildings },
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("GET /api/admin/rooms ERROR:", error);
+    return res.status(500).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/admin/rooms/:id/history", async (req, res) => {
+  try {
+    const roomId = Number(req.params.id);
+
+    if (!Number.isInteger(roomId) || roomId <= 0) {
+      return res.status(400).json({ ok: false, message: "ID de habitación inválido" });
+    }
+
+    const result = await postgresQuery(
+      `SELECT *
+       FROM admin_audit_logs
+       WHERE entity_type = 'room'
+         AND entity_id = $1
+       ORDER BY created_at DESC
+       LIMIT 200`,
+      [String(roomId)]
+    );
+
+    return res.json({
+      ok: true,
+      roomId,
+      count: result.rows.length,
+      history: result.rows,
+    });
+  } catch (error) {
+    console.error("GET /api/admin/rooms/:id/history ERROR:", error);
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/admin/rooms/:id", async (req, res) => {
+  try {
+    const roomId = Number(req.params.id);
+
+    if (!Number.isInteger(roomId) || roomId <= 0) {
+      return res.status(400).json({ ok: false, message: "ID de habitación inválido" });
+    }
+
+    const result = await postgresQuery(
+      "SELECT * FROM rooms WHERE id = $1 LIMIT 1",
+      [roomId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ ok: false, message: "Habitación no encontrada" });
+    }
+
+    return res.json({
+      ok: true,
+      room: adminRoomResponse(result.rows[0]),
+    });
+  } catch (error) {
+    console.error("GET /api/admin/rooms/:id ERROR:", error);
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.patch("/api/admin/rooms/:id", async (req, res) => {
+  const roomId = Number(req.params.id);
+
+  if (!Number.isInteger(roomId) || roomId <= 0) {
+    return res.status(400).json({ ok: false, message: "ID de habitación inválido" });
+  }
+
+  const allowedFields = {
+    roomNumber: "room_number",
+    roomType: "room_type",
+    building: "building",
+    cleaningStatus: "cleaning_status",
+    guestOut: "guest_out",
+    guestOutAt: "guest_out_at",
+    urgent: "urgent",
+    arrival: "arrival",
+    assignedCleaner: "assigned_cleaner",
+    assignedCleaners: "assigned_cleaners",
+    assignedInspector: "assigned_inspector",
+    assignedInspectors: "assigned_inspectors",
+    preInspection: "pre_inspection",
+    preInspectionStarted: "pre_inspection_started",
+    preInspectionStartedAt: "pre_inspection_started_at",
+    preInspectionCompletedAt: "pre_inspection_completed_at",
+  };
+
+  const booleanFields = new Set([
+    "guestOut",
+    "urgent",
+    "arrival",
+    "preInspection",
+    "preInspectionStarted",
+  ]);
+
+  const dateFields = new Set([
+    "guestOutAt",
+    "preInspectionStartedAt",
+    "preInspectionCompletedAt",
+  ]);
+
+  const arrayFields = new Set(["assignedCleaners", "assignedInspectors"]);
+  const actor = adminRoomText(
+    req.body?.updatedBy || req.body?.changedBy || req.headers["x-admin-name"] || "Admin",
+    120
+  ) || "Admin";
+  const actorId = adminRoomText(
+    req.body?.updatedById || req.body?.changedById || req.headers["x-admin-id"] || "",
+    120
+  );
+
+  const requested = Object.entries(allowedFields).filter(([apiField]) =>
+    Object.prototype.hasOwnProperty.call(req.body || {}, apiField)
+  );
+
+  if (!requested.length) {
+    return res.status(400).json({
+      ok: false,
+      message: "No se recibió ningún campo permitido para actualizar",
+    });
+  }
+
+  let client;
+
+  try {
+    client = await getPool().connect();
+    await client.query("BEGIN");
+
+    const currentResult = await client.query(
+      "SELECT * FROM rooms WHERE id = $1 FOR UPDATE",
+      [roomId]
+    );
+    const current = currentResult.rows[0];
+
+    if (!current) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ ok: false, message: "Habitación no encontrada" });
+    }
+
+    const assignments = [];
+    const values = [];
+    const changes = [];
+
+    for (const [apiField, column] of requested) {
+      let nextValue = req.body[apiField];
+
+      if (booleanFields.has(apiField)) {
+        nextValue = adminRoomBoolean(nextValue, current[column] === true);
+      } else if (arrayFields.has(apiField)) {
+        nextValue = adminRoomJsonArray(nextValue);
+      } else if (dateFields.has(apiField)) {
+        const raw = String(nextValue ?? "").trim();
+        if (!raw) {
+          nextValue = null;
+        } else {
+          const parsed = new Date(raw);
+          if (Number.isNaN(parsed.getTime())) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+              ok: false,
+              message: `${apiField} contiene una fecha inválida`,
+            });
+          }
+          nextValue = parsed.toISOString();
+        }
+      } else {
+        nextValue = adminRoomText(nextValue, apiField === "roomNumber" ? 180 : 250);
+        if (apiField === "building") nextValue = nextValue.toUpperCase() || "OTHER";
+      }
+
+      const oldComparable = JSON.stringify(adminRoomSqlValue(current[column]));
+      const newComparable = JSON.stringify(adminRoomSqlValue(nextValue));
+
+      if (oldComparable === newComparable) continue;
+
+      values.push(arrayFields.has(apiField) ? JSON.stringify(nextValue) : nextValue);
+      assignments.push(
+        `${column} = $${values.length}${arrayFields.has(apiField) ? "::jsonb" : ""}`
+      );
+      changes.push({
+        apiField,
+        column,
+        oldValue: current[column],
+        newValue: nextValue,
+      });
+    }
+
+    if (!changes.length) {
+      await client.query("ROLLBACK");
+      return res.json({
+        ok: true,
+        unchanged: true,
+        room: adminRoomResponse(current),
+        message: "No había cambios nuevos para guardar",
+      });
+    }
+
+    values.push(actor);
+    assignments.push(`updated_by = $${values.length}`);
+    assignments.push("updated_at = NOW()");
+    values.push(roomId);
+
+    const updatedResult = await client.query(
+      `UPDATE rooms
+       SET ${assignments.join(", ")}
+       WHERE id = $${values.length}
+       RETURNING *`,
+      values
+    );
+
+    for (const change of changes) {
+      await client.query(
+        `INSERT INTO admin_audit_logs (
+          entity_type,
+          entity_id,
+          action,
+          field_name,
+          old_value,
+          new_value,
+          changed_by,
+          changed_by_id,
+          work_date,
+          metadata
+        ) VALUES (
+          'room', $1, 'update', $2, $3::jsonb, $4::jsonb,
+          $5, $6, $7, $8::jsonb
+        )`,
+        [
+          String(roomId),
+          change.apiField,
+          JSON.stringify(change.oldValue ?? null),
+          JSON.stringify(change.newValue ?? null),
+          actor,
+          actorId,
+          current.work_date,
+          JSON.stringify({
+            column: change.column,
+            source: "rooms-manager",
+          }),
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const room = adminRoomResponse(updatedResult.rows[0]);
+    clearRoomCache(String(room.workDate).slice(0, 10));
+    clearAssignmentCaches(String(room.workDate).slice(0, 10));
+
+    const payload = {
+      reason: "admin-room-update",
+      roomId: room.id,
+      workDate: room.workDate,
+      room,
+      changedFields: changes.map((change) => change.apiField),
+      updatedBy: actor,
+      timestamp: new Date().toISOString(),
+    };
+
+    io.emit("room-updated", payload);
+    io.emit("rooms-updated", payload);
+    io.emit("assignments-updated", payload);
+
+    setImmediate(() => {
+      Promise.resolve()
+        .then(() => IntelligenceEngine.refresh(String(room.workDate).slice(0, 10), "admin-room-update"))
+        .then(() => AIOperationsDirector.generate(String(room.workDate).slice(0, 10), {
+          reason: "admin-room-update",
+        }))
+        .catch((error) => {
+          console.error("ADMIN ROOM BACKGROUND INTELLIGENCE ERROR:", error.message);
+        });
+    });
+
+    return res.json({
+      ok: true,
+      room,
+      changedFields: payload.changedFields,
+      message: "Habitación actualizada correctamente",
+    });
+  } catch (error) {
+    if (client) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+    }
+
+    if (error?.code === "23505") {
+      return res.status(409).json({
+        ok: false,
+        message: "Ya existe otra habitación con ese número para la misma fecha",
+      });
+    }
+
+    console.error("PATCH /api/admin/rooms/:id ERROR:", error);
+    return res.status(500).json({ ok: false, message: error.message });
+  } finally {
+    client?.release?.();
+  }
+});
+
+
+async function startServer() {
+  const databaseStatus = await startPostgres();
+
+  if (databaseStatus.connected) {
+    startSyncQueueWorker();
+
+    try {
+      await runEmployeeSync("startup");
+      startEmployeeSyncSchedule();
+
+      await runRoomSync("startup", todayISO());
+      startRoomSyncSchedule();
+
+      const payrollWeek = getPayrollWeek(new Date());
+      await runPayrollSync("startup", payrollWeek.weekStart, payrollWeek.weekEnd);
+      startPayrollSyncSchedule();
+    } catch (error) {
+      // La sincronización no bloquea el panel. Notion sigue disponible.
+      console.error(
+        "⚠️ El servidor arrancará sin la sincronización inicial de Employees:",
+        error.message
+      );
+
+      startEmployeeSyncSchedule();
+
+      try {
+        await runRoomSync("startup-recovery", todayISO());
+      } catch (roomError) {
+        console.error(
+          "⚠️ El servidor arrancará sin la sincronización inicial de Rooms:",
+          roomError.message
+        );
+      }
+
+      startRoomSyncSchedule();
+
+      try {
+        const payrollWeek = getPayrollWeek(new Date());
+        await runPayrollSync("startup-recovery", payrollWeek.weekStart, payrollWeek.weekEnd);
+      } catch (payrollError) {
+        console.error(
+          "⚠️ El servidor arrancará sin la sincronización inicial de Payroll:",
+          payrollError.message
+        );
+      }
+
+      startPayrollSyncSchedule();
+    }
+  } else {
+    console.warn(
+      "⚠️ Employee sync no se inició porque PostgreSQL no está conectado."
+    );
+  }
+
+  if (databaseStatus.connected) {
+    setTimeout(() => {
+      IntelligenceEngine.refresh(todayISO(), "server-start")
+        .then(() =>
+          AIOperationsDirector.generate(todayISO(), {
+            reason: "server-start",
+          })
+        )
+        .catch((error) => {
+          console.error(
+            "INITIAL INTELLIGENCE / AI DIRECTOR ERROR:",
+            error.message
+          );
+        });
+    }, 2500);
+  }
+
+  server.listen(PORT, () => {
+    console.log(`Panel web activo en puerto ${PORT}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("SERVER START ERROR:", error);
+
+  // Último salvavidas: incluso si falla el bootstrap, intenta abrir el panel.
+  server.listen(PORT, () => {
+    console.log(`Panel web activo en puerto ${PORT} (modo de respaldo)`);
+  });
 });
