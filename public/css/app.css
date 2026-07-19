@@ -738,3 +738,94 @@ html.dark .module-header button{
 @media (max-width:1099px){
   .sidebar-toggle{display:none!important}
 }
+
+/* ===== Dark mode premium · negro, elegante y de alto contraste ===== */
+html.dark{
+  color-scheme:dark;
+  --ink:#f4f7fb;
+  --muted:#9aa6b8;
+  --line:#252b36;
+  --dark:#050607;
+  --shadow:0 18px 46px rgba(0,0,0,.42);
+  --soft-shadow:0 10px 28px rgba(0,0,0,.28);
+}
+
+html.dark body{
+  background:
+    radial-gradient(circle at 18% -8%,rgba(57,106,252,.15),transparent 30%),
+    radial-gradient(circle at 92% 0%,rgba(36,197,144,.08),transparent 24%),
+    #070809;
+  color:var(--ink);
+}
+
+html.dark .os-nav{
+  background:#0b0d10;
+  border-color:#222832;
+  box-shadow:16px 0 40px rgba(0,0,0,.42);
+}
+
+html.dark .os-nav button{
+  color:#a7b0bf;
+}
+
+html.dark .os-nav button:hover{
+  background:#151922;
+  color:#ffffff;
+}
+
+html.dark .os-nav .active{
+  color:#ffffff;
+  background:linear-gradient(135deg,#2563eb,#6d4aff);
+  box-shadow:0 12px 28px rgba(37,99,235,.34);
+}
+
+html.dark .sidebar-toggle{
+  background:#111419;
+  border-color:#2a313c;
+  color:#f7f9fc;
+  box-shadow:0 12px 30px rgba(0,0,0,.38);
+}
+
+html.dark .sidebar-toggle:hover{
+  background:#181c23;
+}
+
+html.dark .mini-hero,
+html.dark .hero{
+  background:
+    radial-gradient(circle at 90% 10%,rgba(72,112,255,.22),transparent 32%),
+    linear-gradient(135deg,#0d1015,#171c25);
+  border:1px solid #252c37;
+  box-shadow:0 18px 42px rgba(0,0,0,.34);
+}
+
+html.dark .list-menu button,
+html.dark .module-header{
+  background:#111419;
+  color:#f4f7fb;
+  border:1px solid #252b34;
+  box-shadow:0 10px 26px rgba(0,0,0,.25);
+}
+
+html.dark .list-menu button:hover{
+  background:#171b22;
+  border-color:#343c49;
+}
+
+html.dark .module-header button{
+  background:#1a1f27;
+  color:#ffffff;
+}
+
+html.dark iframe{
+  background:#070809;
+  border:1px solid #20252d;
+  box-shadow:0 16px 38px rgba(0,0,0,.32);
+}
+
+@media(max-width:1099px){
+  html.dark .os-nav{
+    background:rgba(11,13,16,.96);
+    border-top-color:#252b34;
+  }
+}
