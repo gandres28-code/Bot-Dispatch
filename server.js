@@ -73,6 +73,12 @@ const {
 const {
   createAIOperationsDirector,
 } = require("./services/aiOperationsDirector");
+const {
+  initializeFirebaseAdmin,
+  registerPushToken,
+  deactivatePushToken,
+  sendPushToEmployees,
+} = require("./services/pushNotifications");
 
 const server = http.createServer(app);
 
@@ -5751,6 +5757,49 @@ app.get("/finalizar-dia", async (req, res) => {
 
 
 // =========================================================
+// FIREBASE PUSH · REGISTRO DE DISPOSITIVOS
+// =========================================================
+app.get("/api/push/config", (req, res) => {
+  res.json({
+    ok: true,
+    firebaseConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || "AIzaSyBYyhUn3Mt1jPnGaVzjUXtBw3gUfiQBivA",
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN || "dispatch-7c98d.firebaseapp.com",
+      projectId: process.env.FIREBASE_PROJECT_ID || "dispatch-7c98d",
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "dispatch-7c98d.firebasestorage.app",
+      messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "968016054452",
+      appId: process.env.FIREBASE_APP_ID || "1:968016054452:web:68d3c972753a40f715efe1",
+    },
+    vapidKey: process.env.FIREBASE_VAPID_KEY || "BGveFxjufB-E-TVaqkv7Mh8cs34bD93ki5EE6pgIZ_qOmdKHF23cRO42SnFeJGkh3hYLlS77F04Kj5XncbERdQk",
+  });
+});
+
+app.post("/api/push/register", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) return res.status(503).json({ ok:false, message:"PostgreSQL no está conectado" });
+    const result = await registerPushToken(postgresQuery, {
+      employeeName: req.body.employeeName,
+      employeeRole: req.body.employeeRole,
+      token: req.body.token,
+      platform: req.body.platform || "web",
+      userAgent: req.get("user-agent") || "",
+    });
+    res.json({ ok:true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok:false, message:error.message });
+  }
+});
+
+app.post("/api/push/unregister", async (req, res) => {
+  try {
+    await deactivatePushToken(postgresQuery, String(req.body.token || ""));
+    res.json({ ok:true });
+  } catch (error) {
+    res.status(400).json({ ok:false, message:error.message });
+  }
+});
+
+// =========================================================
 // NOTIFICACIONES DIRIGIDAS Y GUEST OUT DESDE HOTSOS
 // =========================================================
 const employeeNotifications = new Map();
@@ -7956,6 +8005,7 @@ function buildAssignmentSnapshot(pages = []) {
         "Status",
       ]),
       priority: getFirstExistingProperty(props, ["Priority"]),
+      urgent: Boolean(getFirstExistingProperty(props, ["Urgent", "urgent"])) || String(getFirstExistingProperty(props, ["Priority"])).toLowerCase().includes("urgent"),
       arrival: getFirstExistingProperty(props, ["Arrival"]),
       guestOut: flags.guestOut,
       guestOutAt: flags.guestOutAt,
@@ -7969,6 +8019,86 @@ function buildAssignmentSnapshot(pages = []) {
 
   snapshot.sort((a, b) => String(a.id).localeCompare(String(b.id)));
   return JSON.stringify(snapshot);
+}
+
+function snapshotToMap(snapshotText) {
+  try {
+    const rows = JSON.parse(snapshotText || "[]");
+    return new Map(rows.map(row => [String(row.id), row]));
+  } catch (_) {
+    return new Map();
+  }
+}
+
+function namesFromAssignment(value) {
+  return splitCleanerNames(value || "").map(name => String(name).trim()).filter(Boolean);
+}
+
+function differenceNames(a, b) {
+  const bKeys = new Set((b || []).map(notificationEmployeeKey));
+  return (a || []).filter(name => !bKeys.has(notificationEmployeeKey(name)));
+}
+
+async function sendAssignmentTransitionPushes(previousSnapshot, nextSnapshot) {
+  if (!postgresStatus.connected) return;
+
+  const previous = snapshotToMap(previousSnapshot);
+  const next = snapshotToMap(nextSnapshot);
+
+  for (const [id, room] of next.entries()) {
+    const before = previous.get(id);
+    if (!before) continue;
+
+    const unit = room.unit || "Unidad";
+    const oldCleaners = namesFromAssignment(before.cleaner);
+    const newCleaners = namesFromAssignment(room.cleaner);
+    const inspectors = namesFromAssignment(room.inspector);
+    const addedCleaners = differenceNames(newCleaners, oldCleaners);
+    const removedCleaners = differenceNames(oldCleaners, newCleaners);
+
+    if (addedCleaners.length) {
+      await sendPushToEmployees(postgresQuery, addedCleaners, {
+        title: "🧹 Nueva unidad asignada",
+        body: `Se te asignó ${unit}.`,
+        tag: `assigned-${id}-${room.lastEditedTime}`,
+        link: "/",
+        data: { type:"ASSIGNED", unit },
+      });
+    }
+
+    if (removedCleaners.length) {
+      await sendPushToEmployees(postgresQuery, removedCleaners, {
+        title: "↩️ Unidad retirada",
+        body: `${unit} fue retirada de tus asignaciones.`,
+        tag: `removed-${id}-${room.lastEditedTime}`,
+        link: "/",
+        data: { type:"REMOVED", unit },
+      });
+    }
+
+    const becameGuestOut = Boolean(room.guestOut) && !Boolean(before.guestOut);
+    if (becameGuestOut) {
+      await sendPushToEmployees(postgresQuery, [...newCleaners, ...inspectors], {
+        title: "🚪 Guest Out",
+        body: `${unit} ya está disponible.`,
+        tag: `guest-out-${id}-${room.guestOutAt || room.lastEditedTime}`,
+        link: "/launch",
+        data: { type:"GUEST_OUT", unit },
+      });
+    }
+
+    const becameUrgent = Boolean(room.urgent) && !Boolean(before.urgent);
+    if (becameUrgent && newCleaners.length) {
+      await sendPushToEmployees(postgresQuery, newCleaners, {
+        title: "🚨 Limpieza urgente",
+        body: `${unit} fue marcada como urgente.`,
+        tag: `urgent-${id}-${room.lastEditedTime}`,
+        link: "/",
+        urgent: true,
+        data: { type:"URGENT", unit },
+      });
+    }
+  }
 }
 
 async function checkNotionAssignmentChanges() {
@@ -7991,7 +8121,12 @@ async function checkNotionAssignmentChanges() {
 
     if (nextSnapshot === notionWatcherSnapshot) return;
 
+    const previousSnapshot = notionWatcherSnapshot;
     notionWatcherSnapshot = nextSnapshot;
+
+    sendAssignmentTransitionPushes(previousSnapshot, nextSnapshot).catch((error) => {
+      console.error("⚠️ Error enviando push por cambio de asignación:", error.message);
+    });
 
     broadcastAssignmentUpdate("direct-notion-change", {
       roomCount: pages.length,
@@ -10256,6 +10391,7 @@ app.patch("/api/admin/rooms/:id", async (req, res) => {
 
 
 async function startServer() {
+  initializeFirebaseAdmin();
   const databaseStatus = await startPostgres();
 
   if (databaseStatus.connected) {
