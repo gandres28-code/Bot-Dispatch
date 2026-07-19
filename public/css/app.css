@@ -10,7 +10,7 @@
   --dark:#111827;
   --nav-height:86px;
   --sidebar-width:250px;
-  --topbar-height:76px;
+  --topbar-height:0px;
   --shadow:0 16px 38px rgba(15,23,42,.10);
   --soft-shadow:0 8px 22px rgba(15,23,42,.07);
 }
@@ -643,4 +643,98 @@ iframe{
     grid-template-columns:repeat(3,minmax(260px,1fr));
     max-width:none;
   }
+}
+
+
+/* ===== Shell limpio + menú lateral plegable ===== */
+.os-topbar{display:none!important}
+
+.sidebar-toggle{
+  display:none;
+  position:fixed;
+  z-index:90;
+  border:1px solid rgba(226,232,240,.9);
+  background:rgba(255,255,255,.94);
+  color:#0f172a;
+  box-shadow:0 10px 26px rgba(15,23,42,.14);
+  backdrop-filter:blur(16px);
+}
+
+html.dark body{
+  background:#0b1120;
+  color:#e5edf9;
+}
+
+html.dark .sidebar-toggle{
+  background:rgba(17,26,45,.95);
+  border-color:#2a3852;
+  color:#f8fafc;
+}
+
+html.dark .mini-hero,
+html.dark .hero{
+  background:linear-gradient(135deg,#111a2d,#1a2742);
+}
+
+html.dark .list-menu button,
+html.dark .module-header,
+html.dark iframe{
+  background:#111a2d;
+  color:#e5edf9;
+  border-color:#2a3852;
+}
+
+html.dark .module-header button{
+  background:#1a2742;
+  color:#e5edf9;
+}
+
+@media (min-width:1100px){
+  .os-shell{
+    padding:22px 22px 22px calc(var(--sidebar-width) + 22px);
+    transition:padding-left .22s ease;
+  }
+
+  .sidebar-toggle{
+    display:grid;
+    place-items:center;
+    top:14px;
+    left:calc(var(--sidebar-width) + 14px);
+    width:44px;
+    height:44px;
+    border-radius:14px;
+    font-size:19px;
+    font-weight:900;
+    transition:left .22s ease,transform .18s ease;
+  }
+
+  .sidebar-toggle:hover{transform:translateY(-1px)}
+
+  .os-nav{
+    top:0;
+    transition:transform .22s ease,opacity .22s ease;
+  }
+
+  html.sidebar-collapsed .os-nav{
+    transform:translateX(-105%);
+    opacity:0;
+    pointer-events:none;
+  }
+
+  html.sidebar-collapsed .os-shell{
+    padding-left:22px;
+  }
+
+  html.sidebar-collapsed .sidebar-toggle{
+    left:14px;
+  }
+
+  iframe,
+  #dashboardPage iframe{
+    height:calc(100vh - 44px);
+  }
+}
+
+@media (max-width:1099px){
+  .sidebar-toggle{display:none!important}
 }
