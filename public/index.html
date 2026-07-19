@@ -1548,6 +1548,8 @@
     }
 
   </style>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#111827">
 </head>
 
 <body>
@@ -1707,6 +1709,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/maid-core.js"></script>
+<script src="/js/resilience.js"></script>
 
 <script>
 let currentCleanerName = "";
@@ -1781,22 +1784,15 @@ async function fetchCleanerAssignmentsPostgres(name){
 
   const url = `/api/v2/rooms?${params.toString()}`;
 
-  const response = await fetch(url, {
-    cache:"no-store",
-    headers:{
-      "Accept":"application/json"
-    }
-  });
+  const data = window.OSResilience
+    ? await OSResilience.fetchJson(url, { cache:"no-store" }, { timeoutMs:7000, retries:1 })
+    : await fetch(url, { cache:"no-store", headers:{"Accept":"application/json"} }).then(async response => {
+        const body = await response.json().catch(() => ({}));
+        if(!response.ok) throw new Error(body.message || `HTTP ${response.status}`);
+        return body;
+      });
 
-  const data = await response.json().catch(() => ({}));
-
-  if(!response.ok || !data.ok){
-    throw new Error(
-      data.message ||
-      `PostgreSQL respondió con HTTP ${response.status}`
-    );
-  }
-
+  if(!data.ok) throw new Error(data.message || "No se pudieron cargar tus unidades");
   return normalizePostgresCleanerRooms(data, name);
 }
 
@@ -2232,6 +2228,9 @@ async function loadCleanerAssignments(forceRefresh = false){
 
       cachedCleanerUnits = units;
       lastAssignmentsLoadedAt = Date.now();
+      window.OSResilience?.saveSnapshot(`cleaner:${typedName || name.toLowerCase()}`, {
+        ...data, units, cleaner:data.cleaner || name
+      });
 
       setCleanerDisplayName(data.cleaner || name);
       updateCleanerDashboard(units);
@@ -2266,12 +2265,18 @@ async function loadCleanerAssignments(forceRefresh = false){
     .catch(error => {
       console.error("Error cargando unidades:", error);
 
-      if(!cachedCleanerUnits.length){
-        assignmentsBox.innerHTML =
-          "<div class='empty'>No se pudieron cargar tus unidades. Toca Actualizar para intentar otra vez.</div>";
+      const snapshot = window.OSResilience?.loadSnapshot(`cleaner:${name.toLowerCase()}`);
+      if(snapshot?.units?.length){
+        cachedCleanerUnits = snapshot.units;
+        renderCleanerAssignments(cachedCleanerUnits);
+        updateCleanerDashboard(cachedCleanerUnits);
+        showBigStatus("Mostrando la última información guardada. Reconectando…", "loading");
+        return {...snapshot, cached:true, offline:true};
       }
-
-      showBigStatus(error.message || "Error cargando unidades", "error");
+      if(!cachedCleanerUnits.length){
+        assignmentsBox.innerHTML = "<div class='empty'>Reconectando… Tus unidades aparecerán automáticamente.</div>";
+      }
+      showBigStatus("Reconectando con 417 Maid…", "loading");
       return null;
     })
     .finally(() => {
@@ -2646,19 +2651,14 @@ async function sendAction(action){
   showBigStatus("Enviando acción...", "loading");
 
   try{
-    const response = await fetch("/action",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({
-        action,
-        unit,
-        note,
-        name,
-        photoUrl:""
-      })
-    });
-
-    const data = await response.json();
+    const payload = { action, unit, note, name, photoUrl:"" };
+    const data = window.OSResilience
+      ? await OSResilience.postAction("/action", payload)
+      : await fetch("/action",{
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify(payload)
+        }).then(response => response.json());
 
     if(data.success){
       actionSucceeded=true;
@@ -2685,10 +2685,8 @@ async function sendAction(action){
     }
 
   }catch(error){
-    setStatus("Error: " + error.message);
-    showBigStatus("Error: " + error.message, "error");
-    playBeep("error");
-    vibratePhone("error");
+    setStatus("Reconectando…");
+    showBigStatus("No se perdió tu acción. Reintentando automáticamente…", "loading");
   }finally{
     if(!actionSucceeded){
       setCleanerCardLoading(unit,false);
