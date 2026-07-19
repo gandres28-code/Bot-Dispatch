@@ -65,6 +65,13 @@ ON rooms (work_date, guest_out);
 CREATE INDEX IF NOT EXISTS rooms_urgent_idx
 ON rooms (work_date, urgent);
 
+-- 417 Operations Core v1: estado canónico independiente del nombre legado de Notion.
+ALTER TABLE rooms
+ADD COLUMN IF NOT EXISTS core_status TEXT NOT NULL DEFAULT 'PENDING';
+
+CREATE INDEX IF NOT EXISTS rooms_core_status_idx
+ON rooms (work_date, core_status);
+
 CREATE TABLE IF NOT EXISTS assignments (
   id BIGSERIAL PRIMARY KEY,
   room_id BIGINT REFERENCES rooms(id) ON DELETE CASCADE,
