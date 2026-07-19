@@ -1564,34 +1564,60 @@ function setDateIfExists(page, props, name, value) {
   return "";
 }
 
-function setFirstExistingCheckbox(page, props, possibleNames, value) {
-  for (const name of possibleNames) {
-    if (hasProp(page, name)) {
-      props[name] = {
-        checkbox: !!value,
-      };
+function normalizeNotionPropertyName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+}
 
-      return name;
+function findExistingNotionProperty(page, possibleNames, expectedType = "") {
+  const properties = page?.properties || {};
+  const entries = Object.entries(properties);
+
+  // Primero intenta coincidencia exacta para conservar el comportamiento actual.
+  for (const name of possibleNames) {
+    if (Object.prototype.hasOwnProperty.call(properties, name)) {
+      const property = properties[name];
+      if (!expectedType || property?.type === expectedType || property?.[expectedType] !== undefined) {
+        return name;
+      }
     }
+  }
+
+  // Después intenta una coincidencia tolerante a mayúsculas, espacios, guiones y underscores.
+  const wanted = new Set(possibleNames.map(normalizeNotionPropertyName));
+  for (const [name, property] of entries) {
+    if (!wanted.has(normalizeNotionPropertyName(name))) continue;
+    if (expectedType && property?.type !== expectedType && property?.[expectedType] === undefined) continue;
+    return name;
   }
 
   return "";
 }
 
+function setFirstExistingCheckbox(page, props, possibleNames, value) {
+  const name = findExistingNotionProperty(page, possibleNames, "checkbox");
+  if (!name) return "";
+
+  props[name] = {
+    checkbox: !!value,
+  };
+
+  return name;
+}
+
 function setFirstExistingDate(page, props, possibleNames, value) {
-  for (const name of possibleNames) {
-    if (hasProp(page, name)) {
-      props[name] = {
-        date: {
-          start: value,
-        },
-      };
+  const name = findExistingNotionProperty(page, possibleNames, "date");
+  if (!name) return "";
 
-      return name;
-    }
-  }
+  props[name] = {
+    date: {
+      start: value,
+    },
+  };
 
-  return "";
+  return name;
 }
 
 async function getDatabaseSchema(databaseId) {
@@ -3413,6 +3439,7 @@ for (const page of matches) {
       [
         "Pre Inspection Started",
         "Pre-Inspection Started",
+        "Pre_Inspection_Started",
         "pre inspection started",
         "Pre inspection started",
       ],
@@ -3425,6 +3452,7 @@ for (const page of matches) {
       [
         "Pre Inspection Started At",
         "Pre-Inspection Started At",
+        "Pre_Inspection_Started_At",
         "Pre Inspection Start At",
         "pre inspection started at",
       ],
@@ -3445,7 +3473,9 @@ for (const page of matches) {
       [
         "Pre Inspection",
         "Pre-Inspection",
+        "Pre_Inspection",
         "Pre Inspected",
+        "Pre Inspection Complete",
         "pre inspection",
         "Pre inspection",
       ],
@@ -3458,6 +3488,7 @@ for (const page of matches) {
       [
         "Pre Inspection Started",
         "Pre-Inspection Started",
+        "Pre_Inspection_Started",
         "pre inspection started",
         "Pre inspection started",
       ],
@@ -5574,6 +5605,13 @@ app.post("/inspector-action", async (req, res) => {
         inspector: name,
         note,
         photoUrl,
+      });
+
+      // No espera al siguiente intervalo del worker. Intenta sincronizar Notion de inmediato.
+      setImmediate(() => {
+        processNotionQueueOnce().catch((queueError) => {
+          console.error("SYNC QUEUE immediate inspector ERROR:", queueError.message);
+        });
       });
 
       return res.json({
