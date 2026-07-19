@@ -188,6 +188,8 @@
     }
 
   </style>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#111827">
 </head>
 <body>
 <div id="bigStatus"></div>
@@ -225,6 +227,7 @@
 <nav class="bottom-nav"><a class="nav-item active" href="/inspector"><span style="font-size:18px">🔎</span>Inspecciones</a><button class="nav-item" type="button" onclick="openSettingsMenu()"><span style="font-size:18px">⚙️</span>Settings</button></nav>
 <section id="settingsSheet" class="settings-sheet hidden"><div class="sheet-head"><div><span>Settings</span><strong>Cuenta</strong></div><button class="sheet-close" onclick="closeSettingsMenu()">Cerrar</button></div><button class="settings-option" onclick="window.OS?.clearSession?.();window.location.replace('/launch');">Cambiar usuario</button></section>
 <script src="/socket.io/socket.io.js"></script><script src="/js/maid-core.js"></script>
+<script src="/js/resilience.js"></script>
 <script>
 let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",lastUnits=[],activeTab="pre",collapsedBuildings={};
 let inspectorDataSource="postgres";
@@ -277,16 +280,16 @@ async function fetchInspectorAssignmentsPostgres(name){
     t:String(Date.now())
   });
 
-  const response=await fetch(`/api/v2/rooms?${params.toString()}`,{
-    cache:"no-store",
-    headers:{"Accept":"application/json"}
-  });
+  const url=`/api/v2/rooms?${params.toString()}`;
+  const data=window.OSResilience
+    ? await OSResilience.fetchJson(url,{cache:"no-store"},{timeoutMs:7000,retries:1})
+    : await fetch(url,{cache:"no-store",headers:{"Accept":"application/json"}}).then(async response=>{
+        const body=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(body.message||`HTTP ${response.status}`);
+        return body;
+      });
 
-  const data=await response.json().catch(()=>({}));
-
-  if(!response.ok||!data.ok){
-    throw new Error(data.message||`PostgreSQL respondió con HTTP ${response.status}`);
-  }
+  if(!data.ok)throw new Error(data.message||"No se pudieron cargar las inspecciones");
 
   return{
     ok:true,
@@ -708,6 +711,9 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
 
       lastUnits=incomingUnits;
       lastAssignmentsLoadedAt=Date.now();
+      window.OSResilience?.saveSnapshot(`inspector:${currentInspectorName.toLowerCase()}`, {
+        ...data, units:incomingUnits, inspector:currentInspectorName
+      });
 
       if(activeTab==="general"){
         collapsedBuildings={};
@@ -738,12 +744,18 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
     }catch(error){
       console.error("Error cargando inspecciones:",error);
 
-      if(!silent){
-        document.getElementById("assignments").innerHTML=
-          `<div class="empty">No se pudieron cargar las inspecciones.<br>${escapeHtml(error.message||"Error del servidor")}</div>`;
-        showBigStatus("Error cargando inspecciones","error");
+      const snapshot=window.OSResilience?.loadSnapshot(`inspector:${currentInspectorName.toLowerCase()}`);
+      if(snapshot?.units?.length){
+        lastUnits=snapshot.units;
+        updateStats(lastUnits);
+        renderAssignments();
+        if(!silent)showBigStatus("Mostrando la última información guardada. Reconectando…","loading");
+        return {...snapshot,cached:true,offline:true};
       }
-
+      if(!silent){
+        document.getElementById("assignments").innerHTML='<div class="empty">Reconectando… Tus inspecciones aparecerán automáticamente.</div>';
+        showBigStatus("Reconectando con 417 Maid…","loading");
+      }
       return null;
     }finally{
       inspectorAssignmentsRequest=null;
@@ -899,17 +911,19 @@ async function sendInspectionAction(action){
 
   try{
     const payload={action,unit,note:"",name,photoUrl:""};
-    const data=window.OS?.api?.post
-      ? await OS.api.post("/inspector-action",payload)
-      : await fetch("/inspector-action",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify(payload)
-        }).then(async response=>{
-          const body=await response.json();
-          if(!response.ok)throw new Error(body.message||`Error ${response.status}`);
-          return body;
-        });
+    const data=window.OSResilience
+      ? await OSResilience.postAction("/inspector-action",payload)
+      : window.OS?.api?.post
+        ? await OS.api.post("/inspector-action",payload)
+        : await fetch("/inspector-action",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(payload)
+          }).then(async response=>{
+            const body=await response.json();
+            if(!response.ok)throw new Error(body.message||`Error ${response.status}`);
+            return body;
+          });
 
     if(!data.success){
       throw new Error(data.message||"No se pudo guardar la acción");
@@ -935,10 +949,8 @@ async function sendInspectionAction(action){
     // de recibir el cambio, sin vaciar ni parpadear la lista.
     setTimeout(()=>scheduleInspectorRealtimeRefresh(0),5200);
   }catch(error){
-    document.getElementById("status").innerText="Error: "+error.message;
-    showBigStatus("Error: "+error.message,"error");
-    playBeep("error");
-    vibratePhone("error");
+    document.getElementById("status").innerText="Reconectando…";
+    showBigStatus("No se perdió tu acción. Reintentando automáticamente…","loading");
   }finally{
     setInspectionCardLoading(unit,false);
     isSending=false;
