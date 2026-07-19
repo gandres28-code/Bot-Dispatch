@@ -557,3 +557,32 @@ VALUES ('007_admin_center_foundation')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS push_device_tokens (
+  id BIGSERIAL PRIMARY KEY,
+  employee_name TEXT NOT NULL,
+  employee_key TEXT NOT NULL,
+  employee_role TEXT NOT NULL DEFAULT '',
+  token TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL DEFAULT 'web',
+  user_agent TEXT NOT NULL DEFAULT '',
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS push_device_employee_idx
+ON push_device_tokens (employee_key, active);
+
+CREATE INDEX IF NOT EXISTS push_device_seen_idx
+ON push_device_tokens (last_seen_at DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('008_push_notifications')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
