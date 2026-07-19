@@ -1509,6 +1509,44 @@
       opacity:.78;
     }
 
+  
+    .hero-actions{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:8px;
+      flex:0 0 auto;
+    }
+
+    .push-bell-button{
+      width:42px !important;
+      height:42px !important;
+      min-width:42px !important;
+      margin:0 !important;
+      padding:0 !important;
+      border-radius:999px !important;
+      display:grid !important;
+      place-items:center !important;
+      align-self:flex-end;
+      background:#111827;
+      color:#fff;
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:0 10px 24px rgba(15,23,42,.20);
+      font-size:18px !important;
+      line-height:1 !important;
+      cursor:pointer;
+    }
+
+    .push-bell-button:active{
+      transform:scale(.94);
+    }
+
+    .push-bell-button:disabled{
+      background:#166534 !important;
+      opacity:.78 !important;
+      cursor:default;
+    }
+
   </style>
 </head>
 
@@ -1539,10 +1577,20 @@
           <div class="hero-subtitle">Tu lista de trabajo en vivo para el día de hoy.</div>
         </div>
 
-        <button class="refresh-button" onclick="loadCleanerAssignments(true)">
-          <span class="refresh-symbol">↻</span>
-          Actualizar
-        </button>
+        <div class="hero-actions">
+          <button class="refresh-button" onclick="loadCleanerAssignments(true)">
+            <span class="refresh-symbol">↻</span>
+            Actualizar
+          </button>
+          <button
+            id="enablePushNotifications417"
+            class="push-bell-button"
+            type="button"
+            title="Activar notificaciones"
+            aria-label="Activar notificaciones"
+            onclick="window.enable417PushNotifications?.()"
+          >🔔</button>
+        </div>
       </div>
 
       <div class="date-pill">
