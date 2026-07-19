@@ -72,6 +72,15 @@ ADD COLUMN IF NOT EXISTS core_status TEXT NOT NULL DEFAULT 'PENDING';
 CREATE INDEX IF NOT EXISTS rooms_core_status_idx
 ON rooms (work_date, core_status);
 
+CREATE INDEX IF NOT EXISTS rooms_cleaner_date_idx
+ON rooms (work_date, assigned_cleaner);
+
+CREATE INDEX IF NOT EXISTS rooms_inspector_date_idx
+ON rooms (work_date, assigned_inspector);
+
+CREATE INDEX IF NOT EXISTS rooms_updated_at_idx
+ON rooms (work_date, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS assignments (
   id BIGSERIAL PRIMARY KEY,
   room_id BIGINT REFERENCES rooms(id) ON DELETE CASCADE,
