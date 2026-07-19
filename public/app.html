@@ -9,17 +9,16 @@
 </head>
 <body>
   <main class="os-shell">
-    <header class="os-topbar">
-      <div class="brand">
-        <div class="brand-icon">🏨</div>
-        <div>
-          <strong>417 Maid OS</strong>
-          <span id="pageSubtitle">Dashboard</span>
-        </div>
-      </div>
-
-      <a class="switch-user" href="/launch" onclick="localStorage.clear()">Cambiar</a>
-    </header>
+    <button
+      id="sidebarToggle"
+      class="sidebar-toggle"
+      type="button"
+      aria-label="Ocultar menú lateral"
+      aria-expanded="true"
+      onclick="toggleSidebar()"
+    >
+      ☰
+    </button>
 
     <section id="dashboardPage" class="os-page active module-page">
       <iframe id="dashboardFrame" src="/dashboard.html"></iframe>
@@ -62,7 +61,7 @@
       <div class="list-menu">
         <button onclick="openDirectModule('Estadísticas','/statistics')">📈 Estadísticas</button>
         <button onclick="openOSModule('operations')">📄 Daily Report</button>
-        <button onclick="openOSModule('payroll.html')">💵 Payroll Excel</button>
+        <button onclick="openDirectModule('Payroll','/payroll.html')">💵 Payroll</button>
         <button onclick="openOSModule('operations')">🤖 Reportes IA</button>
       </div>
     </section>
