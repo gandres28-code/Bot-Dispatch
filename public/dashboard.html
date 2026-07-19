@@ -321,6 +321,55 @@ html.dark .modal-card{
   color:var(--text);
 }
 
+/* Dark mode completo: elimina superficies blancas y mejora contraste */
+html.dark .panel,
+html.dark .kpi,
+html.dark .intel-card,
+html.dark .employee,
+html.dark .alert,
+html.dark .event,
+html.dark .room-table-panel{
+  background:var(--card);
+  color:var(--text);
+  border-color:var(--line);
+}
+
+html.dark .head,
+html.dark .employee,
+html.dark .alert,
+html.dark .event,
+html.dark .rooms-table td{
+  border-color:var(--line);
+}
+
+html.dark .refresh:hover,
+html.dark .theme-toggle:hover,
+html.dark .room-open:hover{
+  background:#1b2942;
+}
+
+html.dark .room,
+html.dark .employee-mini span,
+html.dark .flag-chip,
+html.dark .room-open{
+  filter:saturate(.85) brightness(.88);
+}
+
+html.dark .building:hover,
+html.dark .kpi:hover,
+html.dark .intel-card:hover{
+  box-shadow:0 16px 36px rgba(0,0,0,.32);
+}
+
+html.dark input::placeholder,
+html.dark select{
+  color:var(--muted);
+}
+
+html.dark .empty{
+  color:var(--muted);
+}
+
 @media(min-width:1400px){
   .grid{
     grid-template-columns:minmax(0,1.8fr) minmax(360px,.72fr);
@@ -1474,6 +1523,7 @@ function setTheme(theme) {
   const dark = theme === "dark";
   document.documentElement.classList.toggle("dark", dark);
   localStorage.setItem("maidOsTheme", dark ? "dark" : "light");
+  try { parent.document.documentElement.classList.toggle("dark", dark); } catch {}
   const button = $("themeToggle");
   if (button) button.textContent = dark ? "☀️" : "🌙";
 }
