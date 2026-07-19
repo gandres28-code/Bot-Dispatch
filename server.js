@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const compression = require("compression");
 const { Client } = require("@notionhq/client");
 const OpenAI = require("openai");
 const PDFDocument = require("pdfkit");
@@ -477,9 +478,19 @@ function getNotificationMessage(event){
 }
 const cors = require("cors");
 
+app.disable("x-powered-by");
+app.use(compression({ threshold: 1024 }));
 app.use(cors());
-app.use(express.json());
-app.use(express.static("public"));
+app.use(express.json({ limit: "2mb" }));
+app.use((req, res, next) => {
+  req.requestId = String(req.get("x-request-id") || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+  res.setHeader("X-Request-Id", req.requestId);
+  if (req.path.startsWith("/api/") || req.path === "/action" || req.path === "/inspector-action") {
+    res.setHeader("Cache-Control", "no-store");
+  }
+  next();
+});
+app.use(express.static("public", { maxAge: process.env.NODE_ENV === "production" ? "1h" : 0, etag: true }));
 
 // Diagnóstico seguro de PostgreSQL. No expone DATABASENEW_URL.
 app.get("/api/database-status", async (req, res) => {
@@ -5552,7 +5563,7 @@ app.post("/action", async (req, res) => {
     }
   } catch (error) {
     console.error("Error en /action:", error.message);
-    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
+    return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
   }
 });
 
@@ -5618,7 +5629,7 @@ app.post("/inspector-action", async (req, res) => {
     }
   } catch (error) {
     console.error("Error inspector:", error.message);
-    return res.status(500).json({ success: false, message: `Error: ${error.message}` });
+    return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
   }
 });
 
@@ -5787,6 +5798,25 @@ app.post("/api/push/register", async (req, res) => {
     res.json({ ok:true, ...result });
   } catch (error) {
     res.status(400).json({ ok:false, message:error.message });
+  }
+});
+
+
+app.post("/api/push/test", async (req, res) => {
+  try {
+    const employeeName = String(req.body.employeeName || "").trim();
+    if (!employeeName) return res.status(400).json({ ok:false, message:"Falta employeeName" });
+    const result = await sendPushToEmployees(postgresQuery, [employeeName], {
+      title: "🔔 417 Maid OS",
+      body: "Las notificaciones funcionan correctamente en este teléfono.",
+      link: "/launch",
+      tag: `push-test-${Date.now()}`,
+      data: { type:"TEST" },
+    });
+    return res.json({ ok:true, ...result });
+  } catch (error) {
+    console.error("PUSH TEST ERROR:", error.message);
+    return res.status(500).json({ ok:false, message:"No se pudo enviar la prueba" });
   }
 });
 
