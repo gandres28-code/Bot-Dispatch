@@ -179,6 +179,10 @@ async function listDataApiRooms({ date, employee = "", role = "" }) {
         r.finished_at AS "finishedAt",
         r.inspection_started_at AS "inspectionStartedAt",
         r.ready_at AS "readyAt",
+        r.pre_inspection AS "preInspection",
+        r.pre_inspection_started AS "preInspectionStarted",
+        r.pre_inspection_started_at AS "preInspectionStartedAt",
+        r.pre_inspection_completed_at AS "preInspectionCompletedAt",
         r.updated_at AS "updatedAt"
       FROM rooms r
       WHERE r.work_date = $1::date
