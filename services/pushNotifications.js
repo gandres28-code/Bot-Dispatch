@@ -1,139 +1,133 @@
-(() => {
-  const BUTTON_ID = "enablePushNotifications417";
+const admin = require("firebase-admin");
 
-  function employee() {
-    return {
-      name: localStorage.getItem("employeeName") || localStorage.getItem("cleanerName") || localStorage.getItem("inspectorName") || window.OS?.user?.name || "",
-      role: localStorage.getItem("employeeRole") || window.OS?.user?.role || "",
-    };
+let firebaseReady = false;
+
+function normalizeEmployeeKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function initializeFirebaseAdmin() {
+  if (firebaseReady) return true;
+
+  const projectId = String(process.env.FIREBASE_PROJECT_ID || "").trim();
+  const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || "").trim();
+  const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || "")
+    .replace(/\\n/g, "\n")
+    .trim();
+
+  if (!projectId || !clientEmail || !privateKey) {
+    console.warn("⚠️ Firebase Push desactivado: faltan FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL o FIREBASE_PRIVATE_KEY.");
+    return false;
   }
 
-  function eligible(role) {
-    const value = String(role || "").toLowerCase();
-    return value.includes("cleaner") || value.includes("inspector") || value.includes("limpi") || value.includes("inspect");
-  }
-
-  function positionButton() {
-    const button = document.getElementById(BUTTON_ID);
-    if (!button) return;
-
-    const refreshButton = document.querySelector(".refresh-button");
-    if (!refreshButton) {
-      button.style.top = "88px";
-      button.style.right = "16px";
-      return;
-    }
-
-    const rect = refreshButton.getBoundingClientRect();
-    button.style.top = `${Math.max(12, rect.bottom + 8)}px`;
-    button.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
-  }
-
-  function makeButton() {
-    if (document.getElementById(BUTTON_ID)) return;
-
-    const button = document.createElement("button");
-    button.id = BUTTON_ID;
-    button.type = "button";
-    button.textContent = "🔔";
-    button.title = "Activar notificaciones";
-    button.setAttribute("aria-label", "Activar notificaciones");
-    button.style.cssText = [
-      "position:fixed",
-      "z-index:99999",
-      "width:42px",
-      "height:42px",
-      "padding:0",
-      "display:grid",
-      "place-items:center",
-      "border:1px solid rgba(255,255,255,.18)",
-      "background:#111827",
-      "color:#fff",
-      "border-radius:50%",
-      "font-size:19px",
-      "line-height:1",
-      "box-shadow:0 10px 24px rgba(0,0,0,.25)",
-      "cursor:pointer",
-      "transition:transform .18s ease, background .18s ease, opacity .18s ease"
-    ].join(";");
-
-    button.addEventListener("mouseenter", () => {
-      if (!button.disabled) button.style.transform = "scale(1.08)";
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
     });
-    button.addEventListener("mouseleave", () => {
-      button.style.transform = "scale(1)";
-    });
-    button.addEventListener("click", enable);
-
-    document.body.appendChild(button);
-    positionButton();
-    window.addEventListener("resize", positionButton, { passive:true });
-    window.addEventListener("scroll", positionButton, { passive:true });
   }
 
-  async function enable() {
-    const person = employee();
-    if (!person.name) return alert("Primero entra con tu código de empleado.");
-    if (!eligible(person.role)) return alert("Las notificaciones están disponibles para cleaners e inspectores.");
-    if (!("serviceWorker" in navigator) || !("Notification" in window)) return alert("Este dispositivo no soporta notificaciones push web.");
+  firebaseReady = true;
+  console.log("✅ Firebase Push Notifications activado");
+  return true;
+}
 
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return alert("Debes permitir las notificaciones en la configuración del dispositivo.");
+async function registerPushToken(query, payload = {}) {
+  const employeeName = String(payload.employeeName || "").trim();
+  const employeeRole = String(payload.employeeRole || "").trim();
+  const token = String(payload.token || "").trim();
 
-    const configResponse = await fetch("/api/push/config", { cache:"no-store" });
-    const config = await configResponse.json();
-    if (!config.ok) throw new Error("No pude cargar Firebase");
+  if (!employeeName || !token) throw new Error("employeeName y token son requeridos");
 
-    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope:"/" });
-    await navigator.serviceWorker.ready;
+  const employeeKey = normalizeEmployeeKey(employeeName);
+  await query(`
+    INSERT INTO push_device_tokens (
+      employee_name, employee_key, employee_role, token, platform, user_agent,
+      active, last_seen_at, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,TRUE,NOW(),NOW())
+    ON CONFLICT (token) DO UPDATE SET
+      employee_name = EXCLUDED.employee_name,
+      employee_key = EXCLUDED.employee_key,
+      employee_role = EXCLUDED.employee_role,
+      platform = EXCLUDED.platform,
+      user_agent = EXCLUDED.user_agent,
+      active = TRUE,
+      last_seen_at = NOW(),
+      updated_at = NOW()
+  `, [
+    employeeName,
+    employeeKey,
+    employeeRole,
+    token,
+    String(payload.platform || "web"),
+    String(payload.userAgent || "").slice(0, 1000),
+  ]);
 
-    if (!window.firebase?.apps?.length) firebase.initializeApp(config.firebaseConfig);
-    const messaging = firebase.messaging();
-    const token = await messaging.getToken({ vapidKey:config.vapidKey, serviceWorkerRegistration:registration });
-    if (!token) throw new Error("Firebase no devolvió un token");
+  return { employeeName, employeeKey, employeeRole };
+}
 
-    const response = await fetch("/api/push/register", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ employeeName:person.name, employeeRole:person.role, token, platform:/iPhone|iPad|iPod/i.test(navigator.userAgent)?"ios-web":"web" })
-    });
-    const result = await response.json();
-    if (!response.ok || !result.ok) throw new Error(result.message || "No pude registrar el dispositivo");
+async function deactivatePushToken(query, token) {
+  await query(`UPDATE push_device_tokens SET active=FALSE, updated_at=NOW() WHERE token=$1`, [token]);
+}
 
-    localStorage.setItem("push417Enabled", "true");
-    localStorage.setItem("push417Token", token);
-    const button=document.getElementById(BUTTON_ID);
-    if (button) {
-      button.textContent="🔔";
-      button.title="Notificaciones activadas";
-      button.setAttribute("aria-label", "Notificaciones activadas");
-      button.disabled=true;
-      button.style.opacity=".72";
-      button.style.background="#166534";
-      button.style.cursor="default";
+async function sendPushToEmployees(query, employeeNames, message = {}) {
+  if (!initializeFirebaseAdmin()) return { sent: 0, failed: 0, skipped: true };
+
+  const keys = [...new Set((employeeNames || []).map(normalizeEmployeeKey).filter(Boolean))];
+  if (!keys.length) return { sent: 0, failed: 0, skipped: true };
+
+  const result = await query(`
+    SELECT token FROM push_device_tokens
+    WHERE active=TRUE AND employee_key = ANY($1::text[])
+  `, [keys]);
+  const tokens = [...new Set(result.rows.map(row => row.token).filter(Boolean))];
+  if (!tokens.length) return { sent: 0, failed: 0, skipped: true };
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: {
+      title: String(message.title || "417 Maid"),
+      body: String(message.body || "Tienes una actualización."),
+    },
+    data: Object.fromEntries(Object.entries(message.data || {}).map(([k,v]) => [k, String(v ?? "")])),
+    webpush: {
+      headers: { Urgency: message.urgent ? "high" : "normal" },
+      notification: {
+        icon: "/icons/icon-192.png",
+        badge: "/icons/badge-96.png",
+        tag: String(message.tag || `417maid-${Date.now()}`),
+        renotify: Boolean(message.urgent),
+        requireInteraction: Boolean(message.urgent),
+        vibrate: message.urgent ? [250,100,250,100,400] : [120,60,120],
+      },
+      fcmOptions: { link: String(message.link || "/launch") },
+    },
+  });
+
+  const invalidTokens=[];
+  response.responses.forEach((item,index)=>{
+    if (item.success) return;
+    const code = item.error?.code || "";
+    if (["messaging/registration-token-not-registered","messaging/invalid-registration-token"].includes(code)) {
+      invalidTokens.push(tokens[index]);
     }
-    alert("Notificaciones push activadas en este dispositivo.");
+  });
+
+  if (invalidTokens.length) {
+    await query(`UPDATE push_device_tokens SET active=FALSE, updated_at=NOW() WHERE token = ANY($1::text[])`, [invalidTokens]);
   }
 
-  function boot() {
-    const person=employee();
-    if (!eligible(person.role)) return;
-    makeButton();
-    if (Notification.permission === "granted" && localStorage.getItem("push417Enabled") === "true") {
-      const button=document.getElementById(BUTTON_ID);
-      if(button){
-        button.textContent="🔔";
-        button.title="Notificaciones activadas";
-        button.setAttribute("aria-label", "Notificaciones activadas");
-        button.disabled=true;
-        button.style.opacity=".72";
-        button.style.background="#166534";
-        button.style.cursor="default";
-      }
-    }
-  }
+  return { sent: response.successCount, failed: response.failureCount, invalidTokens: invalidTokens.length };
+}
 
-  window.addEventListener("os-ready", boot, { once:true });
-  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", () => setTimeout(boot,300)) : setTimeout(boot,300);
-  window.enable417PushNotifications = enable;
-})();
+module.exports = {
+  initializeFirebaseAdmin,
+  registerPushToken,
+  deactivatePushToken,
+  sendPushToEmployees,
+  normalizeEmployeeKey,
+};
