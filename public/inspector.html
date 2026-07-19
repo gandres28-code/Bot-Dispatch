@@ -227,7 +227,7 @@
 <nav class="bottom-nav"><a class="nav-item active" href="/inspector"><span style="font-size:18px">🔎</span>Inspecciones</a><button class="nav-item" type="button" onclick="openSettingsMenu()"><span style="font-size:18px">⚙️</span>Settings</button></nav>
 <section id="settingsSheet" class="settings-sheet hidden"><div class="sheet-head"><div><span>Settings</span><strong>Cuenta</strong></div><button class="sheet-close" onclick="closeSettingsMenu()">Cerrar</button></div><button class="settings-option" onclick="window.OS?.clearSession?.();window.location.replace('/launch');">Cambiar usuario</button></section>
 <script src="/socket.io/socket.io.js"></script><script src="/js/maid-core.js"></script>
-<script src="/js/resilience.js"></script>
+<script src="/js/resilience.js?v=stable-20260719-1"></script>
 <script>
 let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",lastUnits=[],activeTab="pre",collapsedBuildings={};
 let inspectorDataSource="postgres";
@@ -749,12 +749,12 @@ async function loadInspectorAssignments(silent=false,forceRefresh=false){
         lastUnits=snapshot.units;
         updateStats(lastUnits);
         renderAssignments();
-        if(!silent)showBigStatus("Mostrando la última información guardada. Reconectando…","loading");
+        if(!silent)showBigStatus("Mostrando la última información guardada.","error");
         return {...snapshot,cached:true,offline:true};
       }
       if(!silent){
         document.getElementById("assignments").innerHTML='<div class="empty">Reconectando… Tus inspecciones aparecerán automáticamente.</div>';
-        showBigStatus("Reconectando con 417 Maid…","loading");
+        showBigStatus("No pudimos actualizar en este momento. Intentaremos de nuevo.","error");
       }
       return null;
     }finally{
