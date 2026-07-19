@@ -1,0 +1,22 @@
+{
+  "name": "417 Maid OS",
+  "short_name": "417 Maid",
+  "start_url": "/launch",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#111827",
+  "description": "Housekeeping operations for 417 Maid",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
