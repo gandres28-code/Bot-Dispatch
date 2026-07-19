@@ -409,6 +409,191 @@ html.dark .empty{
   }
 }
 
+
+
+/* ===== Dark mode premium · estilo terminal moderno ===== */
+html.dark{
+  color-scheme:dark;
+  --bg:#070809;
+  --card:#111318;
+  --surface:#111318;
+  --surface-soft:#15181e;
+  --surface-strong:#1a1f29;
+  --text:#f4f7fb;
+  --muted:#9ba6b5;
+  --line:#262c35;
+  --blue:#5b7cff;
+  --green:#28c995;
+  --orange:#f6a04d;
+  --purple:#9a78ff;
+  --red:#ff6678;
+  --yellow:#e7bd4a;
+  --shadow:0 16px 42px rgba(0,0,0,.42);
+}
+
+html.dark body{
+  background:
+    radial-gradient(circle at 10% -10%,rgba(69,105,255,.16),transparent 28%),
+    radial-gradient(circle at 100% 0%,rgba(40,201,149,.07),transparent 22%),
+    #070809;
+}
+
+html.dark .top{
+  background:rgba(7,8,9,.9);
+  border-bottom-color:#232831;
+  box-shadow:0 10px 30px rgba(0,0,0,.28);
+}
+
+html.dark .logo{
+  background:linear-gradient(145deg,#315eea,#7b5cff);
+  box-shadow:0 10px 28px rgba(73,100,255,.34);
+}
+
+html.dark .refresh,
+html.dark .theme-toggle,
+html.dark .room-search,
+html.dark .room-filter{
+  background:#111318;
+  color:#f4f7fb;
+  border-color:#2a303a;
+}
+
+html.dark .refresh:hover,
+html.dark .theme-toggle:hover,
+html.dark .room-open:hover{
+  background:#1a1f27;
+  border-color:#3a4350;
+}
+
+html.dark .panel,
+html.dark .kpi,
+html.dark .intel-card,
+html.dark .room-table-panel{
+  background:#111318;
+  color:#f4f7fb;
+  border-color:#262c35;
+  box-shadow:0 14px 36px rgba(0,0,0,.34);
+}
+
+html.dark .building,
+html.dark .metric{
+  background:#15181e;
+  border-color:#2a3039;
+}
+
+html.dark .building:hover,
+html.dark .metric:hover,
+html.dark .kpi:hover,
+html.dark .intel-card:hover{
+  border-color:#3a4350;
+  box-shadow:0 18px 42px rgba(0,0,0,.42);
+}
+
+html.dark .head,
+html.dark .employee,
+html.dark .alert,
+html.dark .event,
+html.dark .rooms-table td{
+  border-color:#262c35;
+}
+
+html.dark .employee,
+html.dark .event{
+  background:transparent;
+}
+
+html.dark .alert{
+  background:#15181e;
+  border-radius:12px;
+  margin-bottom:8px;
+  padding-left:10px;
+  padding-right:10px;
+}
+
+html.dark .alert.high{background:#211418}
+html.dark .alert.medium{background:#211b13}
+html.dark .alert.low{background:#121a22}
+
+html.dark .building-stat,
+html.dark .detail,
+html.dark .pill,
+html.dark .employee-mini span,
+html.dark .flag-chip{
+  background:#1a1e25;
+  color:#aeb8c7;
+  border:1px solid #292f38;
+}
+
+html.dark .letter,
+html.dark .badge,
+html.dark .employee-score,
+html.dark .room-open{
+  background:#1b2340;
+  color:#8ea3ff;
+}
+
+html.dark .employee-score.good{background:#102a22;color:#47d8a8}
+html.dark .employee-score.warn{background:#2a2310;color:#efc85b}
+
+html.dark .rooms-table th{
+  background:#0d0f13;
+  color:#9aa5b4;
+  border-color:#262c35;
+}
+
+html.dark .rooms-table tbody tr:hover{
+  background:#171b22;
+}
+
+html.dark .modal-card{
+  background:#111318;
+  color:#f4f7fb;
+  border:1px solid #2a3039;
+}
+
+html.dark .close{
+  background:#1b2028;
+  color:#f4f7fb;
+}
+
+html.dark .room.ready,
+html.dark .status-chip.ready{background:#102b22;color:#49daa9}
+html.dark .room.pending,
+html.dark .status-chip.pending{background:#2b2410;color:#edc75d}
+html.dark .room.progress,
+html.dark .status-chip.progress{background:#211a38;color:#b69aff}
+html.dark .room.inspection,
+html.dark .status-chip.inspection{background:#2b1c11;color:#ffb169}
+
+html.dark .hero{
+  background:
+    radial-gradient(circle at 88% 12%,rgba(89,118,255,.28),transparent 30%),
+    linear-gradient(135deg,#10131a,#1a2030 58%,#253a75);
+  border:1px solid #2d3544;
+  box-shadow:0 22px 52px rgba(0,0,0,.44);
+}
+
+html.dark .progress-card,
+html.dark .ai-summary{
+  background:rgba(255,255,255,.06);
+  border-color:rgba(255,255,255,.11);
+}
+
+html.dark .director-panel{
+  background:
+    radial-gradient(circle at 90% 0%,rgba(107,93,255,.24),transparent 30%),
+    linear-gradient(135deg,#10141c,#1b2334 55%,#283b72);
+  border:1px solid #303a4c;
+}
+
+html.dark input::placeholder,
+html.dark select{
+  color:#7f8998;
+}
+
+html.dark .source-chip:before{
+  box-shadow:0 0 0 4px rgba(40,201,149,.12),0 0 14px rgba(40,201,149,.35);
+}
 </style>
 </head>
 <body>
