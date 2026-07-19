@@ -198,6 +198,7 @@ async function updateRoomForEvent(
         UPDATE rooms
         SET
           cleaning_status = 'In Progress',
+          core_status = 'CLEANING',
           started_at = COALESCE(started_at, $2::timestamptz),
           finished_at = NULL,
           inspection_started_at = NULL,
@@ -214,6 +215,7 @@ async function updateRoomForEvent(
         UPDATE rooms
         SET
           cleaning_status = 'Cleaned - Awaiting Inspection',
+          core_status = 'WAITING_INSPECTION',
           started_at = COALESCE(started_at, $2::timestamptz),
           finished_at = $2::timestamptz,
           inspection_started_at = NULL,
@@ -230,6 +232,7 @@ async function updateRoomForEvent(
         UPDATE rooms
         SET
           cleaning_status = 'Inspection Started',
+          core_status = 'INSPECTING',
           inspection_started_at = COALESCE(
             inspection_started_at,
             $2::timestamptz
@@ -247,6 +250,7 @@ async function updateRoomForEvent(
         UPDATE rooms
         SET
           cleaning_status = 'Ready for Guest',
+          core_status = 'READY',
           inspection_started_at = COALESCE(
             inspection_started_at,
             $2::timestamptz
@@ -270,6 +274,46 @@ async function updateRoomForEvent(
         WHERE id = $1
         RETURNING *
       `;
+      break;
+
+    case "PRE_INSPECTION_START":
+      sql = `
+        UPDATE rooms
+        SET
+          pre_inspection = FALSE,
+          pre_inspection_started = TRUE,
+          pre_inspection_started_at = COALESCE(
+            pre_inspection_started_at,
+            $2::timestamptz
+          ),
+          pre_inspection_completed_at = NULL,
+          updated_by = $3,
+          source = 'event-engine',
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `;
+      values.push(employee || "");
+      break;
+
+    case "PRE_INSPECTION_COMPLETE":
+      sql = `
+        UPDATE rooms
+        SET
+          pre_inspection = TRUE,
+          pre_inspection_started = FALSE,
+          pre_inspection_started_at = COALESCE(
+            pre_inspection_started_at,
+            $2::timestamptz
+          ),
+          pre_inspection_completed_at = $2::timestamptz,
+          updated_by = $3,
+          source = 'event-engine',
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `;
+      values.push(employee || "");
       break;
 
     default:
