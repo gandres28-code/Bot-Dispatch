@@ -12,6 +12,43 @@ let shellProtected = false;
 const DASHBOARD_CACHE_MS = 15000;
 const DASHBOARD_TIMEOUT_MS = 12000;
 
+const SIDEBAR_STORAGE_KEY = "maidOsSidebarCollapsed";
+
+function setSidebarCollapsed(collapsed, persist = true) {
+  const isCollapsed = Boolean(collapsed);
+  document.documentElement.classList.toggle("sidebar-collapsed", isCollapsed);
+
+  const button = document.getElementById("sidebarToggle");
+  if (button) {
+    button.textContent = isCollapsed ? "☰" : "✕";
+    button.setAttribute("aria-expanded", String(!isCollapsed));
+    button.setAttribute(
+      "aria-label",
+      isCollapsed ? "Mostrar menú lateral" : "Ocultar menú lateral"
+    );
+  }
+
+  if (persist) {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, isCollapsed ? "1" : "0");
+  }
+}
+
+function toggleSidebar() {
+  setSidebarCollapsed(
+    !document.documentElement.classList.contains("sidebar-collapsed")
+  );
+}
+
+function restoreSidebarState() {
+  const collapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  setSidebarCollapsed(collapsed, false);
+}
+
+function syncShellTheme() {
+  const savedTheme = localStorage.getItem("maidOsTheme") || "light";
+  document.documentElement.classList.toggle("dark", savedTheme === "dark");
+}
+
 async function fetchJsonWithTimeout(
   url,
   options = {},
@@ -550,5 +587,11 @@ window.addEventListener("focus", () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+  restoreSidebarState();
+  syncShellTheme();
   initializeAppShell();
+});
+
+window.addEventListener("storage", event => {
+  if (event.key === "maidOsTheme") syncShellTheme();
 });
