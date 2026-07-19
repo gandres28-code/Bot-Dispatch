@@ -157,6 +157,30 @@ function getRoomFromNotionPage(page, fallbackDate = "") {
       "Inspection Start At",
     ]),
     readyAt: readDateProperty(properties, ["Ready At", "Ready for Guest At"]),
+    preInspection: readBooleanProperty(properties, [
+      "Pre Inspection",
+      "Pre-Inspection",
+      "PreInspection",
+      "Pre inspection",
+    ]),
+    preInspectionStarted: readBooleanProperty(properties, [
+      "Pre Inspection Started",
+      "Pre-Inspection Started",
+      "PreInspection Started",
+      "Pre inspection started",
+    ]),
+    preInspectionStartedAt: readDateProperty(properties, [
+      "Pre Inspection Started At",
+      "Pre Inspection Start At",
+      "Pre-Inspection Started At",
+      "PreInspection Started At",
+    ]),
+    preInspectionCompletedAt: readDateProperty(properties, [
+      "Pre Inspection Completed At",
+      "Pre Inspection Complete At",
+      "Pre Inspection At",
+      "Pre-Inspection Completed At",
+    ]),
     rawData: page,
   };
 }
@@ -260,6 +284,10 @@ async function upsertRoom(room) {
     room.finishedAt,
     room.inspectionStartedAt,
     room.readyAt,
+    room.preInspection,
+    room.preInspectionStarted,
+    room.preInspectionStartedAt,
+    room.preInspectionCompletedAt,
     JSON.stringify(room.rawData || {}),
   ];
 
@@ -289,10 +317,14 @@ async function upsertRoom(room) {
           finished_at = $17,
           inspection_started_at = $18,
           ready_at = $19,
+          pre_inspection = $20,
+          pre_inspection_started = $21,
+          pre_inspection_started_at = $22,
+          pre_inspection_completed_at = $23,
           source = 'notion',
-          raw_data = $20::jsonb,
+          raw_data = $24::jsonb,
           updated_at = NOW()
-        WHERE id = $21
+        WHERE id = $25
         RETURNING *
       `,
       [...values, target.id]
@@ -320,6 +352,10 @@ async function upsertRoom(room) {
           finished_at,
           inspection_started_at,
           ready_at,
+          pre_inspection,
+          pre_inspection_started,
+          pre_inspection_started_at,
+          pre_inspection_completed_at,
           source,
           raw_data,
           updated_at
@@ -344,8 +380,12 @@ async function upsertRoom(room) {
           $17,
           $18,
           $19,
+          $20,
+          $21,
+          $22,
+          $23,
           'notion',
-          $20::jsonb,
+          $24::jsonb,
           NOW()
         )
         RETURNING *
