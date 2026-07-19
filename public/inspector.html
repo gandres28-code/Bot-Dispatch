@@ -149,12 +149,50 @@
       to{transform:rotate(270deg)}
     }
 
+  
+    .hero-actions{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:8px;
+      flex:0 0 auto;
+    }
+
+    .push-bell-button{
+      width:42px !important;
+      height:42px !important;
+      min-width:42px !important;
+      margin:0 !important;
+      padding:0 !important;
+      border-radius:999px !important;
+      display:grid !important;
+      place-items:center !important;
+      align-self:flex-end;
+      background:#111827;
+      color:#fff;
+      border:1px solid rgba(255,255,255,.16);
+      box-shadow:0 10px 24px rgba(15,23,42,.20);
+      font-size:18px !important;
+      line-height:1 !important;
+      cursor:pointer;
+    }
+
+    .push-bell-button:active{
+      transform:scale(.94);
+    }
+
+    .push-bell-button:disabled{
+      background:#166534 !important;
+      opacity:.78 !important;
+      cursor:default;
+    }
+
   </style>
 </head>
 <body>
 <div id="bigStatus"></div>
 <div class="app-shell">
-  <section class="hero"><div class="hero-card"><div class="hero-line"><div><h1>Inspecciones</h1><div id="heroInspectorName" class="hero-name">Cargando...</div><div class="hero-subtitle">Tus unidades separadas por edificio y organizadas por etapa de inspección.</div></div><button class="refresh-button" onclick="loadInspectorAssignments(false)"><span class="refresh-symbol">↻</span>Actualizar</button></div><div class="date-pill"><span class="date-box" id="dateDay">--</span><span id="dateText">Hoy</span></div><div class="today-progress"><div class="today-progress-top"><span>Progreso de hoy</span><strong id="todayProgressText">0 de 0</strong></div><div class="progress-track"><div id="todayProgressFill" class="progress-fill"></div></div></div></div></section>
+  <section class="hero"><div class="hero-card"><div class="hero-line"><div><h1>Inspecciones</h1><div id="heroInspectorName" class="hero-name">Cargando...</div><div class="hero-subtitle">Tus unidades separadas por edificio y organizadas por etapa de inspección.</div></div><div class="hero-actions"><button class="refresh-button" onclick="loadInspectorAssignments(false)"><span class="refresh-symbol">↻</span>Actualizar</button><button id="enablePushNotifications417" class="push-bell-button" type="button" title="Activar notificaciones" aria-label="Activar notificaciones" onclick="window.enable417PushNotifications?.()">🔔</button></div></div><div class="date-pill"><span class="date-box" id="dateDay">--</span><span id="dateText">Hoy</span></div><div class="today-progress"><div class="today-progress-top"><span>Progreso de hoy</span><strong id="todayProgressText">0 de 0</strong></div><div class="progress-track"><div id="todayProgressFill" class="progress-fill"></div></div></div></div></section>
   <section class="stats-grid">
     <div class="stat-card">
       <div class="stat-icon pre">◔</div>
