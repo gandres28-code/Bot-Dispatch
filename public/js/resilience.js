@@ -58,11 +58,15 @@
   }
 
   function readQueue() {
-    return safeParse(localStorage.getItem(QUEUE_KEY), []);
+    const parsed = safeParse(localStorage.getItem(QUEUE_KEY), []);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
   }
 
   function writeQueue(queue) {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-100)));
+    const safeQueue = Array.isArray(queue) ? queue.filter(Boolean) : [];
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(safeQueue.slice(-100)));
+    } catch (_) {}
   }
 
   function queueAction(url, payload) {
@@ -109,6 +113,7 @@
       const queue = readQueue();
       const remaining = [];
       for (const item of queue) {
+        if (!item || !item.url || !item.payload) continue;
         try {
           await fetchJson(item.url, {
             method: "POST",
