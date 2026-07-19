@@ -21,8 +21,12 @@ function getPool() {
         process.env.POSTGRES_IDLE_TIMEOUT_MS || 30000
       ),
       connectionTimeoutMillis: Number(
-        process.env.POSTGRES_CONNECTION_TIMEOUT_MS || 10000
+        process.env.POSTGRES_CONNECTION_TIMEOUT_MS || 8000
       ),
+      statement_timeout: Number(process.env.POSTGRES_STATEMENT_TIMEOUT_MS || 12000),
+      query_timeout: Number(process.env.POSTGRES_QUERY_TIMEOUT_MS || 15000),
+      keepAlive: true,
+      allowExitOnIdle: false,
     });
 
     pool.on("error", (error) => {
