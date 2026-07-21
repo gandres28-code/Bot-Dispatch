@@ -1913,21 +1913,33 @@ async function createPayrollRecord({ cleaner, unit, date }) {
       continue;
     }
 
+    const payrollProperties = {
+      Payroll: {
+        title: [{ text: { content: `${cleanerName} - ${unit} - $${amountPerCleaner.toFixed(2)}` } }],
+      },
+      Date: { date: { start: date } },
+      Cleaner: { rich_text: [{ text: { content: cleanerName } }] },
+      Unit: { rich_text: [{ text: { content: unit } }] },
+      "Room Type": { select: { name: pay.roomType } },
+      Amount: { number: amountPerCleaner },
+      "Week Start": { date: { start: week.weekStart } },
+      "Week End": { date: { start: week.weekEnd } },
+      Status: { select: { name: "Pending" } },
+    };
+
+    try {
+      const payrollSchema = await getNotionDatabaseSchema(NOTION_PAYROLL_DATABASE_ID);
+      const propertySchema = payrollSchema.Property || payrollSchema.Hotel || payrollSchema.Location;
+      const propertyKey = payrollSchema.Property ? "Property" : payrollSchema.Hotel ? "Hotel" : payrollSchema.Location ? "Location" : "";
+      const propertyValue = buildNotionTextValue(propertySchema, getPayrollPropertyFromUnit(unit));
+      if (propertyKey && propertyValue) payrollProperties[propertyKey] = propertyValue;
+    } catch (schemaError) {
+      console.warn("No se pudo leer Property de Payroll; se guardará sin clasificación:", schemaError.message);
+    }
+
     await notion.pages.create({
       parent: { database_id: NOTION_PAYROLL_DATABASE_ID },
-      properties: {
-        Payroll: {
-          title: [{ text: { content: `${cleanerName} - ${unit} - $${amountPerCleaner.toFixed(2)}` } }],
-        },
-        Date: { date: { start: date } },
-        Cleaner: { rich_text: [{ text: { content: cleanerName } }] },
-        Unit: { rich_text: [{ text: { content: unit } }] },
-        "Room Type": { select: { name: pay.roomType } },
-        Amount: { number: amountPerCleaner },
-        "Week Start": { date: { start: week.weekStart } },
-        "Week End": { date: { start: week.weekEnd } },
-        Status: { select: { name: "Pending" } },
-      },
+      properties: payrollProperties,
     });
 
     result.created += 1;
@@ -2103,6 +2115,7 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
         hours: p.Hours?.number || 0,
         hourlyRate: p["Hourly Rate"]?.number || 0,
         total: p.Total?.number || 0,
+        workLocation: p["Location Status"]?.select?.name || "Unspecified",
         status: p.Status?.select?.name || "",
       };
     })
@@ -3109,6 +3122,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Date", key: "date", width: 15 },
     { header: "Cleaner", key: "cleaner", width: 24 },
     { header: "Unit", key: "unit", width: 24 },
+    { header: "Property", key: "propertyName", width: 18 },
     { header: "Room Type", key: "roomType", width: 15 },
     { header: "Amount", key: "amount", width: 15 },
   ];
@@ -3133,6 +3147,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   hourlySheet.columns = [
     { header: "Employee", key: "employee", width: 24 },
     { header: "Role", key: "role", width: 20 },
+    { header: "Work Location", key: "workLocation", width: 20 },
     { header: "Clock In", key: "clockIn", width: 25 },
     { header: "Clock Out", key: "clockOut", width: 25 },
     { header: "Hours", key: "hours", width: 12 },
@@ -3207,28 +3222,28 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     employeeSheet.addRow([]);
 
     employeeSheet.addRow(["CLEANING / UNIT PAY"]);
-    employeeSheet.addRow(["Date", "Unit", "Room Type", "Amount"]);
+    employeeSheet.addRow(["Date", "Property", "Unit", "Room Type", "Amount"]);
     for (const r of person.unitRecords) {
-      employeeSheet.addRow([r.date, r.unit, r.roomType, roundMoney(r.amount)]);
+      employeeSheet.addRow([r.date, r.propertyName || "Hotel", r.unit, r.roomType, roundMoney(r.amount)]);
     }
-    employeeSheet.addRow(["Cleaning subtotal", "", "", unitPay]);
+    employeeSheet.addRow(["Cleaning subtotal", "", "", "", unitPay]);
     employeeSheet.addRow([]);
 
     employeeSheet.addRow(["HOURLY WORK"]);
-    employeeSheet.addRow(["Date", "Role", "Clock In", "Clock Out", "Hours", "Rate", "Total"]);
+    employeeSheet.addRow(["Date", "Role", "Work Location", "Clock In", "Clock Out", "Hours", "Rate", "Total"]);
     for (const r of person.hourlyRecords) {
       employeeSheet.addRow([
-        String(r.clockIn || "").slice(0, 10), r.role, r.clockIn, r.clockOut,
+        String(r.clockIn || "").slice(0, 10), r.role, r.workLocation || "Unspecified", r.clockIn, r.clockOut,
         Number(r.hours || 0), Number(r.hourlyRate || 0), roundMoney(r.total),
       ]);
     }
-    employeeSheet.addRow(["Hourly subtotal", "", "", "", Number(person.hours.toFixed(2)), "", hourlyPay]);
+    employeeSheet.addRow(["Hourly subtotal", "", "", "", "", Number(person.hours.toFixed(2)), "", hourlyPay]);
     employeeSheet.addRow([]);
-    employeeSheet.addRow(["WEEKLY TOTAL", "", "", "", "", "", grandTotal]);
+    employeeSheet.addRow(["WEEKLY TOTAL", "", "", "", "", "", "", grandTotal]);
 
     employeeSheet.columns = [
-      { width: 18 }, { width: 24 }, { width: 20 }, { width: 25 },
-      { width: 12 }, { width: 12 }, { width: 15 },
+      { width: 18 }, { width: 20 }, { width: 24 }, { width: 20 },
+      { width: 25 }, { width: 12 }, { width: 12 }, { width: 15 },
     ];
   }
 
@@ -6674,6 +6689,93 @@ function distanceFeet(lat1, lng1, lat2, lng2) {
   return meters * 3.28084;
 }
 
+function normalizeWorkLocation(value) {
+  const clean = String(value || "Hotel").trim();
+  const allowed = new Map([
+    ["hotel", "Hotel"],
+    ["main hotel", "Hotel"],
+    ["chateau", "Chateau"],
+    ["chateau houses", "Chateau"],
+    ["office", "Office"],
+    ["oficina", "Office"],
+    ["laundry", "Laundry"],
+    ["lavanderia", "Laundry"],
+    ["other", "Other"],
+    ["otro", "Other"],
+  ]);
+  return allowed.get(clean.toLowerCase()) || "Other";
+}
+
+function validateClockLocation(body) {
+  const workLocation = normalizeWorkLocation(body.workLocation);
+  const locationNote = String(body.locationNote || "").trim().slice(0, 120);
+  const base = validateHotelLocation(body);
+
+  // El hotel principal conserva la geocerca estricta.
+  if (workLocation === "Hotel") {
+    return { ...base, workLocation, locationNote };
+  }
+
+  // En oficinas, Chateau y otros lugares se exige GPS como evidencia,
+  // pero no se bloquea al empleado por estar fuera del hotel.
+  if (base.lat === null || base.lng === null) {
+    return {
+      ...base,
+      ok: false,
+      workLocation,
+      locationNote,
+      status: `${workLocation} - GPS Error`,
+      message: "No se pudo obtener tu ubicación. Activa Location Services e intenta de nuevo.",
+    };
+  }
+
+  return {
+    ...base,
+    ok: true,
+    workLocation,
+    locationNote,
+    status: workLocation,
+    message: `Ubicación registrada para ${workLocation}.`,
+  };
+}
+
+function getPayrollPropertyFromUnit(unit) {
+  const text = String(unit || "").trim();
+  const normalized = text.toLowerCase();
+  const configured = String(process.env.CHATEAU_UNIT_KEYWORDS || "chateau")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (configured.some((keyword) => normalized.includes(keyword))) {
+    return "Chateau";
+  }
+
+  return "Hotel";
+}
+
+const notionDatabaseSchemaCache = new Map();
+async function getNotionDatabaseSchema(databaseId) {
+  const cached = notionDatabaseSchemaCache.get(databaseId);
+  if (cached && Date.now() - cached.savedAt < 10 * 60 * 1000) {
+    return cached.properties;
+  }
+  const database = await notion.databases.retrieve({ database_id: databaseId });
+  const properties = database?.properties || {};
+  notionDatabaseSchemaCache.set(databaseId, { savedAt: Date.now(), properties });
+  return properties;
+}
+
+function buildNotionTextValue(propertySchema, value) {
+  if (!propertySchema) return null;
+  const content = String(value || "").slice(0, 1900);
+  if (propertySchema.type === "select") return { select: { name: content || "Unspecified" } };
+  if (propertySchema.type === "status") return { status: { name: content || "Unspecified" } };
+  if (propertySchema.type === "rich_text") return { rich_text: [{ text: { content } }] };
+  if (propertySchema.type === "title") return { title: [{ text: { content } }] };
+  return null;
+}
+
 function validateHotelLocation(body) {
   const hotelLat = toNumber(process.env.HOTEL_LAT || 36.638366);
   const hotelLng = toNumber(process.env.HOTEL_LNG || -93.350305);
@@ -6851,7 +6953,7 @@ app.post("/mobile-code-login", async (req, res) => {
 app.post("/clock-in", async (req, res) => {
   try {
     const code = String(req.body.code || "").trim();
-    const location = validateHotelLocation(req.body);
+    const location = validateClockLocation(req.body);
 
     if (!code) {
       return res.status(400).json({
@@ -6877,6 +6979,24 @@ app.post("/clock-in", async (req, res) => {
       });
     }
 
+    const activeClockResponse = await notion.databases.query({
+      database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+      page_size: 20,
+      filter: {
+        and: [
+          { property: "Code", rich_text: { equals: code } },
+          { property: "Status", select: { equals: "Working" } },
+        ],
+      },
+    });
+
+    if ((activeClockResponse.results || []).length > 0) {
+      return res.status(409).json({
+        ok: false,
+        error: "Ya tienes un Clock In activo. Haz Clock Out antes de volver a entrar.",
+      });
+    }
+
     const props = employee.properties;
 
     const employeeName =
@@ -6897,7 +7017,7 @@ app.post("/clock-in", async (req, res) => {
           title: [
             {
               text: {
-                content: `${employeeName} Clock In`,
+                content: `${employeeName} Clock In - ${location.workLocation}${location.locationNote ? ` - ${location.locationNote}` : ""}`,
               },
             },
           ],
@@ -6971,7 +7091,7 @@ app.post("/clock-in", async (req, res) => {
 
     res.json({
       ok: true,
-      message: `${employeeName} clocked in. Location OK (${Math.round(location.distanceFeet)} ft).`,
+      message: `${employeeName} hizo Clock In en ${location.workLocation}.`,
       locationStatus: location.status,
       distanceFeet: location.distanceFeet,
       accuracy: location.accuracy,
@@ -6989,7 +7109,7 @@ app.post("/clock-in", async (req, res) => {
 app.post("/clock-out", async (req, res) => {
   try {
     const code = String(req.body.code || "").trim();
-    const location = validateHotelLocation(req.body);
+    const location = validateClockLocation(req.body);
 
     if (!code) {
       return res.status(400).json({
@@ -7099,7 +7219,7 @@ app.post("/clock-out", async (req, res) => {
 
     res.json({
       ok: true,
-      message: `Clock Out successful (${hours.toFixed(2)} hrs). Location OK (${Math.round(location.distanceFeet)} ft).`,
+      message: `Clock Out completado en ${location.workLocation} (${hours.toFixed(2)} hrs).`,
       locationStatus: location.status,
       distanceFeet: location.distanceFeet,
       accuracy: location.accuracy,
