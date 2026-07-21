@@ -208,6 +208,8 @@ CREATE TABLE IF NOT EXISTS time_clock_records (
   normalized_employee TEXT NOT NULL,
   code TEXT NOT NULL DEFAULT '',
   role_worked TEXT NOT NULL DEFAULT '',
+  work_location TEXT NOT NULL DEFAULT 'Unspecified',
+  location_note TEXT NOT NULL DEFAULT '',
   clock_in TIMESTAMPTZ NOT NULL,
   clock_out TIMESTAMPTZ,
   break_hours NUMERIC(8,2) NOT NULL DEFAULT 0,
@@ -220,6 +222,11 @@ CREATE TABLE IF NOT EXISTS time_clock_records (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
+ALTER TABLE time_clock_records ADD COLUMN IF NOT EXISTS work_location TEXT NOT NULL DEFAULT 'Unspecified';
+ALTER TABLE time_clock_records ADD COLUMN IF NOT EXISTS location_note TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS time_clock_location_idx ON time_clock_records (work_location, clock_in);
 
 CREATE INDEX IF NOT EXISTS time_clock_employee_idx
 ON time_clock_records (normalized_employee, clock_in);
