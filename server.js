@@ -78,7 +78,6 @@ const {
   initializeFirebaseAdmin,
   registerPushToken,
   deactivatePushToken,
-  getPushStatus,
   sendPushToEmployees,
 } = require("./services/pushNotifications");
 
@@ -5787,18 +5786,11 @@ app.get("/finalizar-dia", async (req, res) => {
 // FIREBASE PUSH · REGISTRO DE DISPOSITIVOS
 // =========================================================
 app.get("/api/push/config", (req, res) => {
-  res.json({
-    ok: true,
-    firebaseConfig: {
-      apiKey: process.env.FIREBASE_WEB_API_KEY || "AIzaSyBYyhUn3Mt1jPnGaVzjUXtBw3gUfiQBivA",
-      authDomain: process.env.FIREBASE_AUTH_DOMAIN || "dispatch-7c98d.firebaseapp.com",
-      projectId: process.env.FIREBASE_PROJECT_ID || "dispatch-7c98d",
-      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "dispatch-7c98d.firebasestorage.app",
-      messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "968016054452",
-      appId: process.env.FIREBASE_APP_ID || "1:968016054452:web:68d3c972753a40f715efe1",
-    },
-    vapidKey: process.env.FIREBASE_VAPID_KEY || "BGveFxjufB-E-TVaqkv7Mh8cs34bD93ki5EE6pgIZ_qOmdKHF23cRO42SnFeJGkh3hYLlS77F04Kj5XncbERdQk",
-  });
+  const publicKey = String(process.env.WEB_PUSH_PUBLIC_KEY || "").trim();
+  if (!publicKey) {
+    return res.status(503).json({ ok:false, message:"Falta WEB_PUSH_PUBLIC_KEY en Render" });
+  }
+  return res.json({ ok:true, publicKey });
 });
 
 app.post("/api/push/register", async (req, res) => {
@@ -5807,32 +5799,41 @@ app.post("/api/push/register", async (req, res) => {
     const result = await registerPushToken(postgresQuery, {
       employeeName: req.body.employeeName,
       employeeRole: req.body.employeeRole,
-      token: req.body.token,
-      platform: req.body.platform || "web",
+      subscription: req.body.subscription,
+      platform: req.body.platform || "web-push",
       userAgent: req.get("user-agent") || "",
     });
     res.json({ ok:true, ...result });
   } catch (error) {
+    console.error("PUSH REGISTER ERROR:", error.message);
     res.status(400).json({ ok:false, message:error.message });
   }
 });
 
-
-app.get("/api/push/status", async (req,res)=>{try{return res.json({ok:true,...await getPushStatus(postgresQuery,String(req.query.employeeName||""))});}catch(error){return res.status(500).json({ok:false,message:"No se pudo revisar el dispositivo."});}});
-
 app.post("/api/push/test", async (req, res) => {
   try {
-    const employeeName=String(req.body.employeeName||"").trim();
-    if(!employeeName)return res.status(400).json({ok:false,message:"Falta employeeName"});
-    const result=await sendPushToEmployees(postgresQuery,[employeeName],{title:"🔔 417 Maid OS",body:"Prueba correcta. Este teléfono ya puede recibir notificaciones.",link:"/launch",tag:`push-test-${Date.now()}`,data:{type:"TEST"}});
-    if(!result.sent)return res.status(409).json({ok:false,message:result.reason==="no-active-tokens"?"El teléfono todavía no quedó registrado. Vuelve a tocar la campana.":"Firebase no pudo entregar la prueba.",...result});
-    return res.json({ok:true,...result});
-  } catch(error){console.error("PUSH TEST ERROR:",error);return res.status(500).json({ok:false,message:"No se pudo enviar la prueba.",detail:error.code||error.message});}
+    const employeeName = String(req.body.employeeName || "").trim();
+    if (!employeeName) return res.status(400).json({ ok:false, message:"Falta employeeName" });
+    const result = await sendPushToEmployees(postgresQuery, [employeeName], {
+      title: "🔔 417 Maid OS",
+      body: "Las notificaciones funcionan correctamente en este teléfono.",
+      link: "/launch",
+      tag: `push-test-${Date.now()}`,
+      data: { type:"TEST" },
+    });
+    if (Number(result.sent || 0) < 1) {
+      return res.status(503).json({ ok:false, message:"No hay una suscripción activa para este empleado", ...result });
+    }
+    return res.json({ ok:true, ...result });
+  } catch (error) {
+    console.error("PUSH TEST ERROR:", error.message);
+    return res.status(500).json({ ok:false, message:"No se pudo enviar la prueba" });
+  }
 });
 
 app.post("/api/push/unregister", async (req, res) => {
   try {
-    await deactivatePushToken(postgresQuery, String(req.body.token || ""));
+    await deactivatePushToken(postgresQuery, String(req.body.endpoint || ""));
     res.json({ ok:true });
   } catch (error) {
     res.status(400).json({ ok:false, message:error.message });
@@ -9722,11 +9723,6 @@ app.get("/api/v2/employees", async (req, res) => {
     });
   }
 });
-
-function employeePayload(body={}){const name=String(body.name||"").trim(),code=String(body.code||"").trim(),role=String(body.role||"").trim();if(!name||!code||!role)throw Object.assign(new Error("Nombre, código y rol son obligatorios."),{status:400});return{name,normalizedName:name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim(),code,role,hourlyRate:Number(body.hourlyRate||0),payType:String(body.payType||"hourly"),unitRate:Number(body.unitRate||0),active:body.active!==false,phone:String(body.phone||"").trim(),email:String(body.email||"").trim(),workLocations:Array.isArray(body.workLocations)?body.workLocations:[],notes:String(body.notes||"").trim(),permissions:Array.isArray(body.permissions)?body.permissions:[]};}
-app.post("/api/v2/employees",async(req,res)=>{try{const e=employeePayload(req.body);const r=await postgresQuery(`INSERT INTO employees(name,normalized_name,code,role,hourly_rate,pay_type,unit_rate,active,phone,email,work_locations,notes,permissions,source,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb,'417-maid',NOW()) RETURNING id`,[e.name,e.normalizedName,e.code,e.role,e.hourlyRate,e.payType,e.unitRate,e.active,e.phone,e.email,JSON.stringify(e.workLocations),e.notes,JSON.stringify(e.permissions)]);io.emit("data-api-updated",{module:"employees"});res.status(201).json({ok:true,id:r.rows[0].id});}catch(error){const d=error.code==="23505";res.status(d?409:(error.status||500)).json({ok:false,message:d?"Ese código ya está usado por otro empleado.":error.message});}});
-app.put("/api/v2/employees/:id",async(req,res)=>{try{const e=employeePayload(req.body);const r=await postgresQuery(`UPDATE employees SET name=$1,normalized_name=$2,code=$3,role=$4,hourly_rate=$5,pay_type=$6,unit_rate=$7,active=$8,phone=$9,email=$10,work_locations=$11::jsonb,notes=$12,permissions=$13::jsonb,source='417-maid',updated_at=NOW() WHERE id=$14 RETURNING id`,[e.name,e.normalizedName,e.code,e.role,e.hourlyRate,e.payType,e.unitRate,e.active,e.phone,e.email,JSON.stringify(e.workLocations),e.notes,JSON.stringify(e.permissions),req.params.id]);if(!r.rowCount)return res.status(404).json({ok:false,message:"Empleado no encontrado."});io.emit("data-api-updated",{module:"employees"});res.json({ok:true});}catch(error){const d=error.code==="23505";res.status(d?409:(error.status||500)).json({ok:false,message:d?"Ese código ya está usado por otro empleado.":error.message});}});
-app.patch("/api/v2/employees/:id/status",async(req,res)=>{try{await postgresQuery(`UPDATE employees SET active=$1,updated_at=NOW(),source='417-maid' WHERE id=$2`,[Boolean(req.body.active),req.params.id]);io.emit("data-api-updated",{module:"employees"});res.json({ok:true});}catch(error){res.status(500).json({ok:false,message:"No se pudo actualizar el estado."});}});
 
 app.get("/api/v2/rooms", async (req, res) => {
   try {
