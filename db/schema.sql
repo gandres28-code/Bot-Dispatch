@@ -25,14 +25,6 @@ ON employees (normalized_name);
 CREATE INDEX IF NOT EXISTS employees_active_idx
 ON employees (active);
 
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_type TEXT NOT NULL DEFAULT 'hourly';
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS unit_rate NUMERIC(10,2) NOT NULL DEFAULT 0;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '';
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_locations JSONB NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
-
-
 CREATE TABLE IF NOT EXISTS rooms (
   id BIGSERIAL PRIMARY KEY,
   notion_id TEXT UNIQUE,
@@ -607,6 +599,36 @@ ON push_device_tokens (last_seen_at DESC);
 
 INSERT INTO schema_migrations (migration_name)
 VALUES ('008_push_notifications')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+  id BIGSERIAL PRIMARY KEY,
+  employee_name TEXT NOT NULL,
+  employee_key TEXT NOT NULL,
+  employee_role TEXT NOT NULL DEFAULT '',
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  platform TEXT NOT NULL DEFAULT 'web-push',
+  user_agent TEXT NOT NULL DEFAULT '',
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS web_push_employee_idx
+ON web_push_subscriptions (employee_key, active);
+
+CREATE INDEX IF NOT EXISTS web_push_seen_idx
+ON web_push_subscriptions (last_seen_at DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('009_standard_web_push')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
