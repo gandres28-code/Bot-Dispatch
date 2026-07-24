@@ -263,63 +263,19 @@ function openModule(title, url, options = {}) {
     return;
   }
 
-  setText("moduleTitle", title);
-  setText("moduleUrl", url);
+  // Cada módulo abre como página completa. Esto evita páginas anidadas
+  // dentro de iframes y permite que cada vista use todo el espacio disponible.
+  const targetUrl = new URL(url, window.location.origin);
 
-  moduleReturnTarget = options.returnUrl
-    ? {
-        title: options.returnTitle || "Regresar",
-        url: options.returnUrl,
-      }
-    : null;
-
-  const frame = document.getElementById("moduleFrame");
-  setFrameSource(frame, url, Boolean(options.forceReload));
-
-  document
-    .querySelectorAll(".os-page")
-    .forEach(page => page.classList.remove("active"));
-
-  const modulePage = document.getElementById("modulePage");
-  if (modulePage) {
-    modulePage.classList.add("active");
+  if (options.returnUrl) {
+    targetUrl.searchParams.set("returnTo", options.returnUrl);
   }
 
-  setActiveNavButton(null);
-  setText("pageSubtitle", title);
+  window.location.assign(targetUrl.pathname + targetUrl.search + targetUrl.hash);
 }
 
 function backToDashboard() {
-  if (moduleReturnTarget) {
-    const target = moduleReturnTarget;
-    moduleReturnTarget = null;
-
-    openModule(target.title, target.url);
-    return;
-  }
-
-  const frame = document.getElementById("moduleFrame");
-  if (frame) {
-    frame.src = "about:blank";
-  }
-
-  document
-    .querySelectorAll(".os-page")
-    .forEach(page => page.classList.remove("active"));
-
-  const dashboard = document.getElementById("dashboardPage");
-  if (dashboard) {
-    dashboard.classList.add("active");
-  }
-
-  const dashboardFrame = document.getElementById("dashboardFrame");
-  setFrameSource(dashboardFrame, "/dashboard.html");
-
-  const homeButton = document.querySelector(".os-nav button");
-  setActiveNavButton(homeButton);
-
-  setText("pageSubtitle", "Dashboard");
-  scheduleDashboardRefresh(false, 0);
+  window.location.assign("/app");
 }
 
 function showComingSoon(name) {
@@ -437,40 +393,9 @@ function refreshDashboardFrame(event = null) {
   }
 }
 
-function refreshOpenModule(eventName, payload) {
-  const moduleFrame = document.getElementById("moduleFrame");
-  const moduleUrl = moduleFrame?.getAttribute("src") || "";
-  const contentWindow = moduleFrame?.contentWindow;
-
-  if (!contentWindow || moduleUrl === "about:blank") {
-    return;
-  }
-
-  try {
-    if (
-      typeof contentWindow.applyRealtimeUpdate === "function"
-    ) {
-      contentWindow.applyRealtimeUpdate({
-        type: eventName,
-        ...(payload || {}),
-      });
-      return;
-    }
-
-    if (
-      moduleUrl.startsWith("/rooms-manager") &&
-      typeof contentWindow.loadRooms === "function"
-    ) {
-      contentWindow.loadRooms(false);
-      return;
-    }
-
-    if (typeof contentWindow.refreshAll === "function") {
-      contentWindow.refreshAll();
-    }
-  } catch (error) {
-    console.log("Module refresh error:", error.message);
-  }
+function refreshOpenModule() {
+  // Los módulos ahora son páginas independientes y reciben sus propios
+  // eventos en tiempo real. El shell ya no intenta controlar un iframe.
 }
 
 function emitLocalEvent(name, payload) {
