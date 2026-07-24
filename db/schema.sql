@@ -632,3 +632,37 @@ VALUES ('009_standard_web_push')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS quality_reviews (
+  id BIGSERIAL PRIMARY KEY,
+  work_date DATE NOT NULL,
+  room_id BIGINT REFERENCES rooms(id) ON DELETE SET NULL,
+  unit TEXT NOT NULL,
+  normalized_room TEXT NOT NULL,
+  cleaner TEXT NOT NULL DEFAULT '',
+  inspector TEXT NOT NULL,
+  overall_score INTEGER NOT NULL DEFAULT 0 CHECK (overall_score BETWEEN 0 AND 100),
+  status TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress','approved','correction_required')),
+  first_pass BOOLEAN NOT NULL DEFAULT TRUE,
+  notes TEXT NOT NULL DEFAULT '',
+  scores JSONB NOT NULL DEFAULT '{}'::jsonb,
+  issues JSONB NOT NULL DEFAULT '[]'::jsonb,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (work_date, normalized_room, inspector)
+);
+
+CREATE INDEX IF NOT EXISTS quality_reviews_date_idx
+ON quality_reviews (work_date, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS quality_reviews_cleaner_idx
+ON quality_reviews (cleaner, work_date DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('006_still_waters_quality_game')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
