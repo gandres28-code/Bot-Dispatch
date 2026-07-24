@@ -21,7 +21,7 @@
     </button>
 
     <section id="dashboardPage" class="os-page active module-page">
-      <iframe src="/dashboard.html?v=command-center-v6"></iframe>
+      <iframe id="dashboardFrame" title="Dashboard Ejecutivo" src="/dashboard.html?v=command-center-v6"></iframe>
     </section>
 
     <section id="operationsPage" class="os-page">
@@ -85,17 +85,6 @@
       </div>
     </section>
 
-    <section id="modulePage" class="os-page module-page">
-      <div class="module-header">
-        <button onclick="backToDashboard()">←</button>
-        <div>
-          <strong id="moduleTitle">Módulo</strong>
-          <span id="moduleUrl"></span>
-        </div>
-      </div>
-
-      <iframe id="moduleFrame" src="about:blank"></iframe>
-    </section>
   </main>
 
   <nav class="os-nav">
