@@ -963,6 +963,14 @@ res.sendFile(__dirname + "/public/index.html");
 app.get("/inspector", (req, res) => {
 res.sendFile(__dirname + "/public/inspector.html");
 });
+app.get("/still-waters-quality", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "still-waters-quality.html"));
+});
+
+app.get("/operations-intelligence", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "operations-intelligence.html"));
+});
+
 app.get("/master", (req, res) => {
   res.sendFile(__dirname + "/public/master.html");
 });
@@ -5579,6 +5587,100 @@ app.post("/action", async (req, res) => {
   } catch (error) {
     console.error("Error en /action:", error.message);
     return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
+  }
+});
+
+
+// =========================================================
+// STILL WATERS QUALITY GAME
+// =========================================================
+app.get("/api/quality/rooms", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO());
+    const result = await postgresQuery(
+      `SELECT r.id, r.room_number AS unit, r.normalized_room, r.room_type,
+              r.building, r.cleaning_status AS status, r.assigned_cleaner AS cleaner,
+              r.assigned_inspector AS inspector, r.urgent, r.arrival,
+              qr.overall_score, qr.status AS quality_status, qr.scores,
+              qr.issues, qr.notes, qr.updated_at AS quality_updated_at
+       FROM rooms r
+       LEFT JOIN quality_reviews qr
+         ON qr.work_date = r.work_date
+        AND qr.normalized_room = r.normalized_room
+       WHERE r.work_date = $1::date
+       ORDER BY r.building, r.room_number`,
+      [date]
+    );
+    res.json({ ok: true, date, units: result.rows });
+  } catch (error) {
+    console.error("Quality rooms error:", error.message);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/quality/reviews", async (req, res) => {
+  try {
+    const { unit, inspector, cleaner, scores = {}, issues = [], notes = "", status = "in_progress" } = req.body || {};
+    if (!unit || !inspector) {
+      return res.status(400).json({ ok: false, message: "Unidad e inspector son obligatorios" });
+    }
+    const allowedAreas = ["bathrooms", "beds", "carpets", "kitchen", "living", "amenities", "presentation"];
+    const cleanScores = {};
+    for (const area of allowedAreas) {
+      const value = Number(scores[area] || 0);
+      cleanScores[area] = Math.max(0, Math.min(5, Number.isFinite(value) ? value : 0));
+    }
+    const completed = Object.values(cleanScores).filter(v => v > 0);
+    const overallScore = completed.length
+      ? Math.round((completed.reduce((sum, value) => sum + value, 0) / (completed.length * 5)) * 100)
+      : 0;
+    const normalizedRoom = normalizeRoom(unit);
+    const date = todayISO();
+    const finalStatus = ["approved", "correction_required", "in_progress"].includes(status) ? status : "in_progress";
+    const result = await postgresQuery(
+      `INSERT INTO quality_reviews (
+         work_date, room_id, unit, normalized_room, cleaner, inspector,
+         overall_score, status, scores, issues, notes, completed_at, updated_at
+       ) VALUES (
+         $1::date,
+         (SELECT id FROM rooms WHERE work_date = $1::date AND normalized_room = $2 LIMIT 1),
+         $3, $2, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10,
+         CASE WHEN $7 IN ('approved','correction_required') THEN NOW() ELSE NULL END,
+         NOW()
+       )
+       ON CONFLICT (work_date, normalized_room, inspector)
+       DO UPDATE SET cleaner = EXCLUDED.cleaner, overall_score = EXCLUDED.overall_score,
+         status = EXCLUDED.status, scores = EXCLUDED.scores, issues = EXCLUDED.issues,
+         notes = EXCLUDED.notes, completed_at = EXCLUDED.completed_at, updated_at = NOW()
+       RETURNING *`,
+      [date, normalizedRoom, String(unit), String(cleaner || ""), String(inspector), overallScore,
+       finalStatus, JSON.stringify(cleanScores), JSON.stringify(Array.isArray(issues) ? issues : []), String(notes || "")]
+    );
+    const review = result.rows[0];
+    io.emit("quality:updated", { unit, inspector, overallScore, status: finalStatus, updatedAt: new Date().toISOString() });
+    res.json({ ok: true, review });
+  } catch (error) {
+    console.error("Quality review error:", error.message);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/quality/leaderboard", async (req, res) => {
+  try {
+    const dateFrom = String(req.query.from || dayjs().subtract(30, "day").format("YYYY-MM-DD"));
+    const result = await postgresQuery(
+      `SELECT cleaner, COUNT(*)::int AS inspected,
+              ROUND(AVG(overall_score))::int AS average_score,
+              COUNT(*) FILTER (WHERE status = 'approved')::int AS approved,
+              COUNT(*) FILTER (WHERE status = 'correction_required')::int AS corrections
+       FROM quality_reviews
+       WHERE work_date >= $1::date AND cleaner <> '' AND status <> 'in_progress'
+       GROUP BY cleaner
+       ORDER BY average_score DESC, inspected DESC`, [dateFrom]
+    );
+    res.json({ ok: true, from: dateFrom, cleaners: result.rows });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
   }
 });
 
