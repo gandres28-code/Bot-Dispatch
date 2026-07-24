@@ -1,1836 +1,652 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>417 Maid OS · Dashboard Ejecutivo</title>
-<style>
-:root{--bg:#f4f6fb;--card:#fff;--text:#162033;--muted:#758096;--line:#e7eaf1;--blue:#506cf5;--green:#1fa774;--orange:#ed8a31;--purple:#8058d8;--red:#db5261;--yellow:#d2a026;--shadow:0 12px 35px rgba(28,39,63,.08)}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.shell{max-width:1600px;margin:auto;padding:20px}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:12px}.logo{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;color:#fff;font-weight:900;background:linear-gradient(145deg,#3556ef,#7488ff);box-shadow:0 10px 22px rgba(80,108,245,.25)}.brand b{display:block}.brand span{font-size:12px;color:var(--muted)}button{font:inherit;cursor:pointer}.refresh{border:1px solid var(--line);background:#fff;border-radius:13px;padding:10px 13px}.hero{padding:26px;border-radius:27px;color:#fff;background:linear-gradient(130deg,#17223c,#293d6b 58%,#506cf5);box-shadow:0 20px 45px rgba(38,55,97,.2);margin-bottom:16px}.hero-grid{display:grid;grid-template-columns:1fr 310px;gap:22px;align-items:center}.hero h1{font-size:clamp(28px,4vw,43px);letter-spacing:-.04em;margin:6px 0}.hero p{margin:0;color:#dce4ff}.progress-card{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.17);padding:17px;border-radius:19px}.progress-top{display:flex;justify-content:space-between}.progress-top strong{font-size:25px}.bar{height:10px;background:rgba(255,255,255,.18);border-radius:999px;overflow:hidden;margin:12px 0 8px}.fill{height:100%;background:#fff;width:0;border-radius:999px;transition:.4s}.meta{display:flex;justify-content:space-between;font-size:11px;color:#ced8ff}.kpis{display:grid;grid-template-columns:repeat(8,minmax(120px,1fr));gap:11px;margin-bottom:17px}.kpi{background:#fff;border:1px solid var(--line);border-radius:19px;padding:15px;box-shadow:0 6px 22px rgba(28,39,63,.045)}.kpi i{font-style:normal;font-size:18px}.kpi strong{display:block;font-size:28px;margin-top:12px}.kpi span{font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em}.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(330px,.75fr);gap:17px}.stack{display:grid;gap:17px}.panel{background:#fff;border:1px solid var(--line);border-radius:21px;box-shadow:var(--shadow);overflow:hidden}.head{padding:17px 19px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}.head h2{font-size:16px;margin:0}.head p{font-size:11px;color:var(--muted);margin:4px 0 0}.pill{font-size:11px;font-weight:800;background:#f2f4f8;padding:7px 10px;border-radius:999px;color:var(--muted)}.buildings{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:16px}.building{border:1px solid var(--line);border-radius:16px;padding:14px;background:#fbfcfe}.building-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.letter{width:31px;height:31px;border-radius:10px;background:#eef1ff;color:var(--blue);display:inline-grid;place-items:center;font-weight:900;margin-right:8px}.building b{font-size:13px}.building small{color:var(--muted)}.rooms{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.room{border:0;padding:7px 9px;border-radius:9px;font-size:10px;font-weight:850}.ready{background:#e8f7f1;color:#12805a}.pending{background:#fff7dc;color:#976d06}.progress{background:#f1ebff;color:#6840bd}.inspection{background:#fff0e2;color:#b45e17}.urgent{outline:2px solid #e15a68}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px}.metric{border:1px solid var(--line);border-radius:15px;padding:14px;background:#fbfcfe}.metric strong{font-size:20px;display:block}.metric span{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800}.employees,.alerts,.timeline{padding:14px 16px}.employee,.alert,.event{padding:12px 0;border-bottom:1px solid var(--line)}.employee:last-child,.alert:last-child,.event:last-child{border-bottom:0}.row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.title{font-size:12px;font-weight:850}.sub{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}.badge{padding:5px 8px;border-radius:8px;background:#eef1ff;color:var(--blue);font-size:9px;font-weight:850}.alert{display:flex;gap:10px}.alert-icon{font-size:17px}.timeline{max-height:420px;overflow:auto}.modal{display:none;position:fixed;inset:0;background:rgba(15,22,38,.55);z-index:20;padding:18px;align-items:center;justify-content:center}.modal.show{display:flex}.modal-card{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 25px 70px rgba(0,0,0,.25)}.modal-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}.modal-body{padding:18px 20px}.details{display:grid;grid-template-columns:1fr 1fr;gap:11px}.detail{background:#f7f8fb;border-radius:13px;padding:12px}.detail span{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800}.detail b{font-size:12px;display:block;margin-top:5px}.close{border:0;background:#f1f3f7;border-radius:10px;width:34px;height:34px}.empty{padding:25px;text-align:center;color:var(--muted);font-size:12px}.error{display:none;background:#ffedf0;color:#a33b48;border:1px solid #ffd2d8;padding:11px 13px;border-radius:13px;margin-bottom:14px}.error.show{display:block}
-.intelligence-strip{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:11px;margin-bottom:17px}
-.intel-card{position:relative;overflow:hidden;background:#fff;border:1px solid var(--line);border-radius:19px;padding:16px;box-shadow:0 6px 22px rgba(28,39,63,.045)}
-.intel-card:before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--blue)}
-.intel-card:nth-child(2):before{background:var(--green)}
-.intel-card:nth-child(3):before{background:var(--purple)}
-.intel-card:nth-child(4):before{background:var(--orange)}
-.intel-card:nth-child(5):before{background:var(--red)}
-.intel-label{font-size:9px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.08em}
-.intel-value{display:block;font-size:22px;line-height:1.1;margin-top:10px}
-.intel-sub{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.35}
-.confidence{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;background:#edf8f4;color:#157657;font-size:9px;font-weight:900;margin-top:8px}
-.ai-summary{margin-top:12px;padding:11px 13px;border-radius:13px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);font-size:12px;line-height:1.45;color:#e8edff}
-.building-intel{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
-.building-stat{background:#f4f6fa;border-radius:10px;padding:8px}
-.building-stat span{display:block;font-size:8px;color:var(--muted);font-weight:800;text-transform:uppercase}
-.building-stat b{display:block;font-size:11px;margin-top:4px}
-.employee-score{min-width:42px;text-align:center;padding:6px 7px;border-radius:10px;background:#eef1ff;color:var(--blue);font-size:10px;font-weight:900}
-.employee-score.good{background:#e8f7f1;color:#12805a}
-.employee-score.warn{background:#fff7dc;color:#976d06}
-.employee-mini{display:flex;gap:9px;flex-wrap:wrap;margin-top:7px}
-.employee-mini span{font-size:9px;color:var(--muted);background:#f5f6f9;padding:5px 7px;border-radius:8px}
-.alert.high{background:#fff7f8}
-.alert.medium{background:#fffaf1}
-.alert.low{background:#f7fbff}
-.alert-severity{min-width:8px;width:8px;border-radius:999px;background:var(--orange)}
-.alert.high .alert-severity{background:var(--red)}
-.alert.low .alert-severity{background:var(--blue)}
-.source-chip{display:inline-flex;align-items:center;gap:5px}
-.source-chip:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(31,167,116,.12)}
-
-.director-panel{background:linear-gradient(135deg,#111a30,#253761 55%,#4c68e9);color:#fff;border:0}
-.director-panel .head{border-bottom-color:rgba(255,255,255,.14)}
-.director-panel .head p{color:#cbd5ff}
-.director-score{display:flex;align-items:center;gap:12px}
-.score-ring{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#fff var(--score-angle,0deg),rgba(255,255,255,.16) 0);position:relative}
-.score-ring:after{content:"";position:absolute;inset:6px;border-radius:50%;background:#22345d}
-.score-ring b{position:relative;z-index:1;font-size:14px}
-.director-body{padding:17px 19px}
-.director-summary{font-size:13px;line-height:1.55;color:#eef2ff;margin-bottom:14px}
-.recommendations{display:grid;gap:10px}
-.recommendation{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px}
-.recommendation-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
-.recommendation h3{font-size:12px;margin:0}
-.recommendation p{font-size:10px;line-height:1.45;color:#d9e1ff;margin:6px 0}
-.recommendation-action{font-size:10px;font-weight:800;color:#fff}
-.priority{font-size:8px;font-weight:900;text-transform:uppercase;padding:5px 7px;border-radius:999px;background:rgba(255,255,255,.16)}
-.priority.critical{background:#ff6477}
-.priority.high{background:#ff984f}
-.priority.medium{background:#f3c95a;color:#4b3900}
-.priority.low{background:#6dc8ff;color:#12324c}
-.director-empty{padding:18px;text-align:center;color:#dce4ff;font-size:12px}
-@media(max-width:1200px){.intelligence-strip{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:780px){.intelligence-strip{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:520px){.intelligence-strip{grid-template-columns:1fr}.building-intel{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:1200px){.kpis{grid-template-columns:repeat(4,1fr)}.buildings{grid-template-columns:repeat(2,1fr)}}@media(max-width:900px){.grid{grid-template-columns:1fr}.hero-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.shell{padding:12px}.kpis{grid-template-columns:repeat(2,1fr)}.buildings{grid-template-columns:1fr}.details{grid-template-columns:1fr}.hero{padding:20px}}
-
-/* ===== 417 Maid OS Design System · Dashboard 2.0 ===== */
-:root{
-  --surface:#ffffff;
-  --surface-soft:#f8fafc;
-  --surface-strong:#eef2ff;
-  --sidebar:#0f172a;
-  --radius-sm:12px;
-  --radius-md:18px;
-  --radius-lg:26px;
-  --transition:180ms ease;
-}
-
-body{
-  background:
-    radial-gradient(circle at 0% 0%,rgba(80,108,245,.10),transparent 30%),
-    radial-gradient(circle at 100% 0%,rgba(128,88,216,.08),transparent 28%),
-    var(--bg);
-}
-
-.shell{
-  max-width:none;
-  width:100%;
-  padding:22px;
-}
-
-.top{
-  position:sticky;
-  top:0;
-  z-index:15;
-  margin:-22px -22px 18px;
-  padding:14px 22px;
-  background:rgba(244,246,251,.88);
-  backdrop-filter:blur(18px);
-  border-bottom:1px solid rgba(231,234,241,.88);
-}
-
-.top-actions{
-  display:flex;
-  align-items:center;
-  gap:9px;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-}
-
-.theme-toggle{
-  width:42px;
-  height:42px;
-  border:1px solid var(--line);
-  background:var(--card);
-  color:var(--text);
-  border-radius:13px;
-}
-
-.panel,.kpi,.intel-card,.metric,.building{
-  transition:transform var(--transition),box-shadow var(--transition),border-color var(--transition);
-}
-
-.kpi:hover,.intel-card:hover,.building:hover{
-  transform:translateY(-2px);
-  box-shadow:0 16px 34px rgba(28,39,63,.10);
-}
-
-.hero{
-  position:relative;
-  isolation:isolate;
-}
-
-.hero:after{
-  content:"";
-  position:absolute;
-  width:360px;
-  height:360px;
-  right:-150px;
-  top:-180px;
-  border-radius:50%;
-  background:rgba(255,255,255,.10);
-  z-index:-1;
-}
-
-.room-table-panel{
-  margin-top:17px;
-}
-
-.room-toolbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  flex-wrap:wrap;
-}
-
-.room-controls{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-}
-
-.room-search,
-.room-filter{
-  min-height:40px;
-  border:1px solid var(--line);
-  background:var(--card);
-  color:var(--text);
-  border-radius:12px;
-  padding:9px 12px;
-  outline:none;
-}
-
-.room-search{
-  width:min(320px,72vw);
-}
-
-.room-search:focus,
-.room-filter:focus{
-  border-color:var(--blue);
-  box-shadow:0 0 0 3px rgba(80,108,245,.12);
-}
-
-.table-wrap{
-  overflow:auto;
-  max-height:560px;
-}
-
-.rooms-table{
-  width:100%;
-  border-collapse:separate;
-  border-spacing:0;
-  min-width:980px;
-}
-
-.rooms-table th{
-  position:sticky;
-  top:0;
-  z-index:2;
-  background:#f8fafc;
-  color:var(--muted);
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.06em;
-  text-align:left;
-  padding:12px 14px;
-  border-bottom:1px solid var(--line);
-}
-
-.rooms-table td{
-  padding:13px 14px;
-  border-bottom:1px solid var(--line);
-  font-size:12px;
-  vertical-align:middle;
-}
-
-.rooms-table tbody tr{
-  cursor:pointer;
-  transition:background var(--transition);
-}
-
-.rooms-table tbody tr:hover{
-  background:#f8faff;
-}
-
-.unit-name{
-  font-weight:900;
-  color:var(--text);
-}
-
-.status-chip{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:6px 9px;
-  border-radius:999px;
-  font-size:10px;
-  font-weight:900;
-  white-space:nowrap;
-}
-
-.status-chip.ready{background:#e8f7f1;color:#12805a}
-.status-chip.inspection{background:#fff0e2;color:#b45e17}
-.status-chip.progress{background:#f1ebff;color:#6840bd}
-.status-chip.pending{background:#fff7dc;color:#976d06}
-
-.flag-chip{
-  display:inline-flex;
-  padding:5px 8px;
-  margin:2px;
-  border-radius:999px;
-  background:#f2f4f8;
-  color:var(--muted);
-  font-size:9px;
-  font-weight:850;
-}
-
-.flag-chip.urgent-flag{background:#ffedf0;color:#b53d4b}
-.flag-chip.arrival-flag{background:#eef1ff;color:#405ad3}
-.flag-chip.guest-flag{background:#e8f7f1;color:#12805a}
-
-.room-open{
-  border:0;
-  background:#eef1ff;
-  color:var(--blue);
-  border-radius:10px;
-  padding:7px 10px;
-  font-weight:900;
-}
-
-html.dark{
-  --bg:#0b1220;
-  --card:#111a2d;
-  --text:#e5ecf8;
-  --muted:#93a0b8;
-  --line:#26324a;
-  --shadow:0 14px 38px rgba(0,0,0,.25);
-}
-
-html.dark body{
-  background:
-    radial-gradient(circle at 0% 0%,rgba(80,108,245,.16),transparent 28%),
-    radial-gradient(circle at 100% 0%,rgba(128,88,216,.11),transparent 25%),
-    var(--bg);
-}
-
-html.dark .top{
-  background:rgba(11,18,32,.88);
-  border-bottom-color:rgba(38,50,74,.9);
-}
-
-html.dark .refresh,
-html.dark .theme-toggle,
-html.dark .room-search,
-html.dark .room-filter{
-  background:var(--card);
-  color:var(--text);
-}
-
-html.dark .building,
-html.dark .metric{
-  background:#0f1829;
-}
-
-html.dark .building-stat,
-html.dark .detail,
-html.dark .pill{
-  background:#172238;
-}
-
-html.dark .rooms-table th{
-  background:#0f1829;
-}
-
-html.dark .rooms-table tbody tr:hover{
-  background:#172238;
-}
-
-html.dark .modal-card{
-  background:var(--card);
-  color:var(--text);
-}
-
-/* Dark mode completo: elimina superficies blancas y mejora contraste */
-html.dark .panel,
-html.dark .kpi,
-html.dark .intel-card,
-html.dark .employee,
-html.dark .alert,
-html.dark .event,
-html.dark .room-table-panel{
-  background:var(--card);
-  color:var(--text);
-  border-color:var(--line);
-}
-
-html.dark .head,
-html.dark .employee,
-html.dark .alert,
-html.dark .event,
-html.dark .rooms-table td{
-  border-color:var(--line);
-}
-
-html.dark .refresh:hover,
-html.dark .theme-toggle:hover,
-html.dark .room-open:hover{
-  background:#1b2942;
-}
-
-html.dark .room,
-html.dark .employee-mini span,
-html.dark .flag-chip,
-html.dark .room-open{
-  filter:saturate(.85) brightness(.88);
-}
-
-html.dark .building:hover,
-html.dark .kpi:hover,
-html.dark .intel-card:hover{
-  box-shadow:0 16px 36px rgba(0,0,0,.32);
-}
-
-html.dark input::placeholder,
-html.dark select{
-  color:var(--muted);
-}
-
-html.dark .empty{
-  color:var(--muted);
-}
-
-@media(min-width:1400px){
-  .grid{
-    grid-template-columns:minmax(0,1.8fr) minmax(360px,.72fr);
-  }
-
-  .kpis{
-    grid-template-columns:repeat(8,minmax(130px,1fr));
-  }
-
-  .buildings{
-    grid-template-columns:repeat(4,1fr);
-  }
-}
-
-@media(max-width:780px){
-  .shell{padding:12px}
-  .top{
-    margin:-12px -12px 14px;
-    padding:12px;
-  }
-  .top-actions{
-    width:100%;
-    justify-content:space-between;
-  }
-  .refresh{
-    flex:1;
-  }
-  .room-toolbar{
-    align-items:stretch;
-  }
-  .room-controls{
-    width:100%;
-  }
-  .room-search,
-  .room-filter{
-    width:100%;
-  }
-}
-
-
-
-/* ===== Dark mode premium · estilo terminal moderno ===== */
-html.dark{
-  color-scheme:dark;
-  --bg:#070809;
-  --card:#111318;
-  --surface:#111318;
-  --surface-soft:#15181e;
-  --surface-strong:#1a1f29;
-  --text:#f4f7fb;
-  --muted:#9ba6b5;
-  --line:#262c35;
-  --blue:#5b7cff;
-  --green:#28c995;
-  --orange:#f6a04d;
-  --purple:#9a78ff;
-  --red:#ff6678;
-  --yellow:#e7bd4a;
-  --shadow:0 16px 42px rgba(0,0,0,.42);
-}
-
-html.dark body{
-  background:
-    radial-gradient(circle at 10% -10%,rgba(69,105,255,.16),transparent 28%),
-    radial-gradient(circle at 100% 0%,rgba(40,201,149,.07),transparent 22%),
-    #070809;
-}
-
-html.dark .top{
-  background:rgba(7,8,9,.9);
-  border-bottom-color:#232831;
-  box-shadow:0 10px 30px rgba(0,0,0,.28);
-}
-
-html.dark .logo{
-  background:linear-gradient(145deg,#315eea,#7b5cff);
-  box-shadow:0 10px 28px rgba(73,100,255,.34);
-}
-
-html.dark .refresh,
-html.dark .theme-toggle,
-html.dark .room-search,
-html.dark .room-filter{
-  background:#111318;
-  color:#f4f7fb;
-  border-color:#2a303a;
-}
-
-html.dark .refresh:hover,
-html.dark .theme-toggle:hover,
-html.dark .room-open:hover{
-  background:#1a1f27;
-  border-color:#3a4350;
-}
-
-html.dark .panel,
-html.dark .kpi,
-html.dark .intel-card,
-html.dark .room-table-panel{
-  background:#111318;
-  color:#f4f7fb;
-  border-color:#262c35;
-  box-shadow:0 14px 36px rgba(0,0,0,.34);
-}
-
-html.dark .building,
-html.dark .metric{
-  background:#15181e;
-  border-color:#2a3039;
-}
-
-html.dark .building:hover,
-html.dark .metric:hover,
-html.dark .kpi:hover,
-html.dark .intel-card:hover{
-  border-color:#3a4350;
-  box-shadow:0 18px 42px rgba(0,0,0,.42);
-}
-
-html.dark .head,
-html.dark .employee,
-html.dark .alert,
-html.dark .event,
-html.dark .rooms-table td{
-  border-color:#262c35;
-}
-
-html.dark .employee,
-html.dark .event{
-  background:transparent;
-}
-
-html.dark .alert{
-  background:#15181e;
-  border-radius:12px;
-  margin-bottom:8px;
-  padding-left:10px;
-  padding-right:10px;
-}
-
-html.dark .alert.high{background:#211418}
-html.dark .alert.medium{background:#211b13}
-html.dark .alert.low{background:#121a22}
-
-html.dark .building-stat,
-html.dark .detail,
-html.dark .pill,
-html.dark .employee-mini span,
-html.dark .flag-chip{
-  background:#1a1e25;
-  color:#aeb8c7;
-  border:1px solid #292f38;
-}
-
-html.dark .letter,
-html.dark .badge,
-html.dark .employee-score,
-html.dark .room-open{
-  background:#1b2340;
-  color:#8ea3ff;
-}
-
-html.dark .employee-score.good{background:#102a22;color:#47d8a8}
-html.dark .employee-score.warn{background:#2a2310;color:#efc85b}
-
-html.dark .rooms-table th{
-  background:#0d0f13;
-  color:#9aa5b4;
-  border-color:#262c35;
-}
-
-html.dark .rooms-table tbody tr:hover{
-  background:#171b22;
-}
-
-html.dark .modal-card{
-  background:#111318;
-  color:#f4f7fb;
-  border:1px solid #2a3039;
-}
-
-html.dark .close{
-  background:#1b2028;
-  color:#f4f7fb;
-}
-
-html.dark .room.ready,
-html.dark .status-chip.ready{background:#102b22;color:#49daa9}
-html.dark .room.pending,
-html.dark .status-chip.pending{background:#2b2410;color:#edc75d}
-html.dark .room.progress,
-html.dark .status-chip.progress{background:#211a38;color:#b69aff}
-html.dark .room.inspection,
-html.dark .status-chip.inspection{background:#2b1c11;color:#ffb169}
-
-html.dark .hero{
-  background:
-    radial-gradient(circle at 88% 12%,rgba(89,118,255,.28),transparent 30%),
-    linear-gradient(135deg,#10131a,#1a2030 58%,#253a75);
-  border:1px solid #2d3544;
-  box-shadow:0 22px 52px rgba(0,0,0,.44);
-}
-
-html.dark .progress-card,
-html.dark .ai-summary{
-  background:rgba(255,255,255,.06);
-  border-color:rgba(255,255,255,.11);
-}
-
-html.dark .director-panel{
-  background:
-    radial-gradient(circle at 90% 0%,rgba(107,93,255,.24),transparent 30%),
-    linear-gradient(135deg,#10141c,#1b2334 55%,#283b72);
-  border:1px solid #303a4c;
-}
-
-html.dark input::placeholder,
-html.dark select{
-  color:#7f8998;
-}
-
-html.dark .source-chip:before{
-  box-shadow:0 0 0 4px rgba(40,201,149,.12),0 0 14px rgba(40,201,149,.35);
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Still Waters Resort · Executive Operations Wall</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --panel: #ffffff;
+      --panel-2: #f8fafc;
+      --text: #101828;
+      --muted: #667085;
+      --border: #dfe4ea;
+      --shadow: 0 12px 35px rgba(16, 24, 40, .08);
+      --ready: #18a66a;
+      --cleaning: #e5484d;
+      --not-started: #89919d;
+      --stayover: #2878e5;
+      --inspection: #f08c2e;
+      --urgent: #ffcc00;
+      --accent: #4d68ff;
+      --room-text: #ffffff;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #050607;
+      --panel: #101215;
+      --panel-2: #171a1f;
+      --text: #f5f7fa;
+      --muted: #9ba4b1;
+      --border: #2a2f37;
+      --shadow: none;
+      --not-started: #555e69;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transition: background .2s ease, color .2s ease;
+    }
+    button { font: inherit; }
+
+    .app { min-height: 100vh; padding: clamp(14px, 1.5vw, 26px); }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto auto;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+    .identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .logo {
+      width: 56px; height: 56px; flex: 0 0 auto;
+      display: grid; place-items: center;
+      border-radius: 17px;
+      color: white; font-weight: 950; font-size: 20px;
+      background: linear-gradient(145deg, #304eea, #7890ff);
+    }
+    .identity h1 { margin: 0; font-size: clamp(20px, 2vw, 34px); letter-spacing: -.035em; }
+    .identity p { margin: 4px 0 0; color: var(--muted); font-size: clamp(11px, .9vw, 15px); }
+    .live {
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 10px 14px; border: 1px solid var(--border); border-radius: 999px;
+      background: var(--panel); color: var(--muted); font-weight: 800; white-space: nowrap;
+    }
+    .live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ready); box-shadow: 0 0 0 5px rgba(24,166,106,.12); }
+    .live.offline .live-dot { background: var(--cleaning); box-shadow: 0 0 0 5px rgba(229,72,77,.12); }
+    .clock { text-align: right; white-space: nowrap; }
+    .clock strong { display: block; font-size: clamp(20px, 2.2vw, 38px); line-height: 1; letter-spacing: -.035em; }
+    .clock span { color: var(--muted); font-size: clamp(11px, .9vw, 14px); }
+
+    .toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .segmented, .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .control {
+      min-height: 44px; padding: 10px 15px;
+      border: 1px solid var(--border); border-radius: 13px;
+      background: var(--panel); color: var(--text); font-weight: 850; cursor: pointer;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .control:hover { transform: translateY(-1px); }
+    .control.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .control.icon { width: 46px; padding: 0; display: grid; place-items: center; font-size: 19px; }
+
+    .status-strip {
+      display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 10px;
+      margin-bottom: 14px;
+    }
+    .status-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 15px; border: 1px solid var(--border); border-radius: 16px;
+      background: var(--panel); box-shadow: var(--shadow);
+    }
+    .status-card .dot { width: 15px; height: 15px; border-radius: 5px; flex: 0 0 auto; }
+    .status-card strong { font-size: clamp(22px, 2.2vw, 38px); line-height: 1; display: block; }
+    .status-card span { color: var(--muted); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .06em; }
+
+    .progress-panel {
+      display: grid; grid-template-columns: minmax(170px, 260px) 1fr auto;
+      gap: 18px; align-items: center;
+      padding: 16px 18px; margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: 18px; background: var(--panel);
+    }
+    .progress-panel h2 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: .07em; }
+    .progress-panel p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .progress-track { height: 18px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0; background: var(--ready); border-radius: inherit; transition: width .55s ease; }
+    .progress-value { font-size: clamp(26px, 3vw, 46px); font-weight: 950; letter-spacing: -.05em; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    .workspace.with-ranking { grid-template-columns: minmax(0, 1fr) minmax(270px, 340px); }
+    .view-panel, .ranking-panel {
+      min-width: 0; border: 1px solid var(--border); border-radius: 20px;
+      background: var(--panel); box-shadow: var(--shadow);
+    }
+    .view-panel { padding: 16px; }
+    .ranking-panel { padding: 16px; align-self: start; }
+    .ranking-panel[hidden] { display: none; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .panel-head h2 { margin: 0; font-size: clamp(16px, 1.4vw, 24px); }
+    .panel-head span { color: var(--muted); font-size: 12px; }
+
+    .executive-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .building-card {
+      min-width: 0; border: 1px solid var(--border); border-radius: 18px; padding: 14px;
+      background: var(--panel-2);
+    }
+    .building-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; }
+    .building-title strong { font-size: clamp(17px, 1.4vw, 24px); }
+    .building-title span { color: var(--muted); font-size: 12px; font-weight: 800; }
+    .mini-progress { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; margin-bottom: 12px; }
+    .mini-progress i { display: block; height: 100%; background: var(--ready); border-radius: inherit; }
+    .rooms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 7px; }
+
+    .room {
+      position: relative; min-height: 55px; padding: 7px 5px;
+      display: grid; place-items: center; align-content: center; gap: 2px;
+      border: 0; border-radius: 11px; color: var(--room-text); cursor: pointer;
+      font-weight: 950; letter-spacing: -.02em; text-align: center;
+      transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+      overflow: hidden;
+    }
+    .room:hover { transform: scale(1.055); filter: brightness(1.06); z-index: 2; }
+    .room small { display: block; font-size: 8px; font-weight: 850; opacity: .9; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .room.ready { background: var(--ready); }
+    .room.cleaning { background: var(--cleaning); }
+    .room.not-started { background: var(--not-started); }
+    .room.stayover { background: var(--stayover); }
+    .room.inspection { background: var(--inspection); }
+    .room.urgent::after {
+      content: "!"; position: absolute; top: 4px; right: 5px;
+      width: 17px; height: 17px; display: grid; place-items: center;
+      border-radius: 50%; background: var(--urgent); color: #151515; font-size: 11px; font-weight: 1000;
+    }
+    .room.changed { animation: changed 1.25s ease; }
+    @keyframes changed {
+      0%, 100% { box-shadow: none; }
+      35% { transform: scale(1.09); box-shadow: 0 0 0 6px rgba(255,255,255,.85), 0 0 0 12px rgba(77,104,255,.28); }
+    }
+
+    .map-stage {
+      position: relative; min-height: clamp(570px, 65vh, 920px);
+      padding: 18px; overflow: hidden;
+      border: 1px solid var(--border); border-radius: 20px;
+      background:
+        linear-gradient(90deg, transparent 49.8%, rgba(128,140,155,.10) 50%, transparent 50.2%),
+        linear-gradient(transparent 49.8%, rgba(128,140,155,.10) 50%, transparent 50.2%),
+        var(--panel-2);
+    }
+    .map-grid {
+      display: grid; height: 100%; min-height: inherit;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-auto-rows: minmax(170px, auto); gap: 14px;
+    }
+    .map-building {
+      min-width: 0; padding: 12px; border: 2px solid var(--border); border-radius: 20px;
+      background: var(--panel); box-shadow: var(--shadow);
+    }
+    .map-building:nth-child(5n + 2), .map-building:nth-child(5n + 4) { transform: translateY(28px); }
+    .map-building .rooms-grid { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); }
+    .map-building .room { min-height: 48px; font-size: 12px; }
+    .water-label {
+      position: absolute; right: 22px; bottom: 16px; color: var(--stayover);
+      font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: .18em; opacity: .65;
+    }
+
+    .ranking-list { display: grid; gap: 10px; }
+    .rank-row {
+      display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center;
+      padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel-2);
+    }
+    .rank-number { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--panel); font-weight: 950; }
+    .rank-row strong { display: block; font-size: 13px; }
+    .rank-row span { color: var(--muted); font-size: 10px; }
+    .rank-score { color: var(--ready); font-size: 20px; font-weight: 950; }
+
+    .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+    .error {
+      display: none; margin-bottom: 14px; padding: 12px 14px; border: 1px solid rgba(229,72,77,.35);
+      border-radius: 14px; background: rgba(229,72,77,.10); color: var(--cleaning); font-weight: 800;
+    }
+    .error.show { display: block; }
+
+    .modal {
+      display: none; position: fixed; inset: 0; z-index: 50;
+      align-items: center; justify-content: center; padding: 18px;
+      background: rgba(0,0,0,.62); backdrop-filter: blur(5px);
+    }
+    .modal.show { display: flex; }
+    .modal-card { width: min(540px, 100%); border: 1px solid var(--border); border-radius: 22px; background: var(--panel); color: var(--text); overflow: hidden; }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 17px 19px; border-bottom: 1px solid var(--border); }
+    .modal-head h2 { margin: 0; }
+    .close { width: 38px; height: 38px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel-2); color: var(--text); cursor: pointer; }
+    .modal-body { padding: 18px; }
+    .details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .detail { padding: 12px; border-radius: 13px; background: var(--panel-2); }
+    .detail span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 850; }
+    .detail strong { display: block; margin-top: 5px; font-size: 14px; }
+
+    @media (max-width: 1150px) {
+      .status-strip { grid-template-columns: repeat(3, 1fr); }
+      .workspace.with-ranking { grid-template-columns: 1fr; }
+      .map-grid { grid-template-columns: repeat(3, 1fr); }
+      .map-building:nth-child(n) { transform: none; }
+    }
+    @media (max-width: 760px) {
+      .topbar { grid-template-columns: 1fr auto; }
+      .live { display: none; }
+      .clock { grid-column: 2; grid-row: 1; }
+      .status-strip { grid-template-columns: repeat(2, 1fr); }
+      .progress-panel { grid-template-columns: 1fr auto; }
+      .progress-track { grid-column: 1 / -1; grid-row: 2; }
+      .map-grid { grid-template-columns: repeat(2, 1fr); }
+      .details { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      .identity p { display: none; }
+      .logo { width: 46px; height: 46px; }
+      .status-strip { grid-template-columns: 1fr 1fr; }
+      .status-card { padding: 10px; }
+      .status-card strong { font-size: 24px; }
+      .map-grid { grid-template-columns: 1fr; }
+      .control { padding-inline: 11px; }
+    }
+
+    body.tv-mode .app { padding: 12px; }
+    body.tv-mode .toolbar { opacity: .18; transition: opacity .2s ease; }
+    body.tv-mode .toolbar:hover { opacity: 1; }
+    body.tv-mode .room { min-height: 62px; font-size: 16px; }
+    body.tv-mode .room small { font-size: 9px; }
+  </style>
 </head>
 <body>
-<main class="shell">
-<header class="top"><div class="brand"><div class="logo">417</div><div><b>Dashboard Ejecutivo</b><span id="dateLabel">Cargando operación...</span></div></div><div class="top-actions"><span id="liveStatus" class="pill">Conectando…</span><button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Cambiar tema">🌙</button><button class="refresh" onclick="loadDashboard(true)">↻ Actualizar</button></div></header>
-<div id="error" class="error"></div>
-<section class="hero"><div class="hero-grid"><div><small>COMMAND CENTER · HOUSEKEEPING</small><h1>Estado de la operación</h1><p id="summary">Leyendo habitaciones, empleados, payroll y alertas.</p><div id="aiSummary" class="ai-summary">🧠 Preparando inteligencia operativa...</div></div><div class="progress-card"><div class="progress-top"><span>Progreso del día</span><strong id="percent">0%</strong></div><div class="bar"><div id="fill" class="fill"></div></div><div class="meta"><span id="readyMeta">0 listas</span><span id="remainingMeta">0 restantes</span></div></div></div></section>
-<section class="intelligence-strip">
-  <article class="intel-card"><span class="intel-label">Tiempo restante</span><strong id="etaRemaining" class="intel-value">--</strong><div class="intel-sub">Estimación para terminar la operación</div></article>
-  <article class="intel-card"><span class="intel-label">Cierre estimado</span><strong id="etaFinish" class="intel-value">--</strong><div class="intel-sub">Hora prevista de finalización</div></article>
-  <article class="intel-card"><span class="intel-label">Payroll proyectado</span><strong id="payrollProjected" class="intel-value">$0</strong><div class="intel-sub">Estimación al terminar el día</div></article>
-  <article class="intel-card"><span class="intel-label">Siguiente edificio</span><strong id="nextBuilding" class="intel-value">--</strong><div class="intel-sub">Más próximo a terminar</div></article>
-  <article class="intel-card"><span class="intel-label">Confianza</span><strong id="predictionConfidence" class="intel-value">--%</strong><div class="confidence">● Modelo operacional activo</div></article>
-</section>
-<section class="kpis">
-<div class="kpi"><i>🏨</i><strong id="total">0</strong><span>Total</span></div><div class="kpi"><i>⏳</i><strong id="pending">0</strong><span>Pendientes</span></div><div class="kpi"><i>🧹</i><strong id="inProgress">0</strong><span>En limpieza</span></div><div class="kpi"><i>🔎</i><strong id="inspection">0</strong><span>Inspección</span></div><div class="kpi"><i>✅</i><strong id="ready">0</strong><span>Ready</span></div><div class="kpi"><i>🛎️</i><strong id="arrivals">0</strong><span>Arrivals</span></div><div class="kpi"><i>⚡</i><strong id="urgentCount">0</strong><span>Urgentes</span></div><div class="kpi"><i>⚠️</i><strong id="problems">0</strong><span>Problemas</span></div>
-</section>
-<section class="grid"><div class="stack">
-<section class="panel"><div class="head"><div><h2>Vista del hotel</h2><p>Toca cualquier habitación para ver sus detalles.</p></div><span id="buildingCount" class="pill">0 edificios</span></div><div id="buildings" class="buildings"></div></section>
-<section class="panel director-panel">
-  <div class="head">
-    <div>
-      <h2>🧠 AI Operations Director</h2>
-      <p>Recomendaciones concretas para dirigir la operación.</p>
-    </div>
-    <div class="director-score">
-      <div id="directorScoreRing" class="score-ring"><b id="directorScore">--</b></div>
-      <div>
-        <div id="directorGrade" class="title">Analizando</div>
-        <div id="directorCounts" class="sub">0 recomendaciones</div>
+  <main class="app">
+    <header class="topbar">
+      <div class="identity">
+        <div class="logo">417</div>
+        <div>
+          <h1>Still Waters Resort</h1>
+          <p>Executive Operations Wall · Progreso de Housekeeping</p>
+        </div>
       </div>
+      <div class="live" id="liveStatus"><span class="live-dot"></span><span>Conectando…</span></div>
+      <div class="clock"><strong id="clock">--:--</strong><span id="dateLabel">Cargando fecha…</span></div>
+    </header>
+
+    <section class="toolbar" aria-label="Controles del dashboard">
+      <div class="segmented">
+        <button class="control active" id="executiveBtn" type="button">▦ Executive View</button>
+        <button class="control" id="mapBtn" type="button">⌖ Hotel Map View</button>
+      </div>
+      <div class="actions">
+        <button class="control" id="rankingBtn" type="button">Mostrar Top Cleaners</button>
+        <button class="control icon" id="themeBtn" type="button" aria-label="Cambiar tema">🌙</button>
+        <button class="control icon" id="fullscreenBtn" type="button" aria-label="Pantalla completa">⛶</button>
+        <button class="control icon" id="refreshBtn" type="button" aria-label="Actualizar">↻</button>
+      </div>
+    </section>
+
+    <div class="error" id="error"></div>
+
+    <section class="status-strip" aria-label="Leyenda y conteos">
+      <article class="status-card"><i class="dot" style="background:var(--ready)"></i><div><strong id="readyCount">0</strong><span>Ready</span></div></article>
+      <article class="status-card"><i class="dot" style="background:var(--cleaning)"></i><div><strong id="cleaningCount">0</strong><span>Limpiando</span></div></article>
+      <article class="status-card"><i class="dot" style="background:var(--not-started)"></i><div><strong id="notStartedCount">0</strong><span>Sin entrar</span></div></article>
+      <article class="status-card"><i class="dot" style="background:var(--stayover)"></i><div><strong id="stayoverCount">0</strong><span>Stayover</span></div></article>
+      <article class="status-card"><i class="dot" style="background:var(--inspection)"></i><div><strong id="inspectionCount">0</strong><span>Necesita inspección</span></div></article>
+    </section>
+
+    <section class="progress-panel">
+      <div><h2>Progreso general</h2><p id="progressText">0 de 0 habitaciones listas</p></div>
+      <div class="progress-track" aria-label="Progreso general"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-value" id="progressValue">0%</div>
+    </section>
+
+    <section class="workspace" id="workspace">
+      <div class="view-panel">
+        <div class="panel-head">
+          <div><h2 id="viewTitle">Vista Ejecutiva del Hotel</h2><span id="lastUpdated">Esperando datos…</span></div>
+          <span id="roomTotal">0 habitaciones</span>
+        </div>
+        <div id="executiveView" class="executive-grid"></div>
+        <div id="mapView" class="map-stage" hidden>
+          <div class="map-grid" id="mapGrid"></div>
+          <div class="water-label">Still Waters Resort</div>
+        </div>
+      </div>
+
+      <aside class="ranking-panel" id="rankingPanel" hidden>
+        <div class="panel-head"><div><h2>Top Cleaners</h2><span>Unidades asignadas y listas</span></div></div>
+        <div class="ranking-list" id="rankingList"></div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="modal" id="roomModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <div class="modal-head"><h2 id="modalTitle">Habitación</h2><button class="close" id="closeModal" type="button">✕</button></div>
+      <div class="modal-body"><div class="details" id="roomDetails"></div></div>
     </div>
   </div>
-  <div class="director-body">
-    <div id="directorSummary" class="director-summary">Preparando diagnóstico operacional...</div>
-    <div id="directorRecommendations" class="recommendations"></div>
-  </div>
-</section>
-<section class="panel"><div class="head"><div><h2>Indicadores ejecutivos</h2><p>Datos reales calculados por el servidor.</p></div></div><div class="metrics"><div class="metric"><strong id="cleanAvg">0 min</strong><span>Limpieza promedio</span></div><div class="metric"><strong id="inspectAvg">0 min</strong><span>Inspección promedio</span></div><div class="metric"><strong id="payroll">$0</strong><span>Payroll del día</span></div><div class="metric"><strong id="activeEmployees">0</strong><span>Empleados activos</span></div></div></section>
-</div><aside class="stack">
-<section class="panel"><div class="head"><div><h2>Employee Intelligence</h2><p>Actividad, productividad y ubicación operacional.</p></div><span id="employeeCount" class="pill">0</span></div><div id="employees" class="employees"></div></section>
-<section class="panel"><div class="head"><div><h2>Centro de alertas</h2><p>Situaciones que requieren atención.</p></div><span id="alertCount" class="pill">0</span></div><div id="alerts" class="alerts"></div></section>
-<section class="panel"><div class="head"><div><h2>Actividad en vivo</h2><p>Últimos movimientos del sistema.</p></div></div><div id="timeline" class="timeline"></div></section>
-</aside></section>
 
-<section class="panel room-table-panel">
-  <div class="head room-toolbar">
-    <div>
-      <h2>Habitaciones de hoy</h2>
-      <p>Busca, filtra y abre cualquier unidad sin abandonar el Dashboard.</p>
-    </div>
-    <div class="room-controls">
-      <input id="roomSearch" class="room-search" type="search" placeholder="Buscar unidad, cleaner o inspector..." oninput="renderRoomsTable()">
-      <select id="roomStatusFilter" class="room-filter" onchange="renderRoomsTable()">
-        <option value="">Todos los estados</option>
-        <option value="pending">Pendientes</option>
-        <option value="progress">En limpieza</option>
-        <option value="inspection">Inspección</option>
-        <option value="ready">Ready</option>
-      </select>
-      <select id="roomBuildingFilter" class="room-filter" onchange="renderRoomsTable()">
-        <option value="">Todos los edificios</option>
-      </select>
-    </div>
-  </div>
-  <div class="table-wrap">
-    <table class="rooms-table">
-      <thead>
-        <tr>
-          <th>Unidad</th>
-          <th>Edificio</th>
-          <th>Cleaner</th>
-          <th>Inspector</th>
-          <th>Estado</th>
-          <th>Indicadores</th>
-          <th>Tiempo</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="roomsTableBody"></tbody>
-    </table>
-  </div>
-</section>
-
-</main>
-<div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="modal-card"><div class="modal-head"><div><b id="modalTitle">Habitación</b><div id="modalStatus" class="sub"></div></div><button class="close" onclick="closeModal()">✕</button></div><div id="modalBody" class="modal-body"></div></div></div>
-<script src="/socket.io/socket.io.js"></script>
-<script>
-let dashboard = {};
-let intelligence = null;
-let aiDirector = null;
-let dashboardSource = "postgres";
-let socket = null;
-let refreshTimer = null;
-
-const $ = (id) => document.getElementById(id);
-
-const esc = (value) =>
-  String(value ?? "").replace(
-    /[&<>"']/g,
-    (char) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;",
-      })[char]
-  );
-
-const money = (value) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(Number(value || 0));
-
-function todayChicagoISO() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Chicago",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
-function safeDateLabel(value) {
-  const text = String(value || "").trim();
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    return "Fecha no disponible";
-  }
-
-  const date = new Date(`${text}T12:00:00`);
-
-  if (!Number.isFinite(date.getTime())) {
-    return "Fecha no disponible";
-  }
-
-  return date.toLocaleDateString("es-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function fmtDate(value) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "—";
-
-  return date.toLocaleString("es-US", {
-    timeZone: "America/Chicago",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function fmtMinutes(value) {
-  const minutes = Math.max(0, Math.round(Number(value || 0)));
-
-  if (!minutes) return "0 min";
-  if (minutes < 60) return `${minutes} min`;
-
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-
-  return remaining
-    ? `${hours} h ${remaining} min`
-    : `${hours} h`;
-}
-
-function statusClass(status, statusGroup = "") {
-  const group = String(statusGroup || "").toLowerCase();
-  const value = String(status || "").toLowerCase();
-
-  if (group === "ready" || value.includes("ready")) return "ready";
-
-  if (
-    group === "inspection" ||
-    group === "awaitinginspection" ||
-    value.includes("inspection") ||
-    value.includes("cleaned")
-  ) {
-    return "inspection";
-  }
-
-  if (
-    group === "inprogress" ||
-    value.includes("progress") ||
-    value.includes("started") ||
-    value.includes("cleaning")
-  ) {
-    return "progress";
-  }
-
-  return "pending";
-}
-
-function shortUnit(name) {
-  return String(name || "")
-    .replace(/\s*-\s*[A-Z](?:\s+URGENTE)?\s*$/i, "")
-    .trim();
-}
-
-function normalizeAction(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "_");
-}
-
-function normalizeV2Dashboard(data) {
-  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-  const buildings = Array.isArray(data.buildings)
-    ? data.buildings
-    : [];
-  const stats = data.stats || {};
-
-  return {
-    ok: true,
-    source: "postgres",
-    date: data.date || todayChicagoISO(),
-    stats: {
-      totalUnits: Number(stats.totalUnits || rooms.length || 0),
-      pending: Number(stats.pending || 0),
-      inProgress: Number(stats.inProgress || 0),
-      awaitingInspection: Number(stats.awaitingInspection || 0),
-      inspectionStarted: Number(
-        stats.inspectionStarted ?? stats.inspection ?? 0
-      ),
-      ready: Number(stats.ready || 0),
-      arrivals: Number(stats.arrivals || 0),
-      guestOut: Number(stats.guestOut || 0),
-      urgent: Number(stats.urgent || 0),
-      problems: Number(stats.problems || 0),
-    },
-    averages: {
-      averageCleaningMinutes: Number(
-        data.averages?.averageCleaningMinutes || 0
-      ),
-      averageInspectionMinutes: Number(
-        data.averages?.averageInspectionMinutes || 0
-      ),
-      cleaningSamples: Number(data.averages?.cleaningSamples || 0),
-      inspectionSamples: Number(data.averages?.inspectionSamples || 0),
-    },
-    payroll: {
-      total: Number(data.payroll?.total || 0),
-    },
-    employees: {
-      active: Number(
-        data.employees?.active ??
-          stats.activeEmployees ??
-          0
-      ),
-      clockedIn: Array.isArray(data.employees?.clockedIn)
-        ? data.employees.clockedIn
-        : [],
-    },
-    alerts: Array.isArray(data.alerts) ? data.alerts : [],
-    timeline: Array.isArray(data.timeline) ? data.timeline : [],
-    buildings,
-    units: rooms.map((room) => ({
-      id: room.id,
-      unit: room.unit,
-      status: room.status || "Pending",
-      statusGroup: room.statusGroup || "",
-      building: room.building || "CASAS",
-      cleaner:
-        room.assignedCleaner ||
-        (Array.isArray(room.assignedCleaners)
-          ? room.assignedCleaners.join(", ")
-          : ""),
-      inspector:
-        room.assignedInspector ||
-        (Array.isArray(room.assignedInspectors)
-          ? room.assignedInspectors.join(", ")
-          : ""),
-      startedAt: room.startedAt,
-      finishedAt: room.finishedAt,
-      inspectionStartedAt: room.inspectionStartedAt,
-      readyAt: room.readyAt,
-      arrival: Boolean(room.arrival),
-      urgent: Boolean(room.urgent),
-      guestOut: Boolean(room.guestOut),
-      preInspection: false,
-      preInspectionStarted: false,
-    })),
-  };
-}
-
-function normalizeIntelligence(data) {
-  if (!data?.ok) return null;
-
-  return {
-    ...data,
-    summary: data.summary || {},
-    averages: data.averages || {},
-    predictions: data.predictions || {},
-    payroll: data.payroll || {},
-    alerts: Array.isArray(data.alerts) ? data.alerts : [],
-    buildings: Array.isArray(data.buildings) ? data.buildings : [],
-    employees: Array.isArray(data.employees) ? data.employees : [],
-    rooms: Array.isArray(data.rooms) ? data.rooms : [],
-  };
-}
-
-function buildOperationalAlerts(events = []) {
-  return events
-    .filter((event) => {
-      const action = normalizeAction(event.action);
-      const priority = String(event.priority || "").toLowerCase();
-
-      return (
-        [
-          "ISSUE",
-          "INSPECTION_REPORT",
-          "LOST_FOUND",
-          "SUPPLIES",
-          "INSPECTION_SUPPLIES",
-        ].includes(action) ||
-        ["high", "urgent", "blocking"].some((word) =>
-          priority.includes(word)
-        )
-      );
-    })
-    .slice(0, 20)
-    .map((event) => ({
-      id: event.id,
-      unit: event.unit || "Operación",
-      message:
-        event.note ||
-        event.message ||
-        event.action ||
-        "Situación pendiente",
-      severity: /high|urgent|blocking/i.test(
-        String(event.priority || "")
-      )
-        ? "high"
-        : "medium",
-      action: event.action,
-      time: event.eventTime || event.time,
-    }));
-}
-
-function mergeOperationsIntoDashboard(baseDashboard, operationsData) {
-  const events = Array.isArray(operationsData?.events)
-    ? operationsData.events
-    : [];
-
-  if (!baseDashboard.timeline?.length) {
-    baseDashboard.timeline = events.slice(0, 40);
-  }
-
-  if (!baseDashboard.alerts?.length && !intelligence?.alerts?.length) {
-    baseDashboard.alerts = buildOperationalAlerts(events);
-    baseDashboard.stats.problems = baseDashboard.alerts.length;
-  }
-
-  return baseDashboard;
-}
-
-function mergeIntelligenceIntoDashboard(baseDashboard, intel) {
-  if (!intel) return baseDashboard;
-
-  const summary = intel.summary || {};
-  const intelRooms = Array.isArray(intel.rooms) ? intel.rooms : [];
-
-  baseDashboard.stats = {
-    ...baseDashboard.stats,
-    totalUnits: Number(
-      summary.totalUnits ?? baseDashboard.stats.totalUnits ?? 0
-    ),
-    pending: Number(
-      summary.pending ?? baseDashboard.stats.pending ?? 0
-    ),
-    inProgress: Number(
-      summary.inProgress ?? baseDashboard.stats.inProgress ?? 0
-    ),
-    awaitingInspection: Number(
-      summary.awaitingInspection ??
-        baseDashboard.stats.awaitingInspection ??
-        0
-    ),
-    inspectionStarted: Number(
-      summary.inspection ??
-        baseDashboard.stats.inspectionStarted ??
-        0
-    ),
-    ready: Number(
-      summary.ready ?? baseDashboard.stats.ready ?? 0
-    ),
-    problems: Number(
-      intel.alerts?.filter((alert) =>
-        ["quality-problem", "employee-quality"].includes(alert.type)
-      ).length ?? baseDashboard.stats.problems ?? 0
-    ),
-  };
-
-  baseDashboard.averages = {
-    ...baseDashboard.averages,
-    averageCleaningMinutes: Number(
-      intel.averages?.averageCleaningMinutes ??
-        baseDashboard.averages.averageCleaningMinutes ??
-        0
-    ),
-    averageInspectionMinutes: Number(
-      intel.averages?.averageInspectionMinutes ??
-        baseDashboard.averages.averageInspectionMinutes ??
-        0
-    ),
-  };
-
-  baseDashboard.payroll.total = Number(
-    intel.payroll?.actual ?? baseDashboard.payroll.total ?? 0
-  );
-
-  baseDashboard.employees.active = Number(
-    summary.activeEmployees ??
-      baseDashboard.employees.active ??
-      0
-  );
-
-  if (intelRooms.length) {
-    baseDashboard.units = intelRooms.map((room) => ({
-      id: room.id,
-      unit: room.unit,
-      status: room.status,
-      statusGroup: room.statusGroup,
-      building: room.building,
-      cleaner: room.cleaner,
-      inspector: room.inspector,
-      startedAt: room.startedAt,
-      finishedAt: room.finishedAt,
-      inspectionStartedAt: room.inspectionStartedAt,
-      readyAt: room.readyAt,
-      arrival: Boolean(room.arrival),
-      urgent: Boolean(room.urgent),
-      guestOut: Boolean(room.guestOut),
-      preInspection: false,
-      preInspectionStarted: false,
-      currentDurationMinutes: Number(
-        room.currentDurationMinutes || 0
-      ),
-      issueCount: Number(room.issueCount || 0),
-      supplyCount: Number(room.supplyCount || 0),
-      lastAction: room.lastAction || "",
-      lastEventAt: room.lastEventAt || null,
-    }));
-  }
-
-  if (intel.buildings?.length) {
-    baseDashboard.buildings = intel.buildings.map((building) => ({
-      ...building,
-      units: Array.isArray(building.rooms)
-        ? building.rooms.map((room) => ({
-            id: room.id,
-            unit: room.unit,
-            status: room.status,
-            statusGroup: room.statusGroup,
-            urgent: room.urgent,
-          }))
-        : building.units || [],
-    }));
-  }
-
-  if (intel.alerts?.length) {
-    baseDashboard.alerts = intel.alerts;
-  }
-
-  return baseDashboard;
-}
-
-function render() {
-  const stats = dashboard.stats || {};
-  const averages = dashboard.averages || {};
-  const payroll = dashboard.payroll || {};
-  const employees = dashboard.employees || {};
-
-  const total = Number(stats.totalUnits || 0);
-  const ready = Number(stats.ready || 0);
-  const inspection =
-    Number(stats.awaitingInspection || 0) +
-    Number(stats.inspectionStarted || 0);
-  const percent = total ? Math.round((ready / total) * 100) : 0;
-
-  const values = {
-    total,
-    pending: stats.pending,
-    inProgress: stats.inProgress,
-    inspection,
-    ready,
-    arrivals: stats.arrivals,
-    urgentCount: stats.urgent,
-    problems: stats.problems,
-  };
-
-  for (const [id, value] of Object.entries(values)) {
-    $(id).textContent = Number(value || 0);
-  }
-
-  $("percent").textContent = `${percent}%`;
-  $("fill").style.width = `${percent}%`;
-  $("readyMeta").textContent = `${ready} listas`;
-  $("remainingMeta").textContent =
-    `${Math.max(0, total - ready)} restantes`;
-
-  $("summary").textContent =
-    `${ready} de ${total} habitaciones están listas. ` +
-    `${stats.inProgress || 0} siguen en limpieza y ` +
-    `${inspection} están en inspección.`;
-
-  $("dateLabel").textContent =
-    `${safeDateLabel(dashboard.date)} · ` +
-    `${dashboardSource === "postgres"
-      ? "PostgreSQL"
-      : "Fallback Notion"}`;
-
-  $("liveStatus").innerHTML =
-    `<span class="source-chip">${
-      dashboardSource === "postgres"
-        ? "PostgreSQL en vivo"
-        : "Fallback Notion"
-    }</span>`;
-
-  $("cleanAvg").textContent =
-    Number(averages.averageCleaningMinutes || 0) > 0
-      ? `${Number(
-          averages.averageCleaningMinutes
-        ).toFixed(1)} min`
-      : "Sin datos";
-
-  $("inspectAvg").textContent =
-    Number(averages.averageInspectionMinutes || 0) > 0
-      ? `${Number(
-          averages.averageInspectionMinutes
-        ).toFixed(1)} min`
-      : "Sin datos";
-
-  $("payroll").textContent = money(payroll.total);
-  $("activeEmployees").textContent =
-    Number(employees.active || 0);
-
-  renderIntelligence();
-  renderAIDirector();
-  renderBuildings();
-  renderEmployees();
-  renderAlerts();
-  renderTimeline();
-  renderRoomsTable();
-}
-
-function renderIntelligence() {
-  const predictions = intelligence?.predictions || {};
-  const payroll = intelligence?.payroll || {};
-  const summary = intelligence?.summary || {};
-
-  $("etaRemaining").textContent =
-    intelligence
-      ? fmtMinutes(predictions.estimatedRemainingMinutes)
-      : "Sin datos";
-
-  $("etaFinish").textContent =
-    intelligence && predictions.estimatedFinishAt
-      ? fmtDate(predictions.estimatedFinishAt)
-      : "Sin datos";
-
-  $("payrollProjected").textContent =
-    intelligence
-      ? money(payroll.estimatedFinal)
-      : money(dashboard.payroll?.total || 0);
-
-  const next = String(
-    predictions.nextBuildingToFinish || ""
-  ).toUpperCase();
-
-  $("nextBuilding").textContent =
-    next === "CASAS"
-      ? "Casas"
-      : next === "SUITES"
-        ? "Suites"
-        : next
-          ? `Building ${next}`
-          : "Sin datos";
-
-  $("predictionConfidence").textContent =
-    intelligence
-      ? `${Number(predictions.confidence || 0)}%`
-      : "--%";
-
-  if (!intelligence) {
-    $("aiSummary").textContent =
-      "🧠 El motor de inteligencia aún no tiene una fotografía reciente.";
-    return;
-  }
-
-  const alerts = intelligence.alerts || [];
-  const critical = alerts.filter(
-    (alert) => alert.severity === "high"
-  ).length;
-
-  $("aiSummary").textContent =
-    `🧠 ETA ${fmtMinutes(
-      predictions.estimatedRemainingMinutes
-    )}. ` +
-    `${summary.ready || 0} habitaciones listas, ` +
-    `${summary.activeEmployees || 0} empleados activos, ` +
-    `${critical} alerta(s) crítica(s). ` +
-    `${next
-      ? `El siguiente grupo en terminar es ${
-          next === "CASAS"
-            ? "Casas"
-            : next === "SUITES"
-              ? "Suites"
-              : `Building ${next}`
-        }.`
-      : "No hay un edificio pendiente identificado."}`;
-}
-
-function buildingLabel(value) {
-  const text = String(value || "").toUpperCase();
-
-  if (text === "CASAS") return "Casas";
-  if (text === "SUITES") return "Suites";
-
-  return `Building ${text}`;
-}
-
-function renderAIDirector() {
-  const result = aiDirector;
-  const recommendations = result?.recommendations || [];
-  const operation = result?.operation || {};
-  const score = Number(operation.score || 0);
-
-  $("directorScore").textContent =
-    result ? score : "--";
-
-  $("directorScoreRing").style.setProperty(
-    "--score-angle",
-    `${Math.round((score / 100) * 360)}deg`
-  );
-
-  $("directorGrade").textContent =
-    result ? operation.grade || "Sin evaluación" : "Sin datos";
-
-  $("directorCounts").textContent =
-    `${recommendations.length} recomendación(es)`;
-
-  $("directorSummary").textContent =
-    result?.summary ||
-    "El AI Operations Director aún no tiene una evaluación reciente.";
-
-  $("directorRecommendations").innerHTML =
-    recommendations.length
-      ? recommendations
-          .slice(0, 8)
-          .map(
-            (item) => `
-              <article class="recommendation">
-                <div class="recommendation-top">
-                  <h3>${esc(item.title)}</h3>
-                  <span class="priority ${esc(
-                    item.priority || "medium"
-                  )}">
-                    ${esc(item.priority || "medium")}
-                  </span>
-                </div>
-                <p>${esc(item.message)}</p>
-                <div class="recommendation-action">
-                  → ${esc(item.action)}
-                </div>
-              </article>
-            `
-          )
-          .join("")
-      : '<div class="director-empty">✅ No hay recomendaciones urgentes. La operación está bajo control.</div>';
-}
-
-function renderBuildings() {
-  const list = dashboard.buildings || [];
-  $("buildingCount").textContent = `${list.length} grupos`;
-
-  $("buildings").innerHTML = list.length
-    ? list
-        .map((building) => {
-          const total = Number(building.total || 0);
-          const ready = Number(building.ready || 0);
-          const percent = total
-            ? Math.round((ready / total) * 100)
-            : 0;
-
-          return `
-            <article class="building">
-              <div class="building-top">
-                <div>
-                  <span class="letter">${esc(building.building)}</span>
-                  <b>${esc(buildingLabel(building.building))}</b>
-                </div>
-                <small>${ready}/${total} ready</small>
-              </div>
-
-              <div class="bar" style="background:#edf0f5">
-                <div
-                  class="fill"
-                  style="background:var(--green);width:${percent}%"
-                ></div>
-              </div>
-
-              <div class="building-intel">
-                <div class="building-stat">
-                  <span>Progreso</span>
-                  <b>${Number(
-                    building.completionPercent ?? percent
-                  )}%</b>
-                </div>
-                <div class="building-stat">
-                  <span>ETA</span>
-                  <b>${fmtMinutes(
-                    building.estimatedRemainingMinutes
-                  )}</b>
-                </div>
-                <div class="building-stat">
-                  <span>Urgentes</span>
-                  <b>${Number(building.urgent || 0)}</b>
-                </div>
-              </div>
-
-              <div class="rooms">
-                ${(building.units || [])
-                  .map(
-                    (unit) => `
-                      <button
-                        class="room ${statusClass(
-                          unit.status,
-                          unit.statusGroup
-                        )} ${unit.urgent ? "urgent" : ""}"
-                        onclick='openRoom(${JSON.stringify(unit.id)})'
-                      >
-                        ${esc(shortUnit(unit.unit))}
-                      </button>
-                    `
-                  )
-                  .join("")}
-              </div>
-            </article>
-          `;
-        })
-        .join("")
-    : '<div class="empty">No hay edificios cargados.</div>';
-}
-
-function scoreClass(score) {
-  const value = Number(score || 0);
-
-  if (value >= 75) return "good";
-  if (value >= 45) return "warn";
-
-  return "";
-}
-
-function renderEmployees() {
-  const intelEmployees = intelligence?.employees || [];
-  const clockedIn = dashboard.employees?.clockedIn || [];
-
-  const list = intelEmployees.length
-    ? intelEmployees.filter(
-        (employee) =>
-          employee.clockedIn ||
-          employee.currentUnit ||
-          employee.roomsCompleted ||
-          employee.inspectionsCompleted
-      )
-    : clockedIn.map((employee) => ({
-        name: employee.employee,
-        role: employee.role || "Empleado",
-        clockedIn: true,
-        clockInAt: employee.clockIn,
-        productivityScore: 0,
-        roomsCompleted: 0,
-        inspectionsCompleted: 0,
-        currentUnit: "",
-        currentBuilding: "",
-        problems: 0,
-      }));
-
-  $("employeeCount").textContent = list.length;
-
-  $("employees").innerHTML = list.length
-    ? list
-        .slice(0, 20)
-        .map(
-          (employee) => `
-            <div class="employee">
-              <div class="row">
-                <div>
-                  <div class="title">${esc(
-                    employee.name || employee.employee
-                  )}</div>
-                  <div class="sub">
-                    ${esc(employee.role || "Empleado")}
-                    ${
-                      employee.clockedIn
-                        ? ` · Clock In ${fmtDate(
-                            employee.clockInAt || employee.clockIn
-                          )}`
-                        : ""
-                    }
-                  </div>
-                  <div class="employee-mini">
-                    <span>🧹 ${Number(
-                      employee.roomsCompleted || 0
-                    )} limpiezas</span>
-                    <span>🔎 ${Number(
-                      employee.inspectionsCompleted || 0
-                    )} inspecciones</span>
-                    <span>📍 ${esc(
-                      employee.currentUnit ||
-                        employee.currentBuilding ||
-                        "Sin unidad activa"
-                    )}</span>
-                    ${
-                      Number(employee.problems || 0)
-                        ? `<span>⚠️ ${Number(
-                            employee.problems
-                          )} reportes</span>`
-                        : ""
-                    }
-                  </div>
-                </div>
-                <span class="employee-score ${scoreClass(
-                  employee.productivityScore
-                )}">
-                  ${Number(employee.productivityScore || 0)}
-                </span>
-              </div>
-            </div>
-          `
-        )
-        .join("")
-    : '<div class="empty">No hay empleados activos.</div>';
-}
-
-function renderAlerts() {
-  const list = intelligence?.alerts?.length
-    ? intelligence.alerts
-    : dashboard.alerts || [];
-
-  $("alertCount").textContent = list.length;
-
-  $("alerts").innerHTML = list.length
-    ? list
-        .slice(0, 30)
-        .map(
-          (alert) => `
-            <div class="alert ${esc(alert.severity || "medium")}">
-              <div class="alert-severity"></div>
-              <div>
-                <div class="title">
-                  ${esc(
-                    alert.unit ||
-                      alert.building ||
-                      alert.employee ||
-                      "Operación"
-                  )}
-                </div>
-                <div class="sub">${esc(alert.message)}</div>
-              </div>
-            </div>
-          `
-        )
-        .join("")
-    : '<div class="empty">✅ No hay alertas críticas.</div>';
-}
-
-function renderTimeline() {
-  const list = dashboard.timeline || [];
-
-  $("timeline").innerHTML = list.length
-    ? list
-        .slice(0, 30)
-        .map(
-          (event) => `
-            <div class="event">
-              <div class="row">
-                <div>
-                  <div class="title">
-                    ${esc(
-                      event.employee ||
-                        event.person ||
-                        event.action ||
-                        "Actualización"
-                    )}
-                  </div>
-                  <div class="sub">
-                    ${esc(event.unit || "")}
-                    ${esc(event.message || event.note || "")}
-                  </div>
-                </div>
-                <small>${fmtDate(
-                  event.eventTime ||
-                    event.time ||
-                    event.createdAt
-                )}</small>
-              </div>
-            </div>
-          `
-        )
-        .join("")
-    : '<div class="empty">No hay actividad registrada hoy.</div>';
-}
-
-function openRoom(id) {
-  const unit = (dashboard.units || []).find(
-    (item) => String(item.id) === String(id)
-  );
-
-  if (!unit) return;
-
-  $("modalTitle").textContent =
-    unit.unit || "Habitación";
-  $("modalStatus").textContent =
-    unit.status || "Sin estado";
-
-  $("modalBody").innerHTML = `
-    <div class="details">
-      <div class="detail">
-        <span>Cleaner</span>
-        <b>${esc(unit.cleaner || "Sin asignar")}</b>
-      </div>
-      <div class="detail">
-        <span>Inspector</span>
-        <b>${esc(unit.inspector || "Sin asignar")}</b>
-      </div>
-      <div class="detail">
-        <span>Building</span>
-        <b>${esc(buildingLabel(unit.building))}</b>
-      </div>
-      <div class="detail">
-        <span>Duración actual</span>
-        <b>${fmtMinutes(unit.currentDurationMinutes)}</b>
-      </div>
-      <div class="detail">
-        <span>Inicio limpieza</span>
-        <b>${fmtDate(unit.startedAt)}</b>
-      </div>
-      <div class="detail">
-        <span>Fin limpieza</span>
-        <b>${fmtDate(unit.finishedAt)}</b>
-      </div>
-      <div class="detail">
-        <span>Inicio inspección</span>
-        <b>${fmtDate(unit.inspectionStartedAt)}</b>
-      </div>
-      <div class="detail">
-        <span>Ready At</span>
-        <b>${fmtDate(unit.readyAt)}</b>
-      </div>
-      <div class="detail">
-        <span>Arrival</span>
-        <b>${unit.arrival ? "Sí" : "No"}</b>
-      </div>
-      <div class="detail">
-        <span>Urgent</span>
-        <b>${unit.urgent ? "Sí" : "No"}</b>
-      </div>
-      <div class="detail">
-        <span>Guest Out</span>
-        <b>${unit.guestOut ? "Sí" : "No"}</b>
-      </div>
-      <div class="detail">
-        <span>Reportes</span>
-        <b>${Number(unit.issueCount || 0)}</b>
-      </div>
-      <div class="detail">
-        <span>Supplies</span>
-        <b>${Number(unit.supplyCount || 0)}</b>
-      </div>
-      <div class="detail">
-        <span>Última acción</span>
-        <b>${esc(unit.lastAction || "—")}</b>
-      </div>
-    </div>
-  `;
-
-  $("modal").classList.add("show");
-}
-
-function closeModal() {
-  $("modal").classList.remove("show");
-}
-
-async function fetchJson(url) {
-  const response = await fetch(url, {
-    cache: "no-store",
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok || !data.ok) {
-    throw new Error(
-      data.message || `Error HTTP ${response.status}`
-    );
-  }
-
-  return data;
-}
-
-async function loadDashboard(force = false) {
-  $("error").classList.remove("show");
-
-  const date = todayChicagoISO();
-  const stamp = Date.now();
-
-  try {
-    const [
-      postgresData,
-      operationsData,
-      intelligenceData,
-      directorData,
-    ] = await Promise.all([
-        fetchJson(
-          `/api/v2/dashboard?date=${encodeURIComponent(
-            date
-          )}&t=${stamp}`
-        ),
-        fetchJson(
-          `/api/v2/operations?date=${encodeURIComponent(
-            date
-          )}&limit=300&t=${stamp}`
-        ),
-        fetchJson(
-          `/api/intelligence?date=${encodeURIComponent(
-            date
-          )}${force ? "&fresh=true" : ""}&t=${stamp}`
-        ).catch((error) => {
-          console.warn(
-            "Intelligence Engine no disponible:",
-            error.message
-          );
-          return null;
-        }),
-        fetchJson(
-          `/api/ai-director?date=${encodeURIComponent(
-            date
-          )}${force ? "&fresh=true" : ""}&t=${stamp}`
-        ).catch((error) => {
-          console.warn(
-            "AI Operations Director no disponible:",
-            error.message
-          );
-          return null;
-        }),
-      ]);
-
-    dashboardSource = "postgres";
-    intelligence = normalizeIntelligence(intelligenceData);
-    aiDirector = directorData?.ok ? directorData : null;
-
-    dashboard = mergeOperationsIntoDashboard(
-      mergeIntelligenceIntoDashboard(
-        normalizeV2Dashboard(postgresData),
-        intelligence
-      ),
-      operationsData
-    );
-
-    render();
-    return;
-  } catch (postgresError) {
-    console.warn(
-      "Dashboard PostgreSQL no disponible. Usando fallback:",
-      postgresError.message
-    );
-  }
-
-  try {
-    const fallbackUrl =
-      `/dashboard-data?refresh=${force ? "1" : "0"}` +
-      `&t=${stamp}`;
-
-    const fallbackData = await fetchJson(fallbackUrl);
-
-    dashboardSource = "notion";
-    intelligence = null;
-    aiDirector = null;
-    dashboard = fallbackData;
-
-    render();
-
-    $("error").textContent =
-      "⚠️ PostgreSQL no respondió. Dashboard cargado temporalmente desde Notion.";
-    $("error").classList.add("show");
-  } catch (fallbackError) {
-    $("liveStatus").textContent = "Sin conexión";
-    $("error").textContent =
-      `Dashboard: ${fallbackError.message}`;
-    $("error").classList.add("show");
-  }
-}
-
-function scheduleDashboardRefresh(delay = 250) {
-  clearTimeout(refreshTimer);
-
-  refreshTimer = setTimeout(() => {
-    loadDashboard(false).catch(console.error);
-  }, delay);
-}
-
-
-function setTheme(theme) {
-  const dark = theme === "dark";
-  document.documentElement.classList.toggle("dark", dark);
-  localStorage.setItem("maidOsTheme", dark ? "dark" : "light");
-  try { parent.document.documentElement.classList.toggle("dark", dark); } catch {}
-  const button = $("themeToggle");
-  if (button) button.textContent = dark ? "☀️" : "🌙";
-}
-
-function toggleTheme() {
-  setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
-}
-
-function initializeTheme() {
-  const saved = localStorage.getItem("maidOsTheme");
-  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
-  setTheme(saved || (prefersDark ? "dark" : "light"));
-}
-
-function renderRoomsTable() {
-  const body = $("roomsTableBody");
-  if (!body) return;
-
-  const units = Array.isArray(dashboard.units) ? dashboard.units : [];
-  const search = String($("roomSearch")?.value || "").trim().toLowerCase();
-  const statusFilter = String($("roomStatusFilter")?.value || "");
-  const buildingFilter = String($("roomBuildingFilter")?.value || "");
-
-  const buildings = [...new Set(units.map((unit) => String(unit.building || "CASAS")))]
-    .sort((a, b) => a.localeCompare(b));
-
-  const buildingSelect = $("roomBuildingFilter");
-  if (buildingSelect) {
-    const current = buildingSelect.value;
-    buildingSelect.innerHTML =
-      '<option value="">Todos los edificios</option>' +
-      buildings.map((building) =>
-        `<option value="${esc(building)}">${esc(buildingLabel(building))}</option>`
-      ).join("");
-    buildingSelect.value = buildings.includes(current) ? current : "";
-  }
-
-  const filtered = units.filter((unit) => {
-    const group = statusClass(unit.status, unit.statusGroup);
-    const haystack = [
-      unit.unit,
-      unit.cleaner,
-      unit.inspector,
-      unit.building,
-      unit.status
-    ].join(" ").toLowerCase();
-
-    return (!search || haystack.includes(search)) &&
-      (!statusFilter || group === statusFilter) &&
-      (!buildingFilter || String(unit.building || "CASAS") === buildingFilter);
-  });
-
-  body.innerHTML = filtered.length
-    ? filtered.map((unit) => {
-        const group = statusClass(unit.status, unit.statusGroup);
-        const flags = [
-          unit.arrival ? '<span class="flag-chip arrival-flag">Arrival</span>' : "",
-          unit.guestOut ? '<span class="flag-chip guest-flag">Guest Out</span>' : "",
-          unit.urgent ? '<span class="flag-chip urgent-flag">Urgente</span>' : ""
-        ].join("");
-
+  <script>
+    "use strict";
+
+    const $ = (id) => document.getElementById(id);
+    let dashboard = { units: [], stats: {}, buildings: [] };
+    let socket = null;
+    let refreshTimer = null;
+    let previousStates = new Map();
+
+    const STATUS = {
+      READY: "ready",
+      CLEANING: "cleaning",
+      NOT_STARTED: "not-started",
+      STAYOVER: "stayover",
+      INSPECTION: "inspection"
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalized(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function statusCategory(unit) {
+      if (unit?.stayover) return STATUS.STAYOVER;
+      const status = normalized(unit?.status);
+      if (status.includes("ready") || status.includes("guest")) return STATUS.READY;
+      if (status.includes("inspection") || status.includes("inspect")) return STATUS.INSPECTION;
+      if (status.includes("progress") || status.includes("cleaning") || status.includes("started")) return STATUS.CLEANING;
+      return STATUS.NOT_STARTED;
+    }
+
+    function statusLabel(category) {
+      return {
+        [STATUS.READY]: "Ready",
+        [STATUS.CLEANING]: "Limpiando",
+        [STATUS.NOT_STARTED]: "Sin entrar",
+        [STATUS.STAYOVER]: "Stayover",
+        [STATUS.INSPECTION]: "Necesita inspección"
+      }[category] || "Sin entrar";
+    }
+
+    function shortUnitName(unit) {
+      const text = String(unit || "Sin unidad").trim();
+      const match = text.match(/^([0-9]{2,4}(?:\s*[A-Z])?)/i);
+      return match ? match[1].replace(/\s+/g, "") : text.slice(0, 10);
+    }
+
+    function buildingLabel(building) {
+      const value = String(building || "OTHER").toUpperCase();
+      return value === "OTHER" ? "Casas / Other" : `Building ${value}`;
+    }
+
+    function groupUnits(units) {
+      const groups = new Map();
+      for (const unit of units) {
+        const key = String(unit.building || "OTHER").toUpperCase();
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(unit);
+      }
+      return [...groups.entries()].sort(([a], [b]) => {
+        if (a === "OTHER") return 1;
+        if (b === "OTHER") return -1;
+        return a.localeCompare(b, undefined, { numeric: true });
+      });
+    }
+
+    function sortedUnits(units) {
+      return [...units].sort((a, b) => String(a.unit || "").localeCompare(String(b.unit || ""), undefined, { numeric: true }));
+    }
+
+    function roomButton(unit) {
+      const category = statusCategory(unit);
+      const id = String(unit.id || unit.unit || "");
+      const changed = previousStates.has(id) && previousStates.get(id) !== category;
+      return `
+        <button class="room ${category}${unit.urgent ? " urgent" : ""}${changed ? " changed" : ""}"
+                type="button" data-room-id="${escapeHtml(id)}"
+                aria-label="${escapeHtml(unit.unit)}: ${statusLabel(category)}">
+          <span>${escapeHtml(shortUnitName(unit.unit))}</span>
+          <small>${escapeHtml(statusLabel(category))}</small>
+        </button>`;
+    }
+
+    function renderExecutive(groups) {
+      const root = $("executiveView");
+      if (!groups.length) {
+        root.innerHTML = '<div class="empty">No hay habitaciones para mostrar hoy.</div>';
+        return;
+      }
+      root.innerHTML = groups.map(([building, units]) => {
+        const ready = units.filter((u) => statusCategory(u) === STATUS.READY).length;
+        const percent = units.length ? Math.round((ready / units.length) * 100) : 0;
         return `
-          <tr onclick='openRoom(${JSON.stringify(unit.id)})'>
-            <td><span class="unit-name">${esc(unit.unit || "Sin unidad")}</span></td>
-            <td>${esc(buildingLabel(unit.building || "CASAS"))}</td>
-            <td>${esc(unit.cleaner || "Sin asignar")}</td>
-            <td>${esc(unit.inspector || "Sin asignar")}</td>
-            <td><span class="status-chip ${group}">${esc(unit.status || "Pending")}</span></td>
-            <td>${flags || '<span class="flag-chip">Normal</span>'}</td>
-            <td>${fmtMinutes(unit.currentDurationMinutes || 0)}</td>
-            <td><button class="room-open" onclick="event.stopPropagation();openRoom('${esc(unit.id)}')">Abrir</button></td>
-          </tr>
-        `;
-      }).join("")
-    : '<tr><td colspan="8"><div class="empty">No hay habitaciones que coincidan con los filtros.</div></td></tr>';
-}
+          <section class="building-card">
+            <div class="building-title"><strong>${escapeHtml(buildingLabel(building))}</strong><span>${ready}/${units.length} Ready · ${percent}%</span></div>
+            <div class="mini-progress"><i style="width:${percent}%"></i></div>
+            <div class="rooms-grid">${sortedUnits(units).map(roomButton).join("")}</div>
+          </section>`;
+      }).join("");
+    }
 
-initializeTheme();
+    function renderMap(groups) {
+      const root = $("mapGrid");
+      if (!groups.length) {
+        root.innerHTML = '<div class="empty">No hay habitaciones para mostrar hoy.</div>';
+        return;
+      }
+      root.innerHTML = groups.map(([building, units]) => {
+        const ready = units.filter((u) => statusCategory(u) === STATUS.READY).length;
+        const percent = units.length ? Math.round((ready / units.length) * 100) : 0;
+        return `
+          <section class="map-building">
+            <div class="building-title"><strong>${escapeHtml(buildingLabel(building))}</strong><span>${percent}%</span></div>
+            <div class="mini-progress"><i style="width:${percent}%"></i></div>
+            <div class="rooms-grid">${sortedUnits(units).map(roomButton).join("")}</div>
+          </section>`;
+      }).join("");
+    }
 
-loadDashboard();
+    function renderRanking(units) {
+      const stats = new Map();
+      for (const unit of units) {
+        const cleaner = String(unit.cleaner || "").trim();
+        if (!cleaner) continue;
+        const names = cleaner.split(/[,/&]+/).map((name) => name.trim()).filter(Boolean);
+        for (const name of names) {
+          if (!stats.has(name)) stats.set(name, { assigned: 0, ready: 0 });
+          const row = stats.get(name);
+          row.assigned += 1;
+          if (statusCategory(unit) === STATUS.READY) row.ready += 1;
+        }
+      }
+      const ranking = [...stats.entries()]
+        .sort((a, b) => b[1].ready - a[1].ready || b[1].assigned - a[1].assigned || a[0].localeCompare(b[0]))
+        .slice(0, 8);
+      $("rankingList").innerHTML = ranking.length ? ranking.map(([name, data], index) => `
+        <div class="rank-row">
+          <div class="rank-number">${index < 3 ? ["🥇","🥈","🥉"][index] : index + 1}</div>
+          <div><strong>${escapeHtml(name)}</strong><span>${data.assigned} asignadas</span></div>
+          <div class="rank-score">${data.ready}</div>
+        </div>`).join("") : '<div class="empty">No hay limpiadores asignados todavía.</div>';
+    }
 
-setInterval(() => {
-  loadDashboard(false);
-}, 60000);
+    function render() {
+      const units = Array.isArray(dashboard.units) ? dashboard.units : [];
+      const groups = groupUnits(units);
+      const counts = { ready: 0, cleaning: 0, "not-started": 0, stayover: 0, inspection: 0 };
+      for (const unit of units) counts[statusCategory(unit)] += 1;
 
-try {
-  socket = io();
+      $("readyCount").textContent = counts.ready;
+      $("cleaningCount").textContent = counts.cleaning;
+      $("notStartedCount").textContent = counts["not-started"];
+      $("stayoverCount").textContent = counts.stayover;
+      $("inspectionCount").textContent = counts.inspection;
+      $("roomTotal").textContent = `${units.length} habitaciones`;
 
-  socket.on("connect", () => {
-    $("liveStatus").innerHTML =
-      '<span class="source-chip">PostgreSQL en vivo</span>';
-  });
+      const percent = units.length ? Math.round((counts.ready / units.length) * 100) : 0;
+      $("progressText").textContent = `${counts.ready} de ${units.length} habitaciones listas`;
+      $("progressValue").textContent = `${percent}%`;
+      $("progressFill").style.width = `${percent}%`;
 
-  socket.on("disconnect", () => {
-    $("liveStatus").textContent = "Reconectando…";
-  });
+      renderExecutive(groups);
+      renderMap(groups);
+      renderRanking(units);
 
-  [
-    "ai-director-updated",
-    "intelligence-updated",
-    "data-api-updated",
-    "rooms-postgres-synced",
-    "operations-log-created",
-    "ops-update",
-    "room-updated",
-    "rooms-updated",
-    "assignments-updated",
-    "notion-action-synced",
-    "system-event-created",
-  ].forEach((eventName) => {
-    socket.on(eventName, () => {
-      scheduleDashboardRefresh(
-        eventName === "intelligence-updated" ? 100 : 350
-      );
-    });
-  });
-} catch (error) {
-  console.warn(
-    "Socket.IO no disponible:",
-    error.message
-  );
-}
-</script>
+      const generated = dashboard.generatedAt ? new Date(dashboard.generatedAt) : new Date();
+      $("lastUpdated").textContent = `Última actualización: ${generated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
+
+      document.querySelectorAll("[data-room-id]").forEach((button) => {
+        button.addEventListener("click", () => openRoom(button.dataset.roomId));
+      });
+
+      previousStates = new Map(units.map((unit) => [String(unit.id || unit.unit || ""), statusCategory(unit)]));
+    }
+
+    function openRoom(id) {
+      const unit = (dashboard.units || []).find((item) => String(item.id || item.unit || "") === String(id));
+      if (!unit) return;
+      const category = statusCategory(unit);
+      $("modalTitle").textContent = unit.unit || "Habitación";
+      const details = [
+        ["Estado", statusLabel(category)],
+        ["Edificio", buildingLabel(unit.building)],
+        ["Cleaner", unit.cleaner || "Sin asignar"],
+        ["Inspector", unit.inspector || "Sin asignar"],
+        ["Tipo", unit.stayover ? "Stayover" : (unit.arrival ? "Arrival" : "Departure / Normal")],
+        ["Prioridad", unit.urgent ? "Urgente" : (unit.priority || "Normal")]
+      ];
+      $("roomDetails").innerHTML = details.map(([label, value]) => `<div class="detail"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+      $("roomModal").classList.add("show");
+    }
+
+    function closeModal() { $("roomModal").classList.remove("show"); }
+
+    async function loadDashboard(force = false) {
+      clearTimeout(refreshTimer);
+      try {
+        const url = `/admin-dashboard-data?refresh=${force ? "1" : "0"}&t=${Date.now()}`;
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.message || "No se pudo cargar el dashboard");
+        dashboard = data;
+        $("error").classList.remove("show");
+        render();
+      } catch (error) {
+        $("error").textContent = `No se pudo actualizar el dashboard: ${error.message}`;
+        $("error").classList.add("show");
+      }
+    }
+
+    function scheduleRefresh(delay = 250) {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => loadDashboard(false), delay);
+    }
+
+    function setView(view) {
+      const map = view === "map";
+      $("executiveView").hidden = map;
+      $("mapView").hidden = !map;
+      $("executiveBtn").classList.toggle("active", !map);
+      $("mapBtn").classList.toggle("active", map);
+      $("viewTitle").textContent = map ? "Hotel Map View" : "Vista Ejecutiva del Hotel";
+      localStorage.setItem("maidDashboardView", map ? "map" : "executive");
+    }
+
+    function setTheme(theme) {
+      const dark = theme === "dark";
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      $("themeBtn").textContent = dark ? "☀️" : "🌙";
+      $("themeBtn").ariaLabel = dark ? "Usar modo blanco" : "Usar modo oscuro";
+      localStorage.setItem("maidDashboardTheme", dark ? "dark" : "light");
+    }
+
+    function setRanking(visible) {
+      $("rankingPanel").hidden = !visible;
+      $("workspace").classList.toggle("with-ranking", visible);
+      $("rankingBtn").textContent = visible ? "Ocultar Top Cleaners" : "Mostrar Top Cleaners";
+      localStorage.setItem("maidDashboardRanking", visible ? "shown" : "hidden");
+    }
+
+    function updateClock() {
+      const now = new Date();
+      $("clock").textContent = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      $("dateLabel").textContent = now.toLocaleDateString("es-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    }
+
+    async function toggleFullscreen() {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+          document.body.classList.add("tv-mode");
+        } else {
+          await document.exitFullscreen();
+          document.body.classList.remove("tv-mode");
+        }
+      } catch (error) {
+        console.warn("Pantalla completa no disponible:", error.message);
+      }
+    }
+
+    function initialize() {
+      const savedTheme = localStorage.getItem("maidDashboardTheme");
+      const preferredDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
+      setTheme(savedTheme || (preferredDark ? "dark" : "light"));
+      setView(localStorage.getItem("maidDashboardView") === "map" ? "map" : "executive");
+      setRanking(localStorage.getItem("maidDashboardRanking") === "shown");
+
+      $("executiveBtn").addEventListener("click", () => setView("executive"));
+      $("mapBtn").addEventListener("click", () => setView("map"));
+      $("rankingBtn").addEventListener("click", () => setRanking($("rankingPanel").hidden));
+      $("themeBtn").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+      $("fullscreenBtn").addEventListener("click", toggleFullscreen);
+      $("refreshBtn").addEventListener("click", () => loadDashboard(true));
+      $("closeModal").addEventListener("click", closeModal);
+      $("roomModal").addEventListener("click", (event) => { if (event.target === $("roomModal")) closeModal(); });
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+      document.addEventListener("fullscreenchange", () => document.body.classList.toggle("tv-mode", Boolean(document.fullscreenElement)));
+
+      updateClock();
+      setInterval(updateClock, 1000);
+      loadDashboard(false);
+      setInterval(() => loadDashboard(false), 30000);
+
+      try {
+        socket = io();
+        socket.on("connect", () => {
+          $("liveStatus").classList.remove("offline");
+          $("liveStatus").innerHTML = '<span class="live-dot"></span><span>Actualización en vivo</span>';
+        });
+        socket.on("disconnect", () => {
+          $("liveStatus").classList.add("offline");
+          $("liveStatus").innerHTML = '<span class="live-dot"></span><span>Reconectando…</span>';
+        });
+        [
+          "room-updated", "rooms-updated", "assignments-updated", "rooms-postgres-synced",
+          "data-api-updated", "operations-log-created", "ops-update", "notion-action-synced"
+        ].forEach((eventName) => socket.on(eventName, () => scheduleRefresh(180)));
+      } catch (error) {
+        $("liveStatus").classList.add("offline");
+        $("liveStatus").innerHTML = '<span class="live-dot"></span><span>Actualización cada 30 s</span>';
+      }
+    }
+
+    initialize();
+  </script>
 </body>
 </html>
