@@ -138,7 +138,9 @@ async function upsertPayrollRecord(record) {
         gross_unit_amount = EXCLUDED.gross_unit_amount,
         split_count = EXCLUDED.split_count,
         split_percent = EXCLUDED.split_percent,
-        amount = CASE WHEN payroll_records.manual_override THEN payroll_records.amount ELSE EXCLUDED.amount END,
+        amount = EXCLUDED.amount,
+        manual_override = FALSE,
+        adjustment_reason = '',
         week_start = EXCLUDED.week_start,
         week_end = EXCLUDED.week_end,
         status = CASE WHEN payroll_records.status = 'Closed' THEN payroll_records.status ELSE EXCLUDED.status END,
@@ -189,8 +191,24 @@ async function syncPayrollFromNotion({ notion, databaseId, queryDatabase, weekSt
 
     let saved = 0;
     let skipped = 0;
+    let deleted = 0;
     let splitSourceRecords = 0;
     const warnings = [];
+    const notionPageIds = pages.map((page) => String(page?.id || '').trim()).filter(Boolean);
+
+    // Notion es la fuente oficial. Antes de insertar la fotografía actual de la semana,
+    // elimina de PostgreSQL cualquier registro abierto que ya no exista en Notion.
+    // Las semanas cerradas siguen protegidas por assertPayrollWeekOpen().
+    const cleanupResult = await query(
+      `DELETE FROM payroll_records
+       WHERE week_start = $1
+         AND week_end = $2
+         AND status <> 'Closed'
+         AND source = 'notion'
+         AND NOT (COALESCE(raw_data->>'sourcePageId', '') = ANY($3::text[]))`,
+      [weekStart, weekEnd, notionPageIds]
+    );
+    deleted += Number(cleanupResult.rowCount || 0);
 
     for (const page of pages) {
       await query(
@@ -216,9 +234,9 @@ async function syncPayrollFromNotion({ notion, databaseId, queryDatabase, weekSt
 
     await query(
       `UPDATE sync_status SET status='success',last_completed_at=NOW(),last_success_at=NOW(),records_processed=$2,error_message='',metadata=$3::jsonb,updated_at=NOW() WHERE sync_key=$1`,
-      [syncKey, saved, JSON.stringify({ weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() })]
+      [syncKey, saved, JSON.stringify({ weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, deleted, splitSourceRecords, warnings, authoritativeSource: 'notion', durationMs: Date.now() - startedAt.getTime() })]
     );
-    return { ok: true, weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() };
+    return { ok: true, weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, deleted, splitSourceRecords, authoritativeSource: 'notion', warnings, durationMs: Date.now() - startedAt.getTime() };
   } catch (error) {
     await query(`UPDATE sync_status SET status='error',last_completed_at=NOW(),error_message=$2,updated_at=NOW() WHERE sync_key=$1`, [syncKey, error.message]);
     throw error;
