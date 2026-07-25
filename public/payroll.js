@@ -594,12 +594,12 @@
     try {
       readRangeFromInputs();
       setLoading(true, "Comparando");
-      const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}`;
-      const { data } = await fetchJson(`/api/payroll/compare?${range}&sync=true`);
+      const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}&sync=true`;
+      const { data } = await fetchJson(`/api/payroll/compare?${range}`);
       state.comparison = data;
       renderComparison();
       renderWarnings();
-      showToast(data.matches ? "Nómina corregida y verificada con Notion." : "No fue posible dejar la nómina idéntica a Notion.", data.matches ? "success" : "error");
+      showToast(data.matches ? "Nómina corregida y verificada con Notion." : "Aún hay diferencias después de reconstruir la copia local.", data.matches ? "success" : "error");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
