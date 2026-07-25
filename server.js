@@ -2529,8 +2529,8 @@ app.get("/api/postgres/rooms", async (req, res) => {
 // =========================================================
 // PAYROLL · NOTION → POSTGRESQL
 // =========================================================
-// PostgreSQL es la fuente principal de lectura para Preview y Excel.
-// Notion permanece como fallback automático y fuente de comparación.
+// Notion es la fuente oficial de Payroll. PostgreSQL mantiene una copia operativa
+// para el dashboard, comparación y auditoría, pero no decide los importes del Excel.
 let payrollSyncTimer = null;
 let payrollSyncRunning = false;
 
@@ -2707,14 +2707,14 @@ app.get("/api/payroll/compare", async (req, res) => {
     const currentWeek = getPayrollWeek(new Date());
     const weekStart = String(req.query.start || currentWeek.weekStart).trim();
     const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
-    const shouldSync = String(req.query.sync || "false").toLowerCase() === "true";
+    const shouldSync = String(req.query.sync || "true").toLowerCase() !== "false";
 
     validatePayrollRange(weekStart, weekEnd);
 
     if (!postgresStatus.connected) {
       return res.status(503).json({
         ok: false,
-        message: "PostgreSQL no está conectado; no se pueden comparar las dos fuentes.",
+        message: "PostgreSQL no está conectado; el Excel todavía puede generarse desde Notion, pero no se puede reparar la copia local.",
       });
     }
 
@@ -3089,9 +3089,11 @@ app.get("/test-mobile-code-login", async (req, res) => {
 
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   validatePayrollRange(weekStart, weekEnd);
+  // La nómina descargable siempre nace de Notion, que es la fuente oficial.
+  // Así el archivo no puede salir de una copia vieja o de un ajuste local accidental.
   const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
-    source: "auto",
-    allowFallback: true,
+    source: "notion",
+    allowFallback: false,
   });
   const records = payrollRead.records;
   const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
