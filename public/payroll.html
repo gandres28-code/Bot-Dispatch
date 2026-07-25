@@ -538,11 +538,11 @@
         <button class="btn ghost" id="currentWeek">Semana actual</button>
       </div>
       <div class="actions">
-        <button class="btn" id="syncButton">🔄 Sincronizar</button>
-        <button class="btn secondary" id="compareButton">⚖️ Comparar</button>
-        <button class="btn violet" id="ratesButton">⚙️ Tarifas</button>
-        <button class="btn amber" id="weekLockButton">🔒 Cerrar semana</button>
-        <button class="btn ghost" id="auditButton">🧾 Historial</button>
+        <button class="btn" id="syncButton" hidden disabled>🔄 Sincronizar</button>
+        <button class="btn secondary" id="compareButton" hidden disabled>⚖️ Comparar</button>
+        <button class="btn violet" id="ratesButton" hidden disabled>⚙️ Tarifas</button>
+        <button class="btn amber" id="weekLockButton" hidden disabled>🔒 Cerrar semana</button>
+        <button class="btn ghost" id="auditButton" hidden disabled>🧾 Historial</button>
         <button class="btn success" id="excelButton">⬇️ Descargar Excel</button>
         <button class="btn ghost" id="refreshButton">↻ Actualizar vista</button>
       </div>
@@ -553,7 +553,7 @@
         <div class="panel-header">
           <div>
             <h2 class="panel-title">Estado del sistema</h2>
-            <p class="panel-subtitle">Fuente activa, sincronización y consistencia</p>
+            <p class="panel-subtitle">Fuente oficial y lectura directa</p>
           </div>
           <span class="badge blue" id="systemBadge">Revisando</span>
         </div>
@@ -563,11 +563,11 @@
             <span class="badge blue" id="activeSourceBadge">AUTO</span>
           </div>
           <div class="status-row">
-            <div><strong>Última sincronización</strong><small id="lastSyncText">Sin información</small></div>
+            <div><strong>Origen de los datos</strong><small id="lastSyncText">Payroll Records de Notion</small></div>
             <span class="badge blue" id="syncBadge">Pendiente</span>
           </div>
           <div class="status-row">
-            <div><strong>Notion vs PostgreSQL</strong><small id="comparisonText">Aún no comparado</small></div>
+            <div><strong>Modo de nómina</strong><small id="comparisonText">Sin comparaciones ni copias locales</small></div>
             <span class="badge blue" id="comparisonBadge">Pendiente</span>
           </div>
         </div>
@@ -581,8 +581,8 @@
           </div>
         </div>
         <div class="status-card">
-          <div class="status-row"><div><strong>Registros PostgreSQL</strong><small>Semana seleccionada</small></div><b id="postgresCount">0</b></div>
-          <div class="status-row"><div><strong>Total PostgreSQL</strong><small>Pagos por unidad</small></div><b id="postgresTotal">$0.00</b></div>
+          <div class="status-row"><div><strong>Registros de Notion</strong><small>Semana seleccionada</small></div><b id="postgresCount">0</b></div>
+          <div class="status-row"><div><strong>Total de Notion</strong><small>Pagos por unidad</small></div><b id="postgresTotal">$0.00</b></div>
           <div class="status-row"><div><strong>Entradas por hora</strong><small>Desde Time Clock</small></div><b id="hourlyCount">0</b></div>
         </div>
       </article>
