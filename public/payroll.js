@@ -177,13 +177,13 @@
 
       const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}`;
       const requests = [
-        fetchJson(`/payroll-preview?${range}&source=notion`),
-        fetchJson(`/api/payroll/preview?${range}&source=notion`),
+        fetchJson(`/payroll-preview?${range}`),
+        fetchJson(`/api/payroll/preview?${range}`),
         fetchJson(`/api/sync/payroll/status?${range}`),
         fetchJson(`/api/payroll/week?${range}`),
       ];
 
-      if (compare) requests.push(Promise.resolve({ data: { ok: true, matches: true, source: "notion", message: "Notion is the only payroll source" } }));
+      if (compare) requests.push(fetchJson(`/api/payroll/compare?${range}`));
 
       const results = await Promise.all(requests);
       state.preview = results[0].data;
@@ -229,7 +229,7 @@
   function renderSource() {
     const source = state.preview?.source || state.raw?.source || "unknown";
     const fallback = Boolean(state.preview?.fallback || state.raw?.fallback);
-    const sourceText = source === "postgres" ? "PostgreSQL" : source === "notion" ? "Notion" : source;
+    const sourceText = source === "central-notion" ? "Página central de Notion" : source === "notion" ? "Notion" : source;
 
     $("sourceText").textContent = fallback ? `${sourceText} · fallback` : sourceText;
     $("activeSourceText").textContent = fallback
