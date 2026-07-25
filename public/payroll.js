@@ -595,11 +595,11 @@
       readRangeFromInputs();
       setLoading(true, "Comparando");
       const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}`;
-      const { data } = await fetchJson(`/api/payroll/compare?${range}`);
+      const { data } = await fetchJson(`/api/payroll/compare?${range}&sync=true`);
       state.comparison = data;
       renderComparison();
       renderWarnings();
-      showToast(data.matches ? "Notion y PostgreSQL coinciden." : "Se encontraron diferencias.", data.matches ? "success" : "error");
+      showToast(data.matches ? "Nómina corregida y verificada con Notion." : "No fue posible dejar la nómina idéntica a Notion.", data.matches ? "success" : "error");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
