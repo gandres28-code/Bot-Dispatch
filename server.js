@@ -2529,8 +2529,8 @@ app.get("/api/postgres/rooms", async (req, res) => {
 // =========================================================
 // PAYROLL · NOTION → POSTGRESQL
 // =========================================================
-// Notion es la fuente oficial de Payroll. PostgreSQL mantiene una copia operativa
-// para el dashboard, comparación y auditoría, pero no decide los importes del Excel.
+// Notion es la fuente oficial de Payroll. PostgreSQL funciona como copia local
+// para velocidad, pero debe reflejar exactamente cada semana abierta de Notion.
 let payrollSyncTimer = null;
 let payrollSyncRunning = false;
 
@@ -2714,13 +2714,20 @@ app.get("/api/payroll/compare", async (req, res) => {
     if (!postgresStatus.connected) {
       return res.status(503).json({
         ok: false,
-        message: "PostgreSQL no está conectado; el Excel todavía puede generarse desde Notion, pero no se puede reparar la copia local.",
+        message: "PostgreSQL no está conectado; no se pueden comparar las dos fuentes.",
       });
     }
 
     let syncResult = null;
     if (shouldSync) {
       syncResult = await runPayrollSync("compare", weekStart, weekEnd);
+      if (!syncResult?.ok) {
+        return res.status(503).json({
+          ok: false,
+          message: syncResult?.message || "No fue posible sincronizar Payroll desde Notion.",
+          syncResult,
+        });
+      }
     }
 
     const [notionRecords, postgresRecords, syncStatus] = await Promise.all([
@@ -3089,8 +3096,7 @@ app.get("/test-mobile-code-login", async (req, res) => {
 
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   validatePayrollRange(weekStart, weekEnd);
-  // La nómina descargable siempre nace de Notion, que es la fuente oficial.
-  // Así el archivo no puede salir de una copia vieja o de un ajuste local accidental.
+  // El Excel siempre se construye desde Notion, que es la fuente oficial.
   const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
     source: "notion",
     allowFallback: false,
