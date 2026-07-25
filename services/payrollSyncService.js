@@ -132,18 +132,23 @@ async function upsertPayrollRecord(record) {
       ON CONFLICT (notion_id)
       DO UPDATE SET
         notion_id = EXCLUDED.notion_id,
+        work_date = EXCLUDED.work_date,
         employee = EXCLUDED.employee,
+        normalized_employee = EXCLUDED.normalized_employee,
+        unit = EXCLUDED.unit,
         room_type = EXCLUDED.room_type,
         property_name = EXCLUDED.property_name,
         gross_unit_amount = EXCLUDED.gross_unit_amount,
         split_count = EXCLUDED.split_count,
         split_percent = EXCLUDED.split_percent,
         amount = EXCLUDED.amount,
-        manual_override = FALSE,
-        adjustment_reason = '',
+        pay_type = EXCLUDED.pay_type,
+        role_worked = EXCLUDED.role_worked,
         week_start = EXCLUDED.week_start,
         week_end = EXCLUDED.week_end,
-        status = CASE WHEN payroll_records.status = 'Closed' THEN payroll_records.status ELSE EXCLUDED.status END,
+        status = EXCLUDED.status,
+        manual_override = FALSE,
+        adjustment_reason = '',
         source = 'notion', raw_data = EXCLUDED.raw_data, updated_at = NOW()
       RETURNING *
     `,
@@ -189,35 +194,21 @@ async function syncPayrollFromNotion({ notion, databaseId, queryDatabase, weekSt
       cursor = response.has_more ? response.next_cursor : undefined;
     } while (cursor);
 
+    // Notion es la fuente oficial. Para una semana abierta reemplazamos
+    // completamente la copia local, evitando registros viejos o eliminados.
+    const deletedResult = await query(
+      `DELETE FROM payroll_records
+       WHERE work_date BETWEEN $1 AND $2
+         AND status <> 'Closed'`,
+      [weekStart, weekEnd]
+    );
+
     let saved = 0;
     let skipped = 0;
-    let deleted = 0;
     let splitSourceRecords = 0;
     const warnings = [];
-    const notionPageIds = pages.map((page) => String(page?.id || '').trim()).filter(Boolean);
-
-    // Notion es la fuente oficial. Antes de insertar la fotografía actual de la semana,
-    // elimina de PostgreSQL cualquier registro abierto que ya no exista en Notion.
-    // Las semanas cerradas siguen protegidas por assertPayrollWeekOpen().
-    const cleanupResult = await query(
-      `DELETE FROM payroll_records
-       WHERE week_start = $1
-         AND week_end = $2
-         AND status <> 'Closed'
-         AND source = 'notion'
-         AND NOT (COALESCE(raw_data->>'sourcePageId', '') = ANY($3::text[]))`,
-      [weekStart, weekEnd, notionPageIds]
-    );
-    deleted += Number(cleanupResult.rowCount || 0);
 
     for (const page of pages) {
-      await query(
-        `DELETE FROM payroll_records
-         WHERE manual_override = FALSE
-           AND status <> 'Closed'
-           AND (notion_id = $1 OR raw_data->>'sourcePageId' = $1)`,
-        [page?.id || '']
-      );
       const records = await getPayrollRecordsFromNotionPage(page);
       if (records.length > 1) splitSourceRecords += 1;
       if (!records.length) {
@@ -234,9 +225,9 @@ async function syncPayrollFromNotion({ notion, databaseId, queryDatabase, weekSt
 
     await query(
       `UPDATE sync_status SET status='success',last_completed_at=NOW(),last_success_at=NOW(),records_processed=$2,error_message='',metadata=$3::jsonb,updated_at=NOW() WHERE sync_key=$1`,
-      [syncKey, saved, JSON.stringify({ weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, deleted, splitSourceRecords, warnings, authoritativeSource: 'notion', durationMs: Date.now() - startedAt.getTime() })]
+      [syncKey, saved, JSON.stringify({ weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() })]
     );
-    return { ok: true, weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, deleted, splitSourceRecords, authoritativeSource: 'notion', warnings, durationMs: Date.now() - startedAt.getTime() };
+    return { ok: true, weekStart, weekEnd, totalFromNotion: pages.length, deleted: deletedResult.rowCount || 0, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() };
   } catch (error) {
     await query(`UPDATE sync_status SET status='error',last_completed_at=NOW(),error_message=$2,updated_at=NOW() WHERE sync_key=$1`, [syncKey, error.message]);
     throw error;
