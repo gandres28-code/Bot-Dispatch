@@ -176,21 +176,30 @@
       $("weekLabel").textContent = formatRange(state.start, state.end);
 
       const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}`;
-      const requests = [
-        fetchJson(`/payroll-preview?${range}`),
-        fetchJson(`/api/payroll/preview?${range}`),
-        fetchJson(`/api/sync/payroll/status?${range}`),
-        fetchJson(`/api/payroll/week?${range}`),
-      ];
+      const results = await Promise.all([
+        fetchJson(`/payroll-preview?${range}&source=notion`),
+        fetchJson(`/api/payroll/preview?${range}&source=notion`),
+      ]);
 
-      if (compare) requests.push(fetchJson(`/api/payroll/compare?${range}`));
-
-      const results = await Promise.all(requests);
       state.preview = results[0].data;
       state.raw = results[1].data;
-      state.syncStatus = results[2].data;
-      state.weekState = results[3].data;
-      if (compare) state.comparison = results[4].data;
+      state.syncStatus = {
+        postgresConnected: false,
+        running: false,
+        status: null,
+        notionOnly: true,
+      };
+      state.weekState = {
+        status: "open",
+        validation: { valid: true, errors: [] },
+        week: {},
+      };
+      state.comparison = {
+        matches: true,
+        disabled: true,
+        source: "notion",
+        notion: { count: state.raw.count || 0, total: state.raw.total || 0 },
+      };
 
       renderAll();
       setBadge($("systemBadge"), "Actualizado", "green");
@@ -241,50 +250,15 @@
   }
 
   function renderSyncStatus() {
-    const payload = state.syncStatus || {};
-    const status = payload.status;
-
-    if (!payload.postgresConnected) {
-      $("lastSyncText").textContent = "PostgreSQL no está conectado";
-      setBadge($("syncBadge"), "Sin conexión", "red");
-      return;
-    }
-
-    if (payload.running) {
-      $("lastSyncText").textContent = "Sincronización en proceso";
-      setBadge($("syncBadge"), "Ejecutando", "blue");
-      return;
-    }
-
-    if (!status) {
-      $("lastSyncText").textContent = "Esta semana aún no tiene registro de sincronización";
-      setBadge($("syncBadge"), "Pendiente", "amber");
-      return;
-    }
-
-    const timeValue = status.last_success_at || status.last_run_at || status.updated_at;
-    $("lastSyncText").textContent = safeFormatDate(
-      timeValue,
-      { dateStyle: "medium", timeStyle: "short" }
-    );
-
-    const success = status.status === "success" || status.last_status === "success" || !status.last_error;
-    setBadge($("syncBadge"), success ? "Sincronizado" : "Con error", success ? "green" : "red");
+    $("lastSyncText").textContent = "Lectura directa de Payroll Records";
+    setBadge($("syncBadge"), "Notion directo", "green");
   }
 
   function renderComparison() {
-    const comparison = state.comparison;
-    if (!comparison) {
-      $("comparisonText").textContent = "Presiona Comparar para validar ambas fuentes";
-      setBadge($("comparisonBadge"), "Pendiente", "blue");
-      return;
-    }
-
-    const matches = Boolean(comparison.matches);
-    $("comparisonText").textContent = matches
-      ? `${comparison.notion?.count || 0} registros y ${money(comparison.notion?.total || 0)} coinciden`
-      : `Diferencia: ${comparison.difference?.count || 0} registros y ${money(comparison.difference?.total || 0)}`;
-    setBadge($("comparisonBadge"), matches ? "Coinciden" : "Revisar", matches ? "green" : "red");
+    const count = Number(state.raw?.count || 0);
+    const total = Number(state.raw?.total || 0);
+    $("comparisonText").textContent = `${count} registros leídos directamente de Notion · ${money(total)}`;
+    setBadge($("comparisonBadge"), "Sin comparación", "green");
   }
 
 
@@ -303,8 +277,11 @@
     setBadge($("weekStateBadge"), closed ? "CLOSED" : "OPEN", closed ? "amber" : "green");
     $("weekLockButton").textContent = closed ? "🔓 Reabrir semana" : "🔒 Cerrar semana";
     $("weekLockButton").className = `btn ${closed ? "danger" : "amber"}`;
-    $("syncButton").disabled = state.loading || closed;
-    $("ratesButton").disabled = state.loading || closed;
+    $("syncButton").disabled = true;
+    $("compareButton").disabled = true;
+    $("ratesButton").disabled = true;
+    $("weekLockButton").disabled = true;
+    $("auditButton").disabled = true;
   }
 
   function employeeRecords(employeeName) {
@@ -430,13 +407,6 @@
 
   function renderWarnings() {
     const warnings = [...new Set(state.preview?.warnings || [])];
-    const comparison = state.comparison;
-
-    if (comparison && !comparison.matches) {
-      if (comparison.missingInPostgres?.length) warnings.push(`${comparison.missingInPostgres.length} registros faltan en PostgreSQL.`);
-      if (comparison.extraInPostgres?.length) warnings.push(`${comparison.extraInPostgres.length} registros adicionales existen en PostgreSQL.`);
-      if (comparison.amountMismatches?.length) warnings.push(`${comparison.amountMismatches.length} pagos tienen cantidades diferentes.`);
-    }
 
     const container = $("warningList");
     $("totalWarnings").textContent = warnings.length.toLocaleString();
@@ -572,39 +542,13 @@
   }
 
   async function syncPayroll() {
-    try {
-      readRangeFromInputs();
-      setLoading(true, "Sincronizando");
-      const { data } = await fetchJson("/api/sync/payroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start: state.start, end: state.end }),
-      });
-
-      if (!data.ok) throw new Error(data.message || "La sincronización no terminó correctamente.");
-      showToast(`Sincronización terminada: ${data.saved ?? 0} guardados.`, "success");
-      await loadDashboard({ compare: true });
-    } catch (error) {
-      showToast(error.message, "error");
-      setLoading(false);
-    }
+    await loadDashboard();
+    showToast("Datos recargados directamente desde Notion.", "success");
   }
 
   async function comparePayroll() {
-    try {
-      readRangeFromInputs();
-      setLoading(true, "Comparando");
-      const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}&sync=true`;
-      const { data } = await fetchJson(`/api/payroll/compare?${range}`);
-      state.comparison = data;
-      renderComparison();
-      renderWarnings();
-      showToast(data.matches ? "Nómina corregida y verificada con Notion." : "Aún hay diferencias después de reconstruir la copia local.", data.matches ? "success" : "error");
-    } catch (error) {
-      showToast(error.message, "error");
-    } finally {
-      setLoading(false);
-    }
+    await loadDashboard();
+    showToast("La comparación fue eliminada. Notion es la fuente oficial.", "success");
   }
 
   function downloadExcel() {
