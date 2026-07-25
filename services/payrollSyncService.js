@@ -8,13 +8,58 @@ const {
 
 function readTextProperty(property) {
   if (!property) return '';
-  if (property.title) return property.title.map((item) => item.plain_text || '').join('').trim();
-  if (property.rich_text) return property.rich_text.map((item) => item.plain_text || '').join('').trim();
+  if (Array.isArray(property.title)) return property.title.map((item) => item.plain_text || item.text?.content || '').join('').trim();
+  if (Array.isArray(property.rich_text)) return property.rich_text.map((item) => item.plain_text || item.text?.content || '').join('').trim();
   if (property.select?.name) return String(property.select.name).trim();
   if (property.status?.name) return String(property.status.name).trim();
-  if (property.multi_select) return property.multi_select.map((item) => item.name).join(' / ').trim();
+  if (Array.isArray(property.multi_select)) return property.multi_select.map((item) => item.name || '').filter(Boolean).join(' / ').trim();
+  if (Array.isArray(property.people)) return property.people.map((item) => item.name || item.person?.email || item.id || '').filter(Boolean).join(' / ').trim();
+  if (Array.isArray(property.relation)) return property.relation.map((item) => item.id || '').filter(Boolean).join(' / ').trim();
+  if (property.formula) {
+    if (property.formula.string != null) return String(property.formula.string).trim();
+    if (property.formula.number != null) return String(property.formula.number);
+    if (property.formula.boolean != null) return property.formula.boolean ? 'Yes' : 'No';
+    if (property.formula.date?.start) return String(property.formula.date.start).trim();
+  }
+  if (property.rollup) {
+    if (property.rollup.number != null) return String(property.rollup.number);
+    if (Array.isArray(property.rollup.array)) return property.rollup.array.map(readTextProperty).filter(Boolean).join(' / ').trim();
+  }
   if (property.number !== undefined && property.number !== null) return String(property.number);
+  if (property.url) return String(property.url).trim();
+  if (property.email) return String(property.email).trim();
+  if (property.phone_number) return String(property.phone_number).trim();
   return '';
+}
+
+function firstProperty(properties, names = []) {
+  for (const name of names) {
+    if (properties?.[name]) return properties[name];
+  }
+  const normalized = new Map(Object.keys(properties || {}).map((key) => [key.toLowerCase().replace(/[^a-z0-9]/g, ''), key]));
+  for (const name of names) {
+    const key = normalized.get(String(name).toLowerCase().replace(/[^a-z0-9]/g, ''));
+    if (key) return properties[key];
+  }
+  return null;
+}
+
+function readTextByNames(properties, names = []) {
+  return readTextProperty(firstProperty(properties, names));
+}
+
+function readDateByNames(properties, names = []) {
+  const property = firstProperty(properties, names);
+  const value = property?.date?.start || property?.formula?.date?.start || readTextProperty(property);
+  const match = String(value || '').match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : '';
+}
+
+function readNumberByNames(properties, names = []) {
+  const property = firstProperty(properties, names);
+  const value = property?.number ?? property?.formula?.number ?? property?.rollup?.number ?? readTextProperty(property);
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 }
 
 function roundMoney(value) {
@@ -54,43 +99,34 @@ async function findEffectiveRate(propertyName, roomType, workDate) {
 
 async function getPayrollRecordsFromNotionPage(page) {
   const properties = page?.properties || {};
-  const workDate = properties.Date?.date?.start?.slice(0, 10) || '';
-  const employeeText = readTextProperty(properties.Cleaner) || readTextProperty(properties.Employee) || readTextProperty(properties.Name);
+  const workDate = readDateByNames(properties, ['Date', 'Work Date', 'Cleaning Date', 'Service Date']);
+  const employeeText = readTextByNames(properties, ['Cleaner', 'Employee', 'Assigned Cleaner', 'Employee Name', 'Name']);
   const employees = splitEmployeeNames(employeeText);
-  const unit = readTextProperty(properties.Unit) || readTextProperty(properties.Room);
-  const roomType = readTextProperty(properties['Room Type']) || readTextProperty(properties.Type);
-  const propertyName = readTextProperty(properties.Property) || readTextProperty(properties.Hotel) || readTextProperty(properties.Location) || 'ALL';
-  const statedAmount = Number(properties.Amount?.number ?? properties.Total?.number ?? 0);
-  const statedGross = Number(properties['Gross Unit Amount']?.number ?? properties['Unit Amount']?.number ?? 0);
-  const payType = readTextProperty(properties['Pay Type']) || 'unit';
-  const roleWorked = readTextProperty(properties['Role Worked']) || 'Cleaner';
-  const status = readTextProperty(properties.Status) || 'Pending';
+  const unit = readTextByNames(properties, ['Unit', 'Room', 'Room Number', 'Unit Number', 'Property Unit', 'Cleaning Unit']);
+  const roomType = readTextByNames(properties, ['Room Type', 'Type', 'Unit Type', 'Cleaning Type']);
+  const propertyName = readTextByNames(properties, ['Property', 'Hotel', 'Location', 'Resort']) || 'ALL';
+  const statedAmount = readNumberByNames(properties, ['Amount', 'Total', 'Pay Amount', 'Cleaner Amount']);
+  const statedGross = readNumberByNames(properties, ['Gross Unit Amount', 'Unit Amount', 'Gross Amount']);
+  const payType = readTextByNames(properties, ['Pay Type', 'Payment Type']) || 'unit';
+  const roleWorked = readTextByNames(properties, ['Role Worked', 'Role']) || 'Cleaner';
+  const status = readTextByNames(properties, ['Status', 'Payroll Status']) || 'Pending';
   const computedWeek = getPayrollWeek(workDate);
-  const weekStart = properties['Week Start']?.date?.start?.slice(0, 10) || computedWeek.weekStart;
-  const weekEnd = properties['Week End']?.date?.start?.slice(0, 10) || computedWeek.weekEnd;
+  const weekStart = readDateByNames(properties, ['Week Start', 'Pay Period Start']) || computedWeek.weekStart;
+  const weekEnd = readDateByNames(properties, ['Week End', 'Pay Period End']) || computedWeek.weekEnd;
 
-  const names = employees.length ? employees : employeeText ? [employeeText] : [];
+  // Nunca ocultar una página de Notion. Si falta el empleado, la unidad aparece como
+  // "Unassigned" con advertencia y $0 para que pueda corregirse, no desaparecer.
+  const names = employees.length ? employees : ['Unassigned'];
   const splitCount = Math.max(1, names.length);
-  const effectiveRate = await findEffectiveRate(propertyName, roomType, workDate);
-
-  // Cuando Notion tiene varios nombres juntos, Amount se interpreta como el valor total de la unidad.
-  // Para un solo nombre se conserva Amount tal como está. Si falta, se usa la tarifa configurada.
-  const grossUnitAmount = roundMoney(
-    statedGross > 0
-      ? statedGross
-      : splitCount > 1 && statedAmount > 0
-        ? statedAmount
-        : effectiveRate?.amount || statedAmount
-  );
+  const grossUnitAmount = roundMoney(statedGross > 0 ? statedGross : statedAmount);
 
   return names.map((employee, index) => {
-    const amount = roundMoney(
-      splitCount > 1
-        ? grossUnitAmount / splitCount
-        : statedAmount > 0
-          ? statedAmount
-          : grossUnitAmount
-    );
+    const amount = roundMoney(splitCount > 1 ? grossUnitAmount / splitCount : statedAmount || grossUnitAmount);
+    const issues = [];
+    if (!workDate) issues.push('missing-date');
+    if (!employeeText) issues.push('missing-employee');
+    if (!unit) issues.push('missing-unit');
+    if (!(amount > 0)) issues.push('missing-or-zero-amount');
 
     return {
       notionId: `${page?.id || 'notion'}:${index + 1}:${normalizeEmployeeName(employee)}`,
@@ -98,7 +134,7 @@ async function getPayrollRecordsFromNotionPage(page) {
       workDate,
       employee,
       normalizedEmployee: normalizeEmployeeName(employee),
-      unit,
+      unit: unit || `[Missing unit · ${page?.id || 'Notion page'}]`,
       roomType,
       propertyName,
       grossUnitAmount,
@@ -110,7 +146,8 @@ async function getPayrollRecordsFromNotionPage(page) {
       weekStart,
       weekEnd,
       status,
-      rawData: { sourcePageId: page?.id || '', originalEmployeeText: employeeText, splitIndex: index + 1, splitCount, page },
+      issues,
+      rawData: { sourcePageId: page?.id || '', originalEmployeeText: employeeText, splitIndex: index + 1, splitCount, issues, page },
     };
   });
 }
@@ -132,23 +169,16 @@ async function upsertPayrollRecord(record) {
       ON CONFLICT (notion_id)
       DO UPDATE SET
         notion_id = EXCLUDED.notion_id,
-        work_date = EXCLUDED.work_date,
         employee = EXCLUDED.employee,
-        normalized_employee = EXCLUDED.normalized_employee,
-        unit = EXCLUDED.unit,
         room_type = EXCLUDED.room_type,
         property_name = EXCLUDED.property_name,
         gross_unit_amount = EXCLUDED.gross_unit_amount,
         split_count = EXCLUDED.split_count,
         split_percent = EXCLUDED.split_percent,
-        amount = EXCLUDED.amount,
-        pay_type = EXCLUDED.pay_type,
-        role_worked = EXCLUDED.role_worked,
+        amount = CASE WHEN payroll_records.manual_override THEN payroll_records.amount ELSE EXCLUDED.amount END,
         week_start = EXCLUDED.week_start,
         week_end = EXCLUDED.week_end,
-        status = EXCLUDED.status,
-        manual_override = FALSE,
-        adjustment_reason = '',
+        status = CASE WHEN payroll_records.status = 'Closed' THEN payroll_records.status ELSE EXCLUDED.status END,
         source = 'notion', raw_data = EXCLUDED.raw_data, updated_at = NOW()
       RETURNING *
     `,
@@ -194,21 +224,19 @@ async function syncPayrollFromNotion({ notion, databaseId, queryDatabase, weekSt
       cursor = response.has_more ? response.next_cursor : undefined;
     } while (cursor);
 
-    // Notion es la fuente oficial. Para una semana abierta reemplazamos
-    // completamente la copia local, evitando registros viejos o eliminados.
-    const deletedResult = await query(
-      `DELETE FROM payroll_records
-       WHERE work_date BETWEEN $1 AND $2
-         AND status <> 'Closed'`,
-      [weekStart, weekEnd]
-    );
-
     let saved = 0;
     let skipped = 0;
     let splitSourceRecords = 0;
     const warnings = [];
 
     for (const page of pages) {
+      await query(
+        `DELETE FROM payroll_records
+         WHERE manual_override = FALSE
+           AND status <> 'Closed'
+           AND (notion_id = $1 OR raw_data->>'sourcePageId' = $1)`,
+        [page?.id || '']
+      );
       const records = await getPayrollRecordsFromNotionPage(page);
       if (records.length > 1) splitSourceRecords += 1;
       if (!records.length) {
@@ -227,7 +255,7 @@ async function syncPayrollFromNotion({ notion, databaseId, queryDatabase, weekSt
       `UPDATE sync_status SET status='success',last_completed_at=NOW(),last_success_at=NOW(),records_processed=$2,error_message='',metadata=$3::jsonb,updated_at=NOW() WHERE sync_key=$1`,
       [syncKey, saved, JSON.stringify({ weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() })]
     );
-    return { ok: true, weekStart, weekEnd, totalFromNotion: pages.length, deleted: deletedResult.rowCount || 0, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() };
+    return { ok: true, weekStart, weekEnd, totalFromNotion: pages.length, saved, skipped, splitSourceRecords, warnings, durationMs: Date.now() - startedAt.getTime() };
   } catch (error) {
     await query(`UPDATE sync_status SET status='error',last_completed_at=NOW(),error_message=$2,updated_at=NOW() WHERE sync_key=$1`, [syncKey, error.message]);
     throw error;
