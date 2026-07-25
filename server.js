@@ -2007,27 +2007,95 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
     manualOverride: false,
     adjustmentReason: "",
     status: record.status,
+    issues: Array.isArray(record.issues) ? record.issues : [],
+    sourceNotionId: record.sourceNotionId || "",
   }));
 }
 
 async function getPayrollRecordsWithSource(
   weekStart,
   weekEnd,
-  { source = "notion" } = {}
+  { source = "auto", allowFallback = true } = {}
 ) {
   validatePayrollRange(weekStart, weekEnd);
 
-  // Notion es la única fuente oficial de Payroll.
-  // PostgreSQL no participa en la vista, cálculo, comparación ni exportación.
-  const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
+  const requestedSource = String(source || "auto").toLowerCase();
+  const validSources = new Set(["auto", "postgres", "notion"]);
 
-  return {
-    records,
-    source: "notion",
-    requestedSource: "notion",
-    fallback: false,
-    fallbackReason: "",
-  };
+  if (!validSources.has(requestedSource)) {
+    throw new Error("source debe ser auto, postgres o notion");
+  }
+
+  if (requestedSource === "notion") {
+    return {
+      records: await getPayrollRecordsFromNotion(weekStart, weekEnd),
+      source: "notion",
+      requestedSource,
+      fallback: false,
+      fallbackReason: "",
+    };
+  }
+
+  try {
+    if (!postgresStatus.connected) {
+      throw new Error("PostgreSQL no está conectado");
+    }
+
+    let [postgresRecords, syncStatus] = await Promise.all([
+      listPayrollPostgres({ weekStart, weekEnd }),
+      getPayrollSyncStatus(weekStart, weekEnd),
+    ]);
+
+    let hasSuccessfulSync = syncStatus?.status === "success";
+
+    // Autorrecuperación: si la semana aún no tiene estado exitoso, intenta sincronizarla
+    // una vez antes de activar el fallback a Notion.
+    if (!hasSuccessfulSync) {
+      const repairResult = await runPayrollSync("auto-read-repair", weekStart, weekEnd);
+
+      if (repairResult?.ok && !repairResult?.skipped) {
+        [postgresRecords, syncStatus] = await Promise.all([
+          listPayrollPostgres({ weekStart, weekEnd }),
+          getPayrollSyncStatus(weekStart, weekEnd),
+        ]);
+        hasSuccessfulSync = syncStatus?.status === "success";
+      }
+    }
+
+    // Si ya existen registros válidos, PostgreSQL puede seguir sirviendo la semana aunque
+    // el estado anterior se haya perdido durante una migración de schema.
+    if (!hasSuccessfulSync && postgresRecords.length === 0) {
+      throw new Error("La semana todavía no tiene una sincronización exitosa en PostgreSQL");
+    }
+
+    return {
+      records: postgresRecords.map(mapPayrollPostgresToLegacy),
+      source: "postgres",
+      requestedSource,
+      fallback: false,
+      fallbackReason: hasSuccessfulSync
+        ? ""
+        : "Se encontraron registros en PostgreSQL; el estado de sincronización será reparado en la siguiente sincronización.",
+      syncStatus,
+    };
+  } catch (error) {
+    if (requestedSource === "postgres" || !allowFallback) {
+      throw error;
+    }
+
+    console.warn(
+      `⚠️ Payroll PostgreSQL fallback → Notion (${weekStart} a ${weekEnd}):`,
+      error.message
+    );
+
+    return {
+      records: await getPayrollRecordsFromNotion(weekStart, weekEnd),
+      source: "notion",
+      requestedSource,
+      fallback: true,
+      fallbackReason: error.message,
+    };
+  }
 }
 
 async function getPayrollRecords(weekStart, weekEnd, options = {}) {
@@ -2641,20 +2709,38 @@ app.get("/api/payroll/compare", async (req, res) => {
     const currentWeek = getPayrollWeek(new Date());
     const weekStart = String(req.query.start || currentWeek.weekStart).trim();
     const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
+    const shouldSync = String(req.query.sync || "false").toLowerCase() === "true";
+
     validatePayrollRange(weekStart, weekEnd);
 
-    const notionRecords = await getPayrollRecordsFromNotion(weekStart, weekEnd);
-    const total = roundMoney(notionRecords.reduce((sum, record) => sum + Number(record.amount || 0), 0));
+    if (!postgresStatus.connected) {
+      return res.status(503).json({
+        ok: false,
+        message: "PostgreSQL no está conectado; no se pueden comparar las dos fuentes.",
+      });
+    }
 
-    return res.json({
-      ok: true,
-      matches: true,
-      disabled: true,
-      source: "notion",
+    let syncResult = null;
+    if (shouldSync) {
+      syncResult = await runPayrollSync("compare", weekStart, weekEnd);
+    }
+
+    const [notionRecords, postgresRecords, syncStatus] = await Promise.all([
+      getPayrollRecordsFromNotion(weekStart, weekEnd),
+      listPayrollPostgres({ weekStart, weekEnd }),
+      getPayrollSyncStatus(weekStart, weekEnd),
+    ]);
+
+    const comparison = comparePayrollRecordSets(notionRecords, postgresRecords);
+
+    return res.status(comparison.matches ? 200 : 409).json({
+      ok: comparison.matches,
       weekStart,
       weekEnd,
-      notion: { count: notionRecords.length, total },
-      message: "La comparación fue eliminada. Notion es la única fuente oficial de Payroll.",
+      syncRequested: shouldSync,
+      syncResult,
+      syncStatus,
+      ...comparison,
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: error.message });
@@ -2669,7 +2755,8 @@ app.get("/api/payroll/preview", async (req, res) => {
     const source = "notion";
 
     const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
-      source: "notion",
+      source,
+      allowFallback: source === "auto",
     });
 
     const records = payrollRead.records;
@@ -3006,10 +3093,10 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   validatePayrollRange(weekStart, weekEnd);
   const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
     source: "notion",
+    allowFallback: false,
   });
   const records = payrollRead.records;
-  // El Excel se construye exclusivamente con Payroll Records de Notion.
-  const hourlyRecords = [];
+  const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = process.env.COMPANY_NAME || "417 Maid";
@@ -3048,6 +3135,8 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Property", key: "propertyName", width: 18 },
     { header: "Room Type", key: "roomType", width: 15 },
     { header: "Amount", key: "amount", width: 15 },
+    { header: "Notion Page", key: "sourceNotionId", width: 38 },
+    { header: "Validation", key: "validation", width: 32 },
   ];
 
   for (const r of records) {
@@ -3057,14 +3146,15 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     person.unitTotal += amount;
     person.roles.add("Cleaner");
 
-    if (!r.date || !r.cleaner || !r.unit) {
-      warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `Registro incompleto: ${r.unit || "sin unidad"}` });
+    if (!r.date || !r.cleaner || !r.unit || (Array.isArray(r.issues) && r.issues.length)) {
+      const issueText = Array.isArray(r.issues) && r.issues.length ? ` · ${r.issues.join(", ")}` : "";
+      warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `Registro incompleto: ${r.unit || "sin unidad"}${issueText}` });
     }
     if (!r.roomType || amount <= 0) {
       warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `${r.unit}: tarifa o tipo de unidad inválido` });
     }
 
-    dailySheet.addRow({ ...r, amount });
+    dailySheet.addRow({ ...r, amount, validation: Array.isArray(r.issues) && r.issues.length ? r.issues.join(", ") : "OK" });
   }
 
   hourlySheet.columns = [
@@ -6172,12 +6262,14 @@ app.get("/payroll-preview", async (req, res) => {
     const weekEnd = String(req.query.end || "").trim();
     validatePayrollRange(weekStart, weekEnd);
 
-    const requestedSource = "notion";
-    const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
-      source: "notion",
-    });
-    // La vista de Payroll usa solamente los registros existentes en Notion.
-    const hourlyRecords = [];
+    const requestedSource = String(req.query.source || "auto").trim().toLowerCase();
+    const [payrollRead, hourlyRecords] = await Promise.all([
+      getPayrollRecordsWithSource(weekStart, weekEnd, {
+        source: requestedSource,
+        allowFallback: requestedSource === "auto",
+      }),
+      getHourlyPayrollRecords(weekStart, weekEnd),
+    ]);
     const records = payrollRead.records;
 
     const employees = new Map();
