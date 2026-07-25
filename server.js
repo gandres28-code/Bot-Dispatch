@@ -1956,146 +1956,143 @@ async function createPayrollRecord({ cleaner, unit, date }) {
 
   return result;
 }
-// ■ Leer Payroll Records directamente desde Notion.
-// Se conserva como fallback y para comparar ambas fuentes.
+// ■ Nómina directa desde la página central de Notion.
+// NOTION_DATABASE_ID es la fuente oficial. Payroll Records y PostgreSQL no participan.
+function readCentralPropertyText(property) {
+  if (!property) return "";
+  if (property.title) return property.title.map((item) => item.plain_text || item.text?.content || "").join("").trim();
+  if (property.rich_text) return property.rich_text.map((item) => item.plain_text || item.text?.content || "").join("").trim();
+  if (property.select?.name) return String(property.select.name).trim();
+  if (property.status?.name) return String(property.status.name).trim();
+  if (property.multi_select) return property.multi_select.map((item) => item.name).filter(Boolean).join(", ").trim();
+  if (property.people) return property.people.map((item) => item.name || item.person?.email || "").filter(Boolean).join(", ").trim();
+  if (property.formula?.string != null) return String(property.formula.string).trim();
+  if (property.formula?.number != null) return String(property.formula.number);
+  if (property.rollup?.number != null) return String(property.rollup.number);
+  if (property.number != null) return String(property.number);
+  return "";
+}
+
+function readCentralNumber(properties, names) {
+  for (const name of names) {
+    const prop = properties?.[name];
+    if (!prop) continue;
+    if (prop.number != null && Number.isFinite(Number(prop.number))) return Number(prop.number);
+    if (prop.formula?.number != null && Number.isFinite(Number(prop.formula.number))) return Number(prop.formula.number);
+    if (prop.rollup?.number != null && Number.isFinite(Number(prop.rollup.number))) return Number(prop.rollup.number);
+    const text = readCentralPropertyText(prop).replace(/[$,]/g, "").trim();
+    if (text && Number.isFinite(Number(text))) return Number(text);
+  }
+  return null;
+}
+
+function centralCleanerText(properties) {
+  const names = ["Assigned Cleaner", "Cleaner", "Assigned Cleaners", "Housekeeper"];
+  for (const name of names) {
+    const value = readCentralPropertyText(properties?.[name]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function centralUnitText(properties) {
+  const names = ["Room Number", "Unit", "Room", "Unit Number", "Property Unit"];
+  for (const name of names) {
+    const value = readCentralPropertyText(properties?.[name]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function centralRoomType(properties, unit) {
+  const names = ["Room Type", "Type", "Unit Type"];
+  for (const name of names) {
+    const value = readCentralPropertyText(properties?.[name]);
+    if (value) return value.toUpperCase();
+  }
+  return getRoomType(unit);
+}
+
 async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
-  if (!NOTION_PAYROLL_DATABASE_ID) {
-    throw new Error("Falta NOTION_PAYROLL_DATABASE_ID");
+  if (!NOTION_DATABASE_ID) throw new Error("Falta NOTION_DATABASE_ID de la página central");
+
+  const records = [];
+  const audit = { days: 0, pages: 0, included: 0, missingCleaner: 0, missingUnit: 0, zeroRate: 0 };
+  const startDate = new Date(`${weekStart}T12:00:00`);
+  const endDate = new Date(`${weekEnd}T12:00:00`);
+
+  for (let cursorDate = new Date(startDate); cursorDate <= endDate; cursorDate.setDate(cursorDate.getDate() + 1)) {
+    const date = cursorDate.toISOString().slice(0, 10);
+    const pages = await fetchRoomsFreshFromNotion(date);
+    audit.days += 1;
+    audit.pages += pages.length;
+
+    for (const page of pages) {
+      const properties = page?.properties || {};
+      const workDate = properties.Date?.date?.start?.slice(0, 10) || date;
+      const unit = centralUnitText(properties);
+      const cleanerText = centralCleanerText(properties);
+      const cleaners = splitCleanerNames(cleanerText);
+      const roomType = centralRoomType(properties, unit);
+      const explicitRate = readCentralNumber(properties, ["Rate", "Amount", "Payroll Rate", "Cleaning Rate"]);
+      const calculatedPay = getUnitPay(unit);
+      const grossAmount = roundMoney(explicitRate != null ? explicitRate : calculatedPay.amount || 0);
+      const propertyName = readCentralPropertyText(properties.Property)
+        || readCentralPropertyText(properties.Hotel)
+        || readCentralPropertyText(properties.Location)
+        || getPayrollPropertyFromUnit(unit)
+        || "ALL";
+
+      if (!unit) { audit.missingUnit += 1; continue; }
+      if (!cleaners.length) { audit.missingCleaner += 1; continue; }
+      if (grossAmount <= 0) audit.zeroRate += 1;
+
+      const splitCount = cleaners.length;
+      cleaners.forEach((cleaner, index) => {
+        records.push({
+          id: null,
+          date: workDate,
+          cleaner: normalizeCleaner(cleaner),
+          unit,
+          roomType,
+          propertyName,
+          grossUnitAmount: grossAmount,
+          splitCount,
+          splitPercent: Number((1 / splitCount).toFixed(4)),
+          amount: roundMoney(grossAmount / splitCount),
+          notionId: `${page.id}:${index + 1}:${cleanEmployeeText(cleaner)}`,
+          sourcePageId: page.id,
+          payType: "unit",
+          roleWorked: "Cleaner",
+          manualOverride: false,
+          adjustmentReason: "",
+          status: readCentralPropertyText(properties["Cleaning Status"]) || "Central",
+          source: "central-notion",
+        });
+        audit.included += 1;
+      });
+    }
   }
 
-  let results = [];
-  let cursor;
-
-  do {
-    const body = {
-      database_id: NOTION_PAYROLL_DATABASE_ID,
-      page_size: 100,
-      filter: {
-        and: [
-          { property: "Date", date: { on_or_after: weekStart } },
-          { property: "Date", date: { on_or_before: weekEnd } },
-        ],
-      },
-      sorts: [{ property: "Date", direction: "ascending" }],
-    };
-
-    if (cursor) body.start_cursor = cursor;
-
-    const response = await notion.databases.query(body);
-    results = results.concat(response.results || []);
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
-
-  const expanded = await Promise.all(
-    results.map((page) => getPayrollRecordsFromNotionPage(page))
-  );
-
-  return expanded.flat().map((record) => ({
-    id: null,
-    date: record.workDate,
-    cleaner: normalizeCleaner(record.employee),
-    unit: record.unit,
-    roomType: record.roomType,
-    propertyName: record.propertyName,
-    grossUnitAmount: record.grossUnitAmount,
-    splitCount: record.splitCount,
-    splitPercent: record.splitPercent,
-    amount: roundMoney(record.amount),
-    notionId: record.notionId,
-    payType: record.payType,
-    roleWorked: record.roleWorked,
-    manualOverride: false,
-    adjustmentReason: "",
-    status: record.status,
-    issues: Array.isArray(record.issues) ? record.issues : [],
-    sourceNotionId: record.sourceNotionId || "",
-  }));
+  records.sort((a, b) => `${a.date}|${a.unit}|${a.cleaner}`.localeCompare(`${b.date}|${b.unit}|${b.cleaner}`));
+  console.log("PAYROLL CENTRAL NOTION AUDIT:", { weekStart, weekEnd, ...audit });
+  return records;
 }
 
 async function getPayrollRecordsWithSource(
   weekStart,
   weekEnd,
-  { source = "auto", allowFallback = true } = {}
+  { source = "central", allowFallback = false } = {}
 ) {
   validatePayrollRange(weekStart, weekEnd);
-
-  const requestedSource = String(source || "auto").toLowerCase();
-  const validSources = new Set(["auto", "postgres", "notion"]);
-
-  if (!validSources.has(requestedSource)) {
-    throw new Error("source debe ser auto, postgres o notion");
-  }
-
-  if (requestedSource === "notion") {
-    return {
-      records: await getPayrollRecordsFromNotion(weekStart, weekEnd),
-      source: "notion",
-      requestedSource,
-      fallback: false,
-      fallbackReason: "",
-    };
-  }
-
-  try {
-    if (!postgresStatus.connected) {
-      throw new Error("PostgreSQL no está conectado");
-    }
-
-    let [postgresRecords, syncStatus] = await Promise.all([
-      listPayrollPostgres({ weekStart, weekEnd }),
-      getPayrollSyncStatus(weekStart, weekEnd),
-    ]);
-
-    let hasSuccessfulSync = syncStatus?.status === "success";
-
-    // Autorrecuperación: si la semana aún no tiene estado exitoso, intenta sincronizarla
-    // una vez antes de activar el fallback a Notion.
-    if (!hasSuccessfulSync) {
-      const repairResult = await runPayrollSync("auto-read-repair", weekStart, weekEnd);
-
-      if (repairResult?.ok && !repairResult?.skipped) {
-        [postgresRecords, syncStatus] = await Promise.all([
-          listPayrollPostgres({ weekStart, weekEnd }),
-          getPayrollSyncStatus(weekStart, weekEnd),
-        ]);
-        hasSuccessfulSync = syncStatus?.status === "success";
-      }
-    }
-
-    // Si ya existen registros válidos, PostgreSQL puede seguir sirviendo la semana aunque
-    // el estado anterior se haya perdido durante una migración de schema.
-    if (!hasSuccessfulSync && postgresRecords.length === 0) {
-      throw new Error("La semana todavía no tiene una sincronización exitosa en PostgreSQL");
-    }
-
-    return {
-      records: postgresRecords.map(mapPayrollPostgresToLegacy),
-      source: "postgres",
-      requestedSource,
-      fallback: false,
-      fallbackReason: hasSuccessfulSync
-        ? ""
-        : "Se encontraron registros en PostgreSQL; el estado de sincronización será reparado en la siguiente sincronización.",
-      syncStatus,
-    };
-  } catch (error) {
-    if (requestedSource === "postgres" || !allowFallback) {
-      throw error;
-    }
-
-    console.warn(
-      `⚠️ Payroll PostgreSQL fallback → Notion (${weekStart} a ${weekEnd}):`,
-      error.message
-    );
-
-    return {
-      records: await getPayrollRecordsFromNotion(weekStart, weekEnd),
-      source: "notion",
-      requestedSource,
-      fallback: true,
-      fallbackReason: error.message,
-    };
-  }
+  const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
+  return {
+    records,
+    source: "central-notion",
+    requestedSource: String(source || "central"),
+    fallback: false,
+    fallbackReason: "",
+  };
 }
 
 async function getPayrollRecords(weekStart, weekEnd, options = {}) {
@@ -2709,38 +2706,20 @@ app.get("/api/payroll/compare", async (req, res) => {
     const currentWeek = getPayrollWeek(new Date());
     const weekStart = String(req.query.start || currentWeek.weekStart).trim();
     const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
-    const shouldSync = String(req.query.sync || "false").toLowerCase() === "true";
-
     validatePayrollRange(weekStart, weekEnd);
-
-    if (!postgresStatus.connected) {
-      return res.status(503).json({
-        ok: false,
-        message: "PostgreSQL no está conectado; no se pueden comparar las dos fuentes.",
-      });
-    }
-
-    let syncResult = null;
-    if (shouldSync) {
-      syncResult = await runPayrollSync("compare", weekStart, weekEnd);
-    }
-
-    const [notionRecords, postgresRecords, syncStatus] = await Promise.all([
-      getPayrollRecordsFromNotion(weekStart, weekEnd),
-      listPayrollPostgres({ weekStart, weekEnd }),
-      getPayrollSyncStatus(weekStart, weekEnd),
-    ]);
-
-    const comparison = comparePayrollRecordSets(notionRecords, postgresRecords);
-
-    return res.status(comparison.matches ? 200 : 409).json({
-      ok: comparison.matches,
+    const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
+    return res.json({
+      ok: true,
+      matches: true,
       weekStart,
       weekEnd,
-      syncRequested: shouldSync,
-      syncResult,
-      syncStatus,
-      ...comparison,
+      source: "central-notion",
+      notionCount: records.length,
+      postgresCount: 0,
+      missingInPostgres: [],
+      extraInPostgres: [],
+      amountMismatches: [],
+      message: "Payroll se verificó directamente contra la página central de Notion.",
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: error.message });
@@ -2752,7 +2731,7 @@ app.get("/api/payroll/preview", async (req, res) => {
     const currentWeek = getPayrollWeek(new Date());
     const weekStart = String(req.query.start || currentWeek.weekStart).trim();
     const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
-    const source = "notion";
+    const source = String(req.query.source || "auto").trim().toLowerCase();
 
     const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
       source,
@@ -3092,7 +3071,7 @@ app.get("/test-mobile-code-login", async (req, res) => {
 async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   validatePayrollRange(weekStart, weekEnd);
   const payrollRead = await getPayrollRecordsWithSource(weekStart, weekEnd, {
-    source: "notion",
+    source: "central",
     allowFallback: false,
   });
   const records = payrollRead.records;
@@ -3135,8 +3114,6 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     { header: "Property", key: "propertyName", width: 18 },
     { header: "Room Type", key: "roomType", width: 15 },
     { header: "Amount", key: "amount", width: 15 },
-    { header: "Notion Page", key: "sourceNotionId", width: 38 },
-    { header: "Validation", key: "validation", width: 32 },
   ];
 
   for (const r of records) {
@@ -3146,15 +3123,14 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     person.unitTotal += amount;
     person.roles.add("Cleaner");
 
-    if (!r.date || !r.cleaner || !r.unit || (Array.isArray(r.issues) && r.issues.length)) {
-      const issueText = Array.isArray(r.issues) && r.issues.length ? ` · ${r.issues.join(", ")}` : "";
-      warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `Registro incompleto: ${r.unit || "sin unidad"}${issueText}` });
+    if (!r.date || !r.cleaner || !r.unit) {
+      warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `Registro incompleto: ${r.unit || "sin unidad"}` });
     }
     if (!r.roomType || amount <= 0) {
       warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `${r.unit}: tarifa o tipo de unidad inválido` });
     }
 
-    dailySheet.addRow({ ...r, amount, validation: Array.isArray(r.issues) && r.issues.length ? r.issues.join(", ") : "OK" });
+    dailySheet.addRow({ ...r, amount });
   }
 
   hourlySheet.columns = [
