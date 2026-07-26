@@ -543,6 +543,7 @@
         <button class="btn violet" id="ratesButton" hidden disabled>⚙️ Tarifas</button>
         <button class="btn amber" id="weekLockButton" hidden disabled>🔒 Cerrar semana</button>
         <button class="btn ghost" id="auditButton" hidden disabled>🧾 Historial</button>
+        <button class="btn violet" id="manualHoursButton">➕ Agregar horas</button>
         <button class="btn success" id="excelButton">⬇️ Descargar Excel</button>
         <button class="btn ghost" id="refreshButton">↻ Actualizar vista</button>
       </div>
@@ -588,6 +589,25 @@
       </article>
     </section>
 
+    <section class="section panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Horas pagadas</h2>
+          <p class="panel-subtitle">Entradas y salidas de Time Clock, más ajustes manuales guardados en Notion</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <span class="badge blue">Horas: <b id="hourlyHoursTotal">0.00</b></span>
+          <span class="badge green">Pago: <b id="hourlyPayTotal">$0.00</b></span>
+        </div>
+      </div>
+      <div style="overflow:auto">
+        <table class="detail-table" style="min-width:900px">
+          <thead><tr><th>Empleado</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Tarifa</th><th>Total</th><th>Acción</th></tr></thead>
+          <tbody id="hourlyTableBody"><tr><td colspan="8"><div class="empty">Cargando horas…</div></td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="section split-grid">
       <article class="panel">
         <div class="panel-header">
@@ -627,6 +647,26 @@
     </section>
   </main>
 
+
+
+  <div class="modal-backdrop" id="manualHoursModal">
+    <div class="modal">
+      <div class="modal-head"><h3>⏱️ Agregar horas manuales</h3><button class="mini-btn" data-close-modal="manualHoursModal">✕</button></div>
+      <div class="modal-body">
+        <p class="panel-subtitle">Este registro se guardará en Time Clock de Notion y se sumará automáticamente a la nómina semanal.</p>
+        <div class="modal-grid">
+          <div class="field full"><label>Empleado</label><input id="manualEmployee" placeholder="Nombre exacto del empleado"></div>
+          <div class="field"><label>Función</label><input id="manualRole" value="Hourly" placeholder="Laundry, Runner, Inspector..."></div>
+          <div class="field"><label>Fecha</label><input id="manualDate" type="date"></div>
+          <div class="field"><label>Hora de entrada</label><input id="manualClockIn" type="time"></div>
+          <div class="field"><label>Hora de salida</label><input id="manualClockOut" type="time"></div>
+          <div class="field"><label>Tarifa por hora</label><input id="manualRate" type="number" min="0" step="0.01" placeholder="20.00"></div>
+          <div class="field full"><label>Motivo</label><textarea id="manualReason" placeholder="Ejemplo: olvidó hacer Clock In, capacitación, trabajo adicional..."></textarea></div>
+        </div>
+        <div class="modal-actions"><button class="btn ghost" data-close-modal="manualHoursModal">Cancelar</button><button class="btn violet" id="saveManualHoursButton">Guardar horas</button></div>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-backdrop" id="rateModal">
     <div class="modal">
