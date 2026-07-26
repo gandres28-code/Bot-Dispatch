@@ -11,6 +11,7 @@
     weekState: null,
     rates: [],
     selectedRecord: null,
+    hourly: null,
     loading: false,
   };
 
@@ -181,6 +182,7 @@
         fetchJson(`/api/payroll/preview?${range}`),
         fetchJson(`/api/sync/payroll/status?${range}`),
         fetchJson(`/api/payroll/week?${range}`),
+        fetchJson(`/api/payroll/hourly?${range}`),
       ];
 
       if (compare) requests.push(fetchJson(`/api/payroll/compare?${range}`));
@@ -190,7 +192,8 @@
       state.raw = results[1].data;
       state.syncStatus = results[2].data;
       state.weekState = results[3].data;
-      if (compare) state.comparison = results[4].data;
+      state.hourly = results[4].data;
+      if (compare) state.comparison = results[5].data;
 
       renderAll();
       setBadge($("systemBadge"), "Actualizado", "green");
@@ -211,6 +214,7 @@
     renderComparison();
     renderWeekState();
     renderEmployees();
+    renderHourly();
     renderDaily();
     renderWarnings();
   }
@@ -381,6 +385,85 @@
         await resetAdjustment(Number(button.dataset.recordId));
       });
     });
+  }
+
+
+  function formatClock(value) {
+    const date = safeDate(value);
+    if (!date) return "—";
+    return new Intl.DateTimeFormat("es-US", {
+      timeZone: "America/Chicago",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  function renderHourly() {
+    const payload = state.hourly || {};
+    const records = payload.records || [];
+    $("hourlyHoursTotal").textContent = Number(payload.totalHours || 0).toFixed(2);
+    $("hourlyPayTotal").textContent = money(payload.totalPay || 0);
+    const container = $("hourlyTableBody");
+    if (!records.length) {
+      container.innerHTML = '<tr><td colspan="8"><div class="empty">No hay horas completadas para esta semana.</div></td></tr>';
+      return;
+    }
+    container.innerHTML = records.map((record) => `
+      <tr>
+        <td><strong>${escapeHtml(record.employee || "Sin empleado")}</strong><div class="employee-meta">${escapeHtml(record.role || "Hourly")}</div></td>
+        <td>${escapeHtml(record.workDate || "")}</td>
+        <td>${escapeHtml(formatClock(record.clockIn))}</td>
+        <td>${escapeHtml(formatClock(record.clockOut))}</td>
+        <td>${Number(record.hours || 0).toFixed(2)}</td>
+        <td>${money(record.hourlyRate)}</td>
+        <td><strong>${money(record.total)}</strong>${record.manual ? '<div class="employee-meta">Manual</div>' : ''}</td>
+        <td>${record.manual ? `<button class="mini-btn reset delete-hour" data-id="${escapeHtml(record.id)}">Eliminar</button>` : '<span class="badge green">Clock</span>'}</td>
+      </tr>`).join("");
+    container.querySelectorAll(".delete-hour").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!confirm("¿Eliminar estas horas manuales de Notion?")) return;
+        try {
+          await fetchJson(`/api/payroll/hourly/manual/${encodeURIComponent(button.dataset.id)}`, { method: "DELETE" });
+          showToast("Horas manuales eliminadas.", "success");
+          await loadDashboard();
+        } catch (error) { showToast(error.message, "error"); }
+      });
+    });
+  }
+
+  function openManualHours() {
+    $("manualDate").value = state.start || isoLocal(new Date());
+    $("manualEmployee").value = "";
+    $("manualRole").value = "Hourly";
+    $("manualClockIn").value = "08:00";
+    $("manualClockOut").value = "16:00";
+    $("manualRate").value = "";
+    $("manualReason").value = "";
+    openModal("manualHoursModal");
+  }
+
+  async function saveManualHours() {
+    try {
+      const payload = {
+        employee: $("manualEmployee").value.trim(),
+        role: $("manualRole").value.trim(),
+        date: $("manualDate").value,
+        clockIn: $("manualClockIn").value,
+        clockOut: $("manualClockOut").value,
+        hourlyRate: Number($("manualRate").value || 0),
+        reason: $("manualReason").value.trim(),
+      };
+      const { data } = await fetchJson("/api/payroll/hourly/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      closeModal("manualHoursModal");
+      showToast(`${data.hours.toFixed(2)} horas agregadas · ${money(data.total)}`, "success");
+      await loadDashboard();
+    } catch (error) { showToast(error.message, "error"); }
   }
 
   function renderDaily() {
@@ -643,6 +726,8 @@
     document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => closeModal(button.dataset.closeModal)));
     document.querySelectorAll(".modal-backdrop").forEach((modal) => modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal.id); }));
     $("excelButton").addEventListener("click", downloadExcel);
+    $("manualHoursButton").addEventListener("click", openManualHours);
+    $("saveManualHoursButton").addEventListener("click", saveManualHours);
     $("refreshButton").addEventListener("click", () => loadDashboard());
     $("startDate").addEventListener("change", () => {
       const start = parseLocalDate($("startDate").value);
