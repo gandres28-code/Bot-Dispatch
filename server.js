@@ -2101,36 +2101,69 @@ async function getPayrollRecords(weekStart, weekEnd, options = {}) {
 }
 
 // ■ Generar / actualizar Excel semanal con hoja por limpiador
+function chicagoDateISO(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return String(value).slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+async function queryAllNotionDatabasePages(databaseId) {
+  const results = [];
+  let cursor;
+  do {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100,
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    results.push(...(response.results || []));
+    cursor = response.has_more ? response.next_cursor : undefined;
+  } while (cursor);
+  return results;
+}
+
 async function getHourlyPayrollRecords(weekStart, weekEnd) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
 
-  const response = await notion.databases.query({
-    database_id: NOTION_TIME_CLOCK_DATABASE_ID,
-    page_size: 100,
-  });
+  const pages = await queryAllNotionDatabasePages(NOTION_TIME_CLOCK_DATABASE_ID);
 
-  return response.results
+  return pages
     .map((page) => {
-      const p = page.properties;
-
+      const p = page.properties || {};
+      const entryTitle = p.Entry?.title?.map((t) => t.plain_text).join("") || "";
+      const clockIn = p["Clock In"]?.date?.start || "";
+      const clockOut = p["Clock Out"]?.date?.start || "";
+      const hours = Number(p.Hours?.number || 0);
+      const hourlyRate = Number(p["Hourly Rate"]?.number || 0);
+      const total = Number(p.Total?.number ?? (hours * hourlyRate));
       return {
+        id: page.id,
         employee: p.Employee?.rich_text?.map((t) => t.plain_text).join("") || "",
         code: p.Code?.rich_text?.map((t) => t.plain_text).join("") || "",
         role: p.Role?.select?.name || "",
-        clockIn: p["Clock In"]?.date?.start || "",
-        clockOut: p["Clock Out"]?.date?.start || "",
-        hours: p.Hours?.number || 0,
-        hourlyRate: p["Hourly Rate"]?.number || 0,
-        total: p.Total?.number || 0,
+        clockIn,
+        clockOut,
+        workDate: chicagoDateISO(clockIn),
+        hours,
+        hourlyRate,
+        total: Number(total.toFixed(2)),
         workLocation: p["Location Status"]?.select?.name || "Unspecified",
         status: p.Status?.select?.name || "",
+        manual: /^Manual Hours/i.test(entryTitle),
+        entryTitle,
       };
     })
-    .filter((r) => {
-      if (!r.clockIn) return false;
-      const day = r.clockIn.slice(0, 10);
-      return day >= weekStart && day <= weekEnd && r.status === "Completed";
-    });
+    .filter((r) => r.workDate >= weekStart && r.workDate <= weekEnd && r.status === "Completed");
 }
 async function getEmployeesCached(forceRefresh = false) {
   const legacyCacheKey = "employees:active";
@@ -5502,7 +5535,7 @@ function syncOperationalActionToNotionInBackground({
 
 app.post("/action", async (req, res) => {
   try {
-    const { action, unit, note, name, photoUrl } = req.body || {};
+    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -5515,61 +5548,59 @@ app.post("/action", async (req, res) => {
       return res.status(400).json({ success: false, message: "Debes escribir una nota" });
     }
 
-    // NOTION ES LA FUENTE OFICIAL DE LA OPERACIÓN DIARIA.
-    // No confirmamos la acción al teléfono hasta que Notion la haya guardado.
-    await updateNotionRoom(
-      String(unit).trim(),
-      String(action).trim().toUpperCase(),
-      String(name).trim(),
-      String(note || "").trim(),
-      "cleaner",
-      String(photoUrl || "").trim()
-    );
+    try {
+      const eventResult = await RoomEngine.handleCleanerAction({
+        eventId,
+        requestId,
+        action,
+        unit,
+        cleaner: name,
+        note,
+        photoUrl,
+      });
 
-    if (action === "DONE") {
-      runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
-    }
-
-    // PostgreSQL es una copia operativa para velocidad, historial y análisis.
-    // Si falla, jamás revierte ni bloquea el movimiento ya confirmado en Notion.
-    runDetached(`postgres-mirror-cleaner:${action}:${unit}`, async () => {
-      if (!postgresStatus.connected) return;
-
-      try {
-        await insertOperationalEventPostgres({
-          action,
-          unit,
-          employee: name,
-          role: "Cleaner",
-          note: note || "",
-          photoUrl: photoUrl || "",
-          category: ["ISSUE", "LOST_FOUND"].includes(action)
-            ? "Problem"
-            : action === "SUPPLIES" ? "Supplies" : "Cleaning",
-          priority: action === "ISSUE" ? "High" : "Normal",
-          source: "notion-authoritative",
-        });
-        await runRoomSync("notion-authoritative-cleaner", todayISO());
-      } catch (error) {
-        console.error("POSTGRES MIRROR CLEANER ERROR:", error.message);
+      if (action === "DONE") {
+        runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
       }
-    });
 
-    return res.json({
-      success: true,
-      source: "notion",
-      postgresUpdated: postgresStatus.connected,
-      notionSync: "completed",
-      status: notionStatusFromAction(action) || "",
-      message: `Guardado en Notion: ${actionLabel(action)} - ${unit}`,
-    });
+      return res.json({
+        success: true,
+        source: "postgres",
+        eventId: eventResult?.eventId || "",
+        duplicate: Boolean(eventResult?.duplicate),
+        postgresUpdated: true,
+        notionSync: "queued",
+        payroll: eventResult?.payroll || null,
+        status: eventResult?.status || notionStatusFromAction(action) || "",
+        message: `Enviado correctamente: ${actionLabel(action)} - ${unit}`,
+      });
+    } catch (postgresError) {
+      console.error("⚠️ Event Engine cleaner falló; fallback en background:", postgresError.message);
+
+      if (isDuplicateAction(action, unit, name)) {
+        return res.status(400).json({
+          success: false,
+          message: "Acción ya registrada recientemente",
+        });
+      }
+
+      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Cleaner" });
+
+      return res.status(202).json({
+        success: true,
+        accepted: true,
+        source: "background-fallback",
+        eventId: eventId || requestId || "",
+        duplicate: false,
+        postgresUpdated: false,
+        notionSync: "processing",
+        status: notionStatusFromAction(action) || "",
+        message: `Acción recibida y procesándose: ${actionLabel(action)} - ${unit}`,
+      });
+    }
   } catch (error) {
     console.error("Error en /action:", error.message);
-    return res.status(503).json({
-      success: false,
-      retryable: true,
-      message: `No se guardó en Notion: ${error.message}`,
-    });
+    return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
   }
 });
 
@@ -5669,7 +5700,7 @@ app.get("/api/quality/leaderboard", async (req, res) => {
 
 app.post("/inspector-action", async (req, res) => {
   try {
-    const { action, unit, note, name, photoUrl } = req.body || {};
+    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
 
     if (!action || !unit || !name) {
       return res.status(400).json({
@@ -5682,53 +5713,54 @@ app.post("/inspector-action", async (req, res) => {
       return res.status(400).json({ success: false, message: "Debes escribir una nota" });
     }
 
-    await updateNotionRoom(
-      String(unit).trim(),
-      String(action).trim().toUpperCase(),
-      String(name).trim(),
-      String(note || "").trim(),
-      "inspector",
-      String(photoUrl || "").trim()
-    );
+    try {
+      const eventResult = await RoomEngine.handleInspectorAction({
+        eventId,
+        requestId,
+        action,
+        unit,
+        inspector: name,
+        note,
+        photoUrl,
+      });
 
-    runDetached(`postgres-mirror-inspector:${action}:${unit}`, async () => {
-      if (!postgresStatus.connected) return;
+      return res.json({
+        success: true,
+        source: "postgres",
+        eventId: eventResult?.eventId || "",
+        duplicate: Boolean(eventResult?.duplicate),
+        postgresUpdated: true,
+        notionSync: "queued",
+        status: eventResult?.status || notionStatusFromAction(action) || "",
+        message: `Inspector: ${actionLabel(action)} - ${unit}`,
+      });
+    } catch (postgresError) {
+      console.error("⚠️ Event Engine inspector falló; fallback en background:", postgresError.message);
 
-      try {
-        await insertOperationalEventPostgres({
-          action,
-          unit,
-          employee: name,
-          role: "Inspector",
-          note: note || "",
-          photoUrl: photoUrl || "",
-          category: ["INSPECTION_REPORT", "LOST_FOUND"].includes(action)
-            ? "Problem"
-            : action === "INSPECTION_SUPPLIES" ? "Supplies" : "Inspection",
-          priority: action === "INSPECTION_REPORT" ? "High" : "Normal",
-          source: "notion-authoritative",
+      if (isDuplicateAction(action, unit, name)) {
+        return res.status(400).json({
+          success: false,
+          message: "Acción ya registrada recientemente",
         });
-        await runRoomSync("notion-authoritative-inspector", todayISO());
-      } catch (error) {
-        console.error("POSTGRES MIRROR INSPECTOR ERROR:", error.message);
       }
-    });
 
-    return res.json({
-      success: true,
-      source: "notion",
-      postgresUpdated: postgresStatus.connected,
-      notionSync: "completed",
-      status: notionStatusFromAction(action) || "",
-      message: `Guardado en Notion: ${actionLabel(action)} - ${unit}`,
-    });
+      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Inspector" });
+
+      return res.status(202).json({
+        success: true,
+        accepted: true,
+        source: "background-fallback",
+        eventId: eventId || requestId || "",
+        duplicate: false,
+        postgresUpdated: false,
+        notionSync: "processing",
+        status: notionStatusFromAction(action) || "",
+        message: `Inspector: acción recibida y procesándose - ${unit}`,
+      });
+    }
   } catch (error) {
     console.error("Error inspector:", error.message);
-    return res.status(503).json({
-      success: false,
-      retryable: true,
-      message: `No se guardó en Notion: ${error.message}`,
-    });
+    return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
   }
 });
 
@@ -6230,6 +6262,79 @@ app.post("/api/room-alert", async (req, res) => {
     res.json({ ok: true, assignedCleaner, notifications: notifications.length });
   } catch (error) {
     res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+
+app.get("/api/payroll/hourly", async (req, res) => {
+  try {
+    const weekStart = String(req.query.start || "").trim();
+    const weekEnd = String(req.query.end || "").trim();
+    validatePayrollRange(weekStart, weekEnd);
+    const records = await getHourlyPayrollRecords(weekStart, weekEnd);
+    res.json({
+      ok: true,
+      source: "notion-time-clock",
+      count: records.length,
+      totalHours: Number(records.reduce((sum, r) => sum + Number(r.hours || 0), 0).toFixed(2)),
+      totalPay: roundMoney(records.reduce((sum, r) => sum + Number(r.total || 0), 0)),
+      records,
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/payroll/hourly/manual", async (req, res) => {
+  try {
+    if (!NOTION_TIME_CLOCK_DATABASE_ID) throw new Error("NOTION_TIME_CLOCK_DATABASE_ID no está configurado");
+    const employee = String(req.body.employee || "").trim();
+    const role = String(req.body.role || "Hourly").trim() || "Hourly";
+    const date = String(req.body.date || "").trim();
+    const clockInTime = String(req.body.clockIn || "").trim();
+    const clockOutTime = String(req.body.clockOut || "").trim();
+    const reason = String(req.body.reason || "Manual payroll adjustment").trim();
+    const hourlyRate = Number(req.body.hourlyRate || 0);
+    if (!employee || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Empleado y fecha son obligatorios");
+    if (!/^\d{2}:\d{2}$/.test(clockInTime) || !/^\d{2}:\d{2}$/.test(clockOutTime)) throw new Error("Entrada y salida deben tener una hora válida");
+    if (!(hourlyRate >= 0)) throw new Error("La tarifa por hora no es válida");
+
+    const clockIn = new Date(`${date}T${clockInTime}:00-05:00`);
+    let clockOut = new Date(`${date}T${clockOutTime}:00-05:00`);
+    if (clockOut <= clockIn) clockOut = new Date(clockOut.getTime() + 24 * 60 * 60 * 1000);
+    const hours = Number(((clockOut - clockIn) / 3600000).toFixed(2));
+    const total = Number((hours * hourlyRate).toFixed(2));
+
+    const created = await notion.pages.create({
+      parent: { database_id: NOTION_TIME_CLOCK_DATABASE_ID },
+      properties: {
+        Entry: { title: [{ text: { content: `Manual Hours - ${employee} - ${date} - ${reason}` } }] },
+        Employee: { rich_text: [{ text: { content: employee } }] },
+        Code: { rich_text: [{ text: { content: "MANUAL" } }] },
+        Role: { select: { name: role } },
+        "Hourly Rate": { number: hourlyRate },
+        "Clock In": { date: { start: clockIn.toISOString() } },
+        "Clock Out": { date: { start: clockOut.toISOString() } },
+        Hours: { number: hours },
+        Total: { number: total },
+        Status: { select: { name: "Completed" } },
+      },
+    });
+
+    res.json({ ok: true, id: created.id, employee, date, hours, hourlyRate, total });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.delete("/api/payroll/hourly/manual/:id", async (req, res) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) throw new Error("Registro requerido");
+    await notion.pages.update({ page_id: id, archived: true });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
   }
 });
 
@@ -10620,72 +10725,60 @@ app.patch("/api/admin/rooms/:id", async (req, res) => {
 });
 
 
-let postgresRecoveryTimer = null;
-let postgresServicesStarted = false;
-
-async function startPostgresServicesOnce(reason = "startup") {
-  if (!postgresStatus.connected || postgresServicesStarted) return;
-
-  postgresServicesStarted = true;
-  startSyncQueueWorker();
-  startEmployeeSyncSchedule();
-  startRoomSyncSchedule();
-
-  try {
-    await runEmployeeSync(reason);
-  } catch (error) {
-    console.error("EMPLOYEE INITIAL SYNC ERROR:", error.message);
-  }
-
-  try {
-    await runRoomSync(reason, todayISO());
-  } catch (error) {
-    console.error("ROOM INITIAL SYNC ERROR:", error.message);
-  }
-
-  // Payroll permanece directo desde la página central de Notion.
-  // No se inicia ningún worker ni calendario de Payroll hacia PostgreSQL.
-  console.log("💵 Payroll source: central Notion only (PostgreSQL disabled for payroll)");
-}
-
-function startPostgresRecoveryLoop() {
-  if (postgresRecoveryTimer) return;
-
-  const intervalMs = Math.max(
-    15000,
-    Number(process.env.POSTGRES_RECOVERY_INTERVAL_MS || 30000)
-  );
-
-  postgresRecoveryTimer = setInterval(async () => {
-    if (postgresStatus.connected) return;
-
-    console.warn("🔄 Reintentando conexión con PostgreSQL...");
-    const status = await startPostgres();
-
-    if (status.connected) {
-      await startPostgresServicesOnce("postgres-recovered");
-    }
-  }, intervalMs);
-
-  if (typeof postgresRecoveryTimer.unref === "function") {
-    postgresRecoveryTimer.unref();
-  }
-}
-
 async function startServer() {
   initializeFirebaseAdmin();
-
   const databaseStatus = await startPostgres();
 
   if (databaseStatus.connected) {
-    await startPostgresServicesOnce("startup");
+    startSyncQueueWorker();
+
+    try {
+      await runEmployeeSync("startup");
+      startEmployeeSyncSchedule();
+
+      await runRoomSync("startup", todayISO());
+      startRoomSyncSchedule();
+
+      const payrollWeek = getPayrollWeek(new Date());
+      await runPayrollSync("startup", payrollWeek.weekStart, payrollWeek.weekEnd);
+      startPayrollSyncSchedule();
+    } catch (error) {
+      // La sincronización no bloquea el panel. Notion sigue disponible.
+      console.error(
+        "⚠️ El servidor arrancará sin la sincronización inicial de Employees:",
+        error.message
+      );
+
+      startEmployeeSyncSchedule();
+
+      try {
+        await runRoomSync("startup-recovery", todayISO());
+      } catch (roomError) {
+        console.error(
+          "⚠️ El servidor arrancará sin la sincronización inicial de Rooms:",
+          roomError.message
+        );
+      }
+
+      startRoomSyncSchedule();
+
+      try {
+        const payrollWeek = getPayrollWeek(new Date());
+        await runPayrollSync("startup-recovery", payrollWeek.weekStart, payrollWeek.weekEnd);
+      } catch (payrollError) {
+        console.error(
+          "⚠️ El servidor arrancará sin la sincronización inicial de Payroll:",
+          payrollError.message
+        );
+      }
+
+      startPayrollSyncSchedule();
+    }
   } else {
     console.warn(
-      "⚠️ PostgreSQL no está disponible. Notion continuará recibiendo las acciones directamente."
+      "⚠️ Employee sync no se inició porque PostgreSQL no está conectado."
     );
   }
-
-  startPostgresRecoveryLoop();
 
   if (databaseStatus.connected) {
     setTimeout(() => {
