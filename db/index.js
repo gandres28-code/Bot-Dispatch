@@ -62,41 +62,11 @@ async function testDatabaseConnection() {
   return result.rows[0];
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isRetryableDatabaseError(error) {
-  return ["40P01", "55P03", "57P03", "08000", "08003", "08006"].includes(error?.code) ||
-    /deadlock|lock timeout|connection|terminating connection/i.test(String(error?.message || ""));
-}
-
 async function initializeDatabase() {
   const schemaPath = path.join(__dirname, "schema.sql");
   const schema = fs.readFileSync(schemaPath, "utf8");
-  const attempts = Math.max(1, Number(process.env.POSTGRES_INIT_ATTEMPTS || 6));
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const client = await getPool().connect();
-
-    try {
-      // Evita que dos instancias de Render ejecuten schema.sql simultáneamente.
-      await client.query("SELECT pg_advisory_lock($1)", [4172026]);
-      await client.query(schema);
-      const result = await client.query(`
-        SELECT NOW() AS database_time, current_database() AS database_name
-      `);
-      return result.rows[0];
-    } catch (error) {
-      if (!isRetryableDatabaseError(error) || attempt === attempts) throw error;
-      const delay = Math.min(15000, 1000 * Math.pow(2, attempt - 1));
-      console.warn(`⚠️ PostgreSQL init intento ${attempt}/${attempts}: ${error.message}. Reintentando...`);
-      await sleep(delay);
-    } finally {
-      try { await client.query("SELECT pg_advisory_unlock($1)", [4172026]); } catch (_) {}
-      client.release();
-    }
-  }
+  await query(schema);
 
   return testDatabaseConnection();
 }
