@@ -79,6 +79,7 @@ const {
   registerPushToken,
   deactivatePushToken,
   sendPushToEmployees,
+  sendPushToRole,
 } = require("./services/pushNotifications");
 
 const server = http.createServer(app);
@@ -10251,6 +10252,27 @@ app.post("/api/service-orders", async (req, res) => {
     await client.query("COMMIT");
     const order = normalizeServiceOrder(result.rows[0]);
     io.emit("service-order:created", order);
+
+    // Push notification for runners. The API response is not delayed if push fails.
+    const itemSummary = items.slice(0, 3).map(item => `${item.quantity} ${item.name}`).join(" · ");
+    const pushMessage = {
+      title: priority === "urgent" ? `🚨 Orden urgente · ${room}` : `📦 Nueva orden · ${room}`,
+      body: itemSummary || category,
+      link: "/runner-orders",
+      tag: `service-order-${order.id}`,
+      urgent: priority === "urgent",
+      data: { type:"SERVICE_ORDER", orderId:order.id, room, priority },
+    };
+    const assignedKey = assignedTo.toLowerCase();
+    const genericRunner = !assignedTo || ["runner","unassigned","sin asignar"].includes(assignedKey);
+    Promise.resolve(
+      genericRunner
+        ? sendPushToRole(postgresQuery, "runner", pushMessage)
+        : sendPushToEmployees(postgresQuery, [assignedTo], pushMessage)
+    ).then(result => {
+      console.log("SERVICE ORDER PUSH:", { orderId:order.id, assignedTo:assignedTo || "Runner", ...result });
+    }).catch(error => console.error("SERVICE ORDER PUSH ERROR:", error.message));
+
     res.status(201).json({ ok:true, order });
   } catch (error) {
     await client.query("ROLLBACK").catch(()=>{});
