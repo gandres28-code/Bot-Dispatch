@@ -2101,69 +2101,36 @@ async function getPayrollRecords(weekStart, weekEnd, options = {}) {
 }
 
 // ■ Generar / actualizar Excel semanal con hoja por limpiador
-function chicagoDateISO(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return String(value).slice(0, 10);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date).reduce((acc, part) => {
-    if (part.type !== "literal") acc[part.type] = part.value;
-    return acc;
-  }, {});
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-async function queryAllNotionDatabasePages(databaseId) {
-  const results = [];
-  let cursor;
-  do {
-    const response = await notion.databases.query({
-      database_id: databaseId,
-      page_size: 100,
-      ...(cursor ? { start_cursor: cursor } : {}),
-    });
-    results.push(...(response.results || []));
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
-  return results;
-}
-
 async function getHourlyPayrollRecords(weekStart, weekEnd) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
 
-  const pages = await queryAllNotionDatabasePages(NOTION_TIME_CLOCK_DATABASE_ID);
+  const response = await notion.databases.query({
+    database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+    page_size: 100,
+  });
 
-  return pages
+  return response.results
     .map((page) => {
-      const p = page.properties || {};
-      const entryTitle = p.Entry?.title?.map((t) => t.plain_text).join("") || "";
-      const clockIn = p["Clock In"]?.date?.start || "";
-      const clockOut = p["Clock Out"]?.date?.start || "";
-      const hours = Number(p.Hours?.number || 0);
-      const hourlyRate = Number(p["Hourly Rate"]?.number || 0);
-      const total = Number(p.Total?.number ?? (hours * hourlyRate));
+      const p = page.properties;
+
       return {
-        id: page.id,
         employee: p.Employee?.rich_text?.map((t) => t.plain_text).join("") || "",
         code: p.Code?.rich_text?.map((t) => t.plain_text).join("") || "",
         role: p.Role?.select?.name || "",
-        clockIn,
-        clockOut,
-        workDate: chicagoDateISO(clockIn),
-        hours,
-        hourlyRate,
-        total: Number(total.toFixed(2)),
+        clockIn: p["Clock In"]?.date?.start || "",
+        clockOut: p["Clock Out"]?.date?.start || "",
+        hours: p.Hours?.number || 0,
+        hourlyRate: p["Hourly Rate"]?.number || 0,
+        total: p.Total?.number || 0,
         workLocation: p["Location Status"]?.select?.name || "Unspecified",
         status: p.Status?.select?.name || "",
-        manual: /^Manual Hours/i.test(entryTitle),
-        entryTitle,
       };
     })
-    .filter((r) => r.workDate >= weekStart && r.workDate <= weekEnd && r.status === "Completed");
+    .filter((r) => {
+      if (!r.clockIn) return false;
+      const day = r.clockIn.slice(0, 10);
+      return day >= weekStart && day <= weekEnd && r.status === "Completed";
+    });
 }
 async function getEmployeesCached(forceRefresh = false) {
   const legacyCacheKey = "employees:active";
@@ -6265,79 +6232,6 @@ app.post("/api/room-alert", async (req, res) => {
   }
 });
 
-
-app.get("/api/payroll/hourly", async (req, res) => {
-  try {
-    const weekStart = String(req.query.start || "").trim();
-    const weekEnd = String(req.query.end || "").trim();
-    validatePayrollRange(weekStart, weekEnd);
-    const records = await getHourlyPayrollRecords(weekStart, weekEnd);
-    res.json({
-      ok: true,
-      source: "notion-time-clock",
-      count: records.length,
-      totalHours: Number(records.reduce((sum, r) => sum + Number(r.hours || 0), 0).toFixed(2)),
-      totalPay: roundMoney(records.reduce((sum, r) => sum + Number(r.total || 0), 0)),
-      records,
-    });
-  } catch (error) {
-    res.status(400).json({ ok: false, message: error.message });
-  }
-});
-
-app.post("/api/payroll/hourly/manual", async (req, res) => {
-  try {
-    if (!NOTION_TIME_CLOCK_DATABASE_ID) throw new Error("NOTION_TIME_CLOCK_DATABASE_ID no está configurado");
-    const employee = String(req.body.employee || "").trim();
-    const role = String(req.body.role || "Hourly").trim() || "Hourly";
-    const date = String(req.body.date || "").trim();
-    const clockInTime = String(req.body.clockIn || "").trim();
-    const clockOutTime = String(req.body.clockOut || "").trim();
-    const reason = String(req.body.reason || "Manual payroll adjustment").trim();
-    const hourlyRate = Number(req.body.hourlyRate || 0);
-    if (!employee || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Empleado y fecha son obligatorios");
-    if (!/^\d{2}:\d{2}$/.test(clockInTime) || !/^\d{2}:\d{2}$/.test(clockOutTime)) throw new Error("Entrada y salida deben tener una hora válida");
-    if (!(hourlyRate >= 0)) throw new Error("La tarifa por hora no es válida");
-
-    const clockIn = new Date(`${date}T${clockInTime}:00-05:00`);
-    let clockOut = new Date(`${date}T${clockOutTime}:00-05:00`);
-    if (clockOut <= clockIn) clockOut = new Date(clockOut.getTime() + 24 * 60 * 60 * 1000);
-    const hours = Number(((clockOut - clockIn) / 3600000).toFixed(2));
-    const total = Number((hours * hourlyRate).toFixed(2));
-
-    const created = await notion.pages.create({
-      parent: { database_id: NOTION_TIME_CLOCK_DATABASE_ID },
-      properties: {
-        Entry: { title: [{ text: { content: `Manual Hours - ${employee} - ${date} - ${reason}` } }] },
-        Employee: { rich_text: [{ text: { content: employee } }] },
-        Code: { rich_text: [{ text: { content: "MANUAL" } }] },
-        Role: { select: { name: role } },
-        "Hourly Rate": { number: hourlyRate },
-        "Clock In": { date: { start: clockIn.toISOString() } },
-        "Clock Out": { date: { start: clockOut.toISOString() } },
-        Hours: { number: hours },
-        Total: { number: total },
-        Status: { select: { name: "Completed" } },
-      },
-    });
-
-    res.json({ ok: true, id: created.id, employee, date, hours, hourlyRate, total });
-  } catch (error) {
-    res.status(400).json({ ok: false, message: error.message });
-  }
-});
-
-app.delete("/api/payroll/hourly/manual/:id", async (req, res) => {
-  try {
-    const id = String(req.params.id || "").trim();
-    if (!id) throw new Error("Registro requerido");
-    await notion.pages.update({ page_id: id, archived: true });
-    res.json({ ok: true });
-  } catch (error) {
-    res.status(400).json({ ok: false, message: error.message });
-  }
-});
-
 app.get("/payroll-preview", async (req, res) => {
   try {
     const weekStart = String(req.query.start || "").trim();
@@ -10275,6 +10169,132 @@ app.post("/api/sync-queue/retry", async (req, res) => {
 // =========================================================
 // ADMIN CENTER · ROOMS MANAGER
 // =========================================================
+// =========================================================
+// SERVICE ORDERS · HOTSOS-STYLE ROOM REQUESTS
+// =========================================================
+app.get("/service-orders", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "service-orders.html"));
+});
+
+function normalizeServiceOrder(row) {
+  return {
+    ...row,
+    items: Array.isArray(row.items) ? row.items : [],
+  };
+}
+
+app.get("/api/service-orders", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) return res.status(503).json({ ok:false, error:"PostgreSQL no está conectado." });
+    const status = String(req.query.status || "").trim();
+    const room = String(req.query.room || "").trim();
+    const values = [];
+    const where = [];
+    if (status && status !== "all") { values.push(status); where.push(`status = $${values.length}`); }
+    if (room) { values.push(`%${room}%`); where.push(`room ILIKE $${values.length}`); }
+    const result = await postgresQuery(`
+      SELECT * FROM service_orders
+      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+      ORDER BY
+        CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 ELSE 3 END,
+        CASE status WHEN 'new' THEN 1 WHEN 'accepted' THEN 2 WHEN 'in_progress' THEN 3 WHEN 'delivered' THEN 4 ELSE 5 END,
+        created_at DESC
+      LIMIT 500
+    `, values);
+    res.json({ ok:true, orders:result.rows.map(normalizeServiceOrder) });
+  } catch (error) {
+    console.error("SERVICE ORDERS LIST ERROR:", error.message);
+    res.status(500).json({ ok:false, error:error.message });
+  }
+});
+
+app.get("/api/service-orders/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok:false, error:"Orden inválida." });
+    const [orderResult, eventResult] = await Promise.all([
+      postgresQuery("SELECT * FROM service_orders WHERE id=$1", [id]),
+      postgresQuery("SELECT * FROM service_order_events WHERE order_id=$1 ORDER BY created_at ASC", [id]),
+    ]);
+    if (!orderResult.rows[0]) return res.status(404).json({ ok:false, error:"Orden no encontrada." });
+    res.json({ ok:true, order:normalizeServiceOrder(orderResult.rows[0]), events:eventResult.rows });
+  } catch (error) {
+    res.status(500).json({ ok:false, error:error.message });
+  }
+});
+
+app.post("/api/service-orders", async (req, res) => {
+  const client = await getPool().connect();
+  try {
+    const room = String(req.body.room || "").trim().toUpperCase();
+    const category = String(req.body.category || "Other").trim();
+    const priority = ["normal","high","urgent"].includes(req.body.priority) ? req.body.priority : "normal";
+    const assignedTo = String(req.body.assignedTo || "").trim();
+    const requestedBy = String(req.body.requestedBy || "").trim();
+    const notes = String(req.body.notes || "").trim();
+    const scheduledFor = req.body.scheduledFor || null;
+    const items = Array.isArray(req.body.items) ? req.body.items
+      .map(item => ({ name:String(item.name || "").trim(), quantity:Math.max(1, Number(item.quantity) || 1) }))
+      .filter(item => item.name) : [];
+    if (!room) return res.status(400).json({ ok:false, error:"Selecciona una habitación." });
+    if (!items.length) return res.status(400).json({ ok:false, error:"Agrega al menos un artículo o servicio." });
+    await client.query("BEGIN");
+    const result = await client.query(`
+      INSERT INTO service_orders (room, category, items, priority, assigned_to, requested_by, notes, scheduled_for)
+      VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8) RETURNING *
+    `, [room, category, JSON.stringify(items), priority, assignedTo, requestedBy, notes, scheduledFor]);
+    await client.query(`INSERT INTO service_order_events (order_id,event_type,actor,note) VALUES ($1,'created',$2,$3)`, [result.rows[0].id, requestedBy, notes]);
+    await client.query("COMMIT");
+    const order = normalizeServiceOrder(result.rows[0]);
+    io.emit("service-order:created", order);
+    res.status(201).json({ ok:true, order });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    console.error("SERVICE ORDER CREATE ERROR:", error.message);
+    res.status(500).json({ ok:false, error:error.message });
+  } finally { client.release(); }
+});
+
+app.patch("/api/service-orders/:id/status", async (req, res) => {
+  const client = await getPool().connect();
+  try {
+    const id = Number(req.params.id);
+    const status = String(req.body.status || "");
+    const actor = String(req.body.actor || "").trim();
+    const note = String(req.body.note || "").trim();
+    const allowed = ["new","accepted","in_progress","delivered","completed","cancelled"];
+    if (!allowed.includes(status)) return res.status(400).json({ ok:false, error:"Estado inválido." });
+    const timestampColumn = {accepted:"accepted_at",in_progress:"started_at",delivered:"delivered_at",completed:"completed_at"}[status];
+    await client.query("BEGIN");
+    const sql = `UPDATE service_orders SET status=$1, updated_at=NOW()${timestampColumn ? `, ${timestampColumn}=COALESCE(${timestampColumn},NOW())` : ""}${actor && status==='accepted' ? ', assigned_to=CASE WHEN assigned_to=\'\' THEN $3 ELSE assigned_to END' : ''} WHERE id=$2 RETURNING *`;
+    const params = actor && status==='accepted' ? [status,id,actor] : [status,id];
+    const result = await client.query(sql, params);
+    if (!result.rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ ok:false, error:"Orden no encontrada." }); }
+    await client.query(`INSERT INTO service_order_events (order_id,event_type,actor,note) VALUES ($1,$2,$3,$4)`, [id,status,actor,note]);
+    await client.query("COMMIT");
+    const order = normalizeServiceOrder(result.rows[0]);
+    io.emit("service-order:updated", order);
+    res.json({ ok:true, order });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    res.status(500).json({ ok:false, error:error.message });
+  } finally { client.release(); }
+});
+
+app.patch("/api/service-orders/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const assignedTo = String(req.body.assignedTo || "").trim();
+    const priority = ["normal","high","urgent"].includes(req.body.priority) ? req.body.priority : "normal";
+    const notes = String(req.body.notes || "").trim();
+    const result = await postgresQuery(`UPDATE service_orders SET assigned_to=$1, priority=$2, notes=$3, updated_at=NOW() WHERE id=$4 RETURNING *`, [assignedTo,priority,notes,id]);
+    if (!result.rows[0]) return res.status(404).json({ ok:false, error:"Orden no encontrada." });
+    const order=normalizeServiceOrder(result.rows[0]);
+    io.emit("service-order:updated", order);
+    res.json({ok:true,order});
+  } catch(error) { res.status(500).json({ok:false,error:error.message}); }
+});
+
 app.get("/rooms-manager", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "rooms-manager.html"));
 });
