@@ -56,7 +56,7 @@
     </div>
 
     <div id="status" class="status"></div>
-    <div class="small">Limpieza · Inspecciones · Operaciones · Clock</div>
+    <div class="small">Limpieza · Inspecciones · Operaciones · Service Orders · Clock</div>
   </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -201,12 +201,15 @@ function routeUser(){
     return;
   }
 
+  if(role === "runner" || role === "laundry / activities / runner") {
+    window.location.replace("/runner-orders");
+    return;
+  }
+
   if([
     "laundry / activities",
-    "laundry / activities / runner",
     "laundry",
-    "activities",
-    "runner"
+    "activities"
   ].includes(role)){
     openOS("clock", "/time-clock");
     return;
@@ -309,16 +312,8 @@ window.addEventListener("DOMContentLoaded", () => {
     localStorage.getItem("employeeSessionVerifiedAt") || 0
   );
 
-  const sessionIsFresh =
-    verifiedAt > 0 && Date.now() - verifiedAt < SESSION_TTL_MS;
-
-  if(sessionIsFresh){
-    setStatus("Sesión encontrada. Entrando...", true);
-    routeUser();
-    return;
-  }
-
-  setStatus("Validando sesión...", true);
+  // Validate on every launch so role changes made in Notion take effect immediately.
+  setStatus("Actualizando acceso...", true);
   validateSavedSession(savedUser);
 });
 </script>
