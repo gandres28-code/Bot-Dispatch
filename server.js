@@ -3597,6 +3597,67 @@ for (const page of matches) {
   // Evento ligero para actualizar solo una tarjeta en todos los teléfonos.
   io.emit("room-updated", roomUpdatePayload);
 
+  // Alertas administrativas: limpieza iniciada, terminada y solicitudes operativas.
+  const adminAlertConfig = {
+    START: {
+      kind: "cleaning_start",
+      title: `🧹 Limpieza iniciada · ${fullUnitTitle}`,
+      body: `${officialCleaner || employee || "Cleaner"} comenzó la habitación.`,
+      link: "/operations.html",
+    },
+    DONE: {
+      kind: "cleaning_done",
+      title: `✅ Limpieza terminada · ${fullUnitTitle}`,
+      body: `${officialCleaner || employee || "Cleaner"} terminó la habitación.`,
+      link: "/operations.html",
+    },
+    ISSUE: {
+      kind: "request",
+      title: `⚠️ Reporte en Operations · ${fullUnitTitle}`,
+      body: `${employee || officialCleaner || "Empleado"}: ${note || "Reportó un problema."}`,
+      link: "/operations.html",
+    },
+    SUPPLIES: {
+      kind: "request",
+      title: `📦 Solicitud en Operations · ${fullUnitTitle}`,
+      body: `${employee || officialCleaner || "Empleado"}: ${note || "Solicitó artículos."}`,
+      link: "/operations.html",
+    },
+    LOST_FOUND: {
+      kind: "request",
+      title: `🔎 Lost & Found · ${fullUnitTitle}`,
+      body: `${employee || officialCleaner || "Empleado"}: ${note || "Registró un objeto."}`,
+      link: "/operations.html",
+    },
+  };
+
+  const adminAlert = adminAlertConfig[action];
+  if (adminAlert) {
+    const adminPayload = {
+      ...adminAlert,
+      action,
+      unit: fullUnitTitle,
+      employee: officialCleaner || employee || "",
+      createdAt: now,
+    };
+    io.emit("admin-operation-alert", adminPayload);
+    Promise.resolve(sendPushToRole(postgresQuery, "admin", {
+      title: adminPayload.title,
+      body: adminPayload.body,
+      link: adminPayload.link,
+      tag: `admin-${String(action).toLowerCase()}-${String(fullUnitTitle).replace(/\s+/g, "-")}-${Date.now()}`,
+      urgent: ["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(action),
+      data: {
+        type: "ADMIN_OPERATION_ALERT",
+        soundType: adminPayload.kind,
+        action,
+        unit: fullUnitTitle,
+      },
+    })).then(result => {
+      console.log("ADMIN OPERATIONS PUSH:", { action, unit: fullUnitTitle, ...result });
+    }).catch(error => console.error("ADMIN OPERATIONS PUSH ERROR:", error.message));
+  }
+
   // Evento general como respaldo para cambios de asignación o cambios externos.
   broadcastAssignmentUpdate("server-room-update", {
     pageId: page.id,
@@ -10272,6 +10333,27 @@ app.post("/api/service-orders", async (req, res) => {
     ).then(result => {
       console.log("SERVICE ORDER PUSH:", { orderId:order.id, assignedTo:assignedTo || "Runner", ...result });
     }).catch(error => console.error("SERVICE ORDER PUSH ERROR:", error.message));
+
+    const adminOrderAlert = {
+      kind: "request",
+      title: priority === "urgent" ? `🚨 Nueva solicitud urgente · ${room}` : `📦 Nueva solicitud · ${room}`,
+      body: `${requestedBy || "Operations"}: ${itemSummary || category}`,
+      link: "/service-orders",
+      orderId: order.id,
+      room,
+      createdAt: new Date().toISOString(),
+    };
+    io.emit("admin-operation-alert", adminOrderAlert);
+    Promise.resolve(sendPushToRole(postgresQuery, "admin", {
+      title: adminOrderAlert.title,
+      body: adminOrderAlert.body,
+      link: adminOrderAlert.link,
+      tag: `admin-service-order-${order.id}`,
+      urgent: priority === "urgent",
+      data: { type:"ADMIN_SERVICE_ORDER", soundType:"request", orderId:order.id, room },
+    })).then(result => {
+      console.log("ADMIN SERVICE ORDER PUSH:", { orderId:order.id, ...result });
+    }).catch(error => console.error("ADMIN SERVICE ORDER PUSH ERROR:", error.message));
 
     res.status(201).json({ ok:true, order });
   } catch (error) {
