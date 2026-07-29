@@ -133,10 +133,70 @@ async function sendPushToEmployees(query, employeeNames, message = {}) {
   return { sent, failed, invalidSubscriptions: invalidEndpoints.length };
 }
 
+async function sendPushToRole(query, role, message = {}) {
+  if (!initializeFirebaseAdmin()) return { sent: 0, failed: 0, skipped: true, reason: "web-push-not-configured" };
+
+  const roleKey = normalizeEmployeeKey(role);
+  if (!roleKey) return { sent: 0, failed: 0, skipped: true, reason: "no-role" };
+
+  const result = await query(`
+    SELECT endpoint, p256dh, auth
+    FROM web_push_subscriptions
+    WHERE active=TRUE
+      AND LOWER(TRIM(employee_role)) = $1
+  `, [roleKey]);
+
+  if (!result.rows.length) return { sent: 0, failed: 0, skipped: true, reason: "no-active-subscriptions" };
+
+  const payload = JSON.stringify({
+    title: String(message.title || "417 Maid"),
+    body: String(message.body || "Tienes una actualización."),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/badge-96.png",
+    tag: String(message.tag || `417maid-${Date.now()}`),
+    url: String(message.link || "/launch"),
+    urgent: Boolean(message.urgent),
+    data: message.data || {},
+  });
+
+  let sent = 0;
+  let failed = 0;
+  const invalidEndpoints = [];
+
+  await Promise.all(result.rows.map(async row => {
+    try {
+      await webpush.sendNotification({
+        endpoint: row.endpoint,
+        keys: { p256dh: row.p256dh, auth: row.auth },
+      }, payload, {
+        TTL: 60 * 60,
+        urgency: message.urgent ? "high" : "normal",
+      });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      const statusCode = Number(error?.statusCode || 0);
+      console.error("WEB PUSH ROLE ERROR:", statusCode || "unknown", error?.body || error?.message || error);
+      if ([404, 410].includes(statusCode)) invalidEndpoints.push(row.endpoint);
+    }
+  }));
+
+  if (invalidEndpoints.length) {
+    await query(`
+      UPDATE web_push_subscriptions
+      SET active=FALSE, updated_at=NOW()
+      WHERE endpoint = ANY($1::text[])
+    `, [invalidEndpoints]);
+  }
+
+  return { sent, failed, invalidSubscriptions: invalidEndpoints.length };
+}
+
 module.exports = {
   initializeFirebaseAdmin,
   registerPushToken,
   deactivatePushToken,
   sendPushToEmployees,
+  sendPushToRole,
   normalizeEmployeeKey,
 };
