@@ -7,14 +7,21 @@ self.addEventListener("push", event => {
   }
 
   const data = payload.data || {};
+  const soundType = data.soundType || "default";
+  const vibrationPatterns = {
+    cleaning_start: [90, 50, 140],
+    cleaning_done: [100, 45, 100, 45, 220],
+    request: [220, 90, 220, 90, 360],
+    default: [120, 60, 120],
+  };
   const options = {
     body: payload.body || "Tienes una actualización.",
     icon: payload.icon || "/icons/icon-192.png",
     badge: payload.badge || "/icons/badge-96.png",
     tag: payload.tag || `417maid-${Date.now()}`,
-    renotify: Boolean(payload.urgent),
-    requireInteraction: Boolean(payload.urgent),
-    vibrate: payload.urgent ? [250, 100, 250, 100, 400] : [120, 60, 120],
+    renotify: Boolean(payload.urgent) || soundType === "request",
+    requireInteraction: Boolean(payload.urgent) || soundType === "request",
+    vibrate: vibrationPatterns[soundType] || vibrationPatterns.default,
     data: { url: payload.url || "/launch", ...data },
   };
 
