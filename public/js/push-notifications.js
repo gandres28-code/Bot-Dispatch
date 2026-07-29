@@ -10,7 +10,7 @@
 
   function eligible(role) {
     const value = String(role || "").toLowerCase();
-    return value.includes("cleaner") || value.includes("inspector") || value.includes("limpi") || value.includes("inspect");
+    return value.includes("cleaner") || value.includes("inspector") || value.includes("runner") || value.includes("admin") || value.includes("limpi") || value.includes("inspect");
   }
 
   function base64ToUint8Array(base64String) {
@@ -50,7 +50,7 @@
     try {
       const person = employee();
       if (!person.name) throw new Error("Primero entra con tu código de empleado.");
-      if (!eligible(person.role)) throw new Error("Las notificaciones están disponibles para cleaners e inspectores.");
+      if (!eligible(person.role)) throw new Error("Las notificaciones no están disponibles para este rol.");
       if (!window.isSecureContext) throw new Error("Las notificaciones requieren HTTPS.");
       if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
         throw new Error("Este navegador no tiene Web Push disponible.");
