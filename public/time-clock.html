@@ -12,6 +12,7 @@ h1{text-align:center;margin:0 0 6px;font-size:30px}.subtitle{text-align:center;c
 label{display:block;color:#cbd5e1;font-size:14px;font-weight:700;margin:15px 0 7px}input,select{width:100%;border:0;border-radius:15px;background:var(--field);color:#fff;padding:16px;font-size:18px;outline:none}#code{text-align:center;font-size:24px;letter-spacing:.05em}.hint{color:var(--muted);font-size:12px;line-height:1.4;margin-top:7px}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}button{border:0;border-radius:16px;padding:17px 10px;color:#fff;font-size:18px;font-weight:900;cursor:pointer}.in{background:var(--green)}.out{background:var(--red)}button:disabled{opacity:.55;cursor:wait}#msg{min-height:24px;text-align:center;margin-top:18px;font-size:16px;line-height:1.45}.loader{display:none;margin:16px auto 0;width:34px;height:34px;border:4px solid rgba(255,255,255,.18);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:420px){.card{padding:20px}.actions{grid-template-columns:1fr}h1{font-size:27px}}
+.return-bar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(8,14,26,.96);border-top:1px solid rgba(255,255,255,.10);backdrop-filter:blur(16px)}.return-bar.show{display:block}.return-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:min(520px,100%);margin:auto;text-decoration:none;background:var(--blue);color:#fff;border-radius:16px;padding:15px 18px;font-size:17px;font-weight:900;box-shadow:0 12px 28px rgba(40,104,232,.28)}body.has-return .container{padding-bottom:105px}
 </style>
 </head>
 <body>
@@ -28,8 +29,15 @@ label{display:block;color:#cbd5e1;font-size:14px;font-weight:700;margin:15px 0 7
 <div class="actions"><button class="in" onclick="sendClock('clock-in')">CLOCK IN</button><button class="out" onclick="sendClock('clock-out')">CLOCK OUT</button></div>
 <div id="loader" class="loader"></div><div id="msg"></div>
 </div></div>
+<div id="runnerReturnBar" class="return-bar"><a class="return-btn" href="/runner-orders">← Volver a Runner Orders</a></div>
 <script>
 const buttons=[...document.querySelectorAll('button')];
+const params=new URLSearchParams(location.search);
+const savedRole=String(localStorage.getItem('employeeRole')||localStorage.getItem('role')||'').toLowerCase();
+const cameFromRunner=params.get('from')==='runner'||savedRole==='runner';
+if(cameFromRunner){document.body.classList.add('has-return');document.getElementById('runnerReturnBar').classList.add('show');}
+const savedCode=localStorage.getItem('employeeCode')||localStorage.getItem('code')||'';
+if(savedCode)document.getElementById('code').value=savedCode;
 function showLoading(show){document.getElementById('loader').style.display=show?'block':'none';buttons.forEach(b=>b.disabled=show)}
 function toggleLocationNote(){const value=document.getElementById('workLocation').value;document.getElementById('locationNoteWrap').style.display=value==='Other'?'block':'none'}
 function getLocation(){return new Promise((resolve,reject)=>{if(!navigator.geolocation)return reject(new Error('Este dispositivo no permite GPS.'));navigator.geolocation.getCurrentPosition(p=>resolve({lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy}),()=>reject(new Error('Activa Location Services para registrar tu horario.')),{enableHighAccuracy:true,timeout:15000,maximumAge:30000})})}
