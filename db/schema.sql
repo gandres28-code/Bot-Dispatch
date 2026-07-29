@@ -666,3 +666,43 @@ VALUES ('006_still_waters_quality_game')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS service_orders (
+  id BIGSERIAL PRIMARY KEY,
+  room TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Other',
+  items JSONB NOT NULL DEFAULT '[]'::jsonb,
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('normal','high','urgent')),
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','accepted','in_progress','delivered','completed','cancelled')),
+  assigned_to TEXT NOT NULL DEFAULT '',
+  requested_by TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  scheduled_for TIMESTAMPTZ,
+  accepted_at TIMESTAMPTZ,
+  started_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS service_orders_status_idx ON service_orders (status, priority, created_at DESC);
+CREATE INDEX IF NOT EXISTS service_orders_room_idx ON service_orders (room, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS service_order_events (
+  id BIGSERIAL PRIMARY KEY,
+  order_id BIGINT NOT NULL REFERENCES service_orders(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  actor TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS service_order_events_order_idx ON service_order_events (order_id, created_at ASC);
+
+INSERT INTO schema_migrations (migration_name) VALUES ('010_service_orders') ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
