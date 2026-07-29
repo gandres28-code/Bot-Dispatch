@@ -10176,6 +10176,10 @@ app.get("/service-orders", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "service-orders.html"));
 });
 
+app.get("/runner-orders", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "runner-orders.html"));
+});
+
 function normalizeServiceOrder(row) {
   return {
     ...row,
