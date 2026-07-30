@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS employees (
   permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
   source TEXT NOT NULL DEFAULT 'notion',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source_report_id TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS employees_code_unique
@@ -691,6 +692,8 @@ CREATE TABLE IF NOT EXISTS service_orders (
 
 CREATE INDEX IF NOT EXISTS service_orders_status_idx ON service_orders (status, priority, created_at DESC);
 CREATE INDEX IF NOT EXISTS service_orders_room_idx ON service_orders (room, created_at DESC);
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS source_report_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS service_orders_source_report_uidx ON service_orders (source_report_id) WHERE source_report_id IS NOT NULL AND source_report_id <> '';
 
 CREATE TABLE IF NOT EXISTS service_order_events (
   id BIGSERIAL PRIMARY KEY,
