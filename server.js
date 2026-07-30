@@ -10363,6 +10363,101 @@ app.post("/api/service-orders", async (req, res) => {
   } finally { client.release(); }
 });
 
+
+app.post("/api/operations-report-to-service-order", async (req, res) => {
+  const client = await getPool().connect();
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({ ok:false, error:"PostgreSQL no está conectado." });
+    }
+
+    const sourceReportId = String(req.body.sourceReportId || req.body.reportPageId || "").trim();
+    const room = String(req.body.room || "").trim().toUpperCase();
+    const category = String(req.body.category || "General").trim();
+    const priority = ["normal","high","urgent"].includes(req.body.priority) ? req.body.priority : "normal";
+    const assignedTo = String(req.body.assignedTo || "Runner").trim() || "Runner";
+    const requestedBy = String(req.body.requestedBy || "Operations").trim();
+    const notes = String(req.body.notes || "").trim();
+    const items = Array.isArray(req.body.items) ? req.body.items
+      .map(item => ({ name:String(item.name || "").trim(), quantity:Math.max(1, Number(item.quantity) || 1) }))
+      .filter(item => item.name) : [];
+
+    if (!sourceReportId) return res.status(400).json({ ok:false, error:"Falta el reporte de origen." });
+    if (!room) return res.status(400).json({ ok:false, error:"Selecciona una habitación." });
+    if (!items.length) return res.status(400).json({ ok:false, error:"Agrega al menos un artículo o servicio." });
+
+    await client.query("BEGIN");
+    await client.query("ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS source_report_id TEXT");
+    await client.query("CREATE UNIQUE INDEX IF NOT EXISTS service_orders_source_report_uidx ON service_orders (source_report_id) WHERE source_report_id IS NOT NULL AND source_report_id <> ''");
+
+    const existing = await client.query("SELECT * FROM service_orders WHERE source_report_id=$1 LIMIT 1", [sourceReportId]);
+    if (existing.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ ok:false, alreadySent:true, order:normalizeServiceOrder(existing.rows[0]), error:"Este reporte ya fue enviado a Service Orders." });
+    }
+
+    const result = await client.query(`
+      INSERT INTO service_orders
+        (room, category, items, priority, assigned_to, requested_by, notes, source_report_id)
+      VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8)
+      RETURNING *
+    `, [room, category, JSON.stringify(items), priority, assignedTo, requestedBy, notes, sourceReportId]);
+
+    await client.query(
+      `INSERT INTO service_order_events (order_id,event_type,actor,note)
+       VALUES ($1,'created_from_operations',$2,$3)`,
+      [result.rows[0].id, requestedBy, `Operations report: ${sourceReportId}${notes ? ` · ${notes}` : ""}`]
+    );
+    await client.query("COMMIT");
+
+    const order = normalizeServiceOrder(result.rows[0]);
+
+    // Mark the source report only after PostgreSQL successfully created the order.
+    let sourceMarked = false;
+    let sourceMarkError = "";
+    try {
+      if (!NOTION_REPORTS_DATABASE_ID) throw new Error("Falta NOTION_REPORTS_DB_ID en Render");
+      const schema = await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID);
+      const props = {};
+      addNotionProp(props, schema, ["HotSOS Sent", "HOTSOS Sent", "Service Order Sent"], true, "checkbox");
+      addNotionProp(props, schema, ["Status", "status"], "Sent to Service Orders", "select");
+      await notion.pages.update({ page_id: sourceReportId, properties: props });
+      sourceMarked = true;
+    } catch (markError) {
+      sourceMarkError = markError.message;
+      console.error("OPERATIONS REPORT SOURCE MARK ERROR:", markError.message);
+    }
+
+    io.emit("service-order:created", order);
+    broadcastOpsUpdate({ type:"service-order-created", reportPageId:sourceReportId, orderId:order.id });
+
+    const itemSummary = items.slice(0, 3).map(item => `${item.quantity} ${item.name}`).join(" · ");
+    const pushMessage = {
+      title: priority === "urgent" ? `🚨 Orden urgente · ${room}` : `📦 Nueva orden · ${room}`,
+      body: itemSummary || category,
+      link: "/runner-orders",
+      tag: `service-order-${order.id}`,
+      urgent: priority === "urgent",
+      data: { type:"SERVICE_ORDER", orderId:order.id, room, priority },
+    };
+    const assignedKey = assignedTo.toLowerCase();
+    const genericRunner = !assignedTo || ["runner","unassigned","sin asignar"].includes(assignedKey);
+    Promise.resolve(
+      genericRunner
+        ? sendPushToRole(postgresQuery, "runner", pushMessage)
+        : sendPushToEmployees(postgresQuery, [assignedTo], pushMessage)
+    ).catch(error => console.error("OPERATIONS TO SERVICE ORDER PUSH ERROR:", error.message));
+
+    res.status(201).json({ ok:true, order, sourceMarked, sourceMarkError });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(()=>{});
+    console.error("OPERATIONS REPORT TO SERVICE ORDER ERROR:", error.message);
+    res.status(500).json({ ok:false, error:error.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.patch("/api/service-orders/:id/status", async (req, res) => {
   const client = await getPool().connect();
   try {
