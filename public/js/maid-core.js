@@ -15,7 +15,7 @@ window.OS = {
     operations: { title: "Operaciones", url: "/operations.html", permission: "operations" },
     master: { title: "Master", url: "/master", permission: "rooms" },
     clock: { title: "Clock In/Out", url: "/time-clock", permission: "clock" },
-    payroll: { title: "Nómina", url: "/payroll-excel", permission: "reports" },
+    payroll: { title: "Nómina", url: "/payroll", permission: "reports" },
     launch: { title: "Launch", url: "/launch", permission: "public" },
   },
 
