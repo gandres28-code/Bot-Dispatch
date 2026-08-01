@@ -187,13 +187,14 @@
 
       if (compare) requests.push(fetchJson(`/api/payroll/compare?${range}`));
 
-      const results = await Promise.all(requests);
-      state.preview = results[0].data;
-      state.raw = results[1].data;
-      state.syncStatus = results[2].data;
-      state.weekState = results[3].data;
-      state.hourly = results[4].data;
-      if (compare) state.comparison = results[5].data;
+      const results = await Promise.allSettled(requests);
+      if (results[0].status !== "fulfilled") throw results[0].reason;
+      state.preview = results[0].value.data;
+      state.raw = results[1].status === "fulfilled" ? results[1].value.data : { records: state.preview.records || [], count: state.preview.count || 0, total: state.preview.total || 0, source: state.preview.source };
+      state.syncStatus = results[2].status === "fulfilled" ? results[2].value.data : { postgresConnected: false };
+      state.weekState = results[3].status === "fulfilled" ? results[3].value.data : { status: "open", validation: { valid: true, errors: [] } };
+      state.hourly = results[4].status === "fulfilled" ? results[4].value.data : { records: [], totalHours: 0, totalPay: 0 };
+      if (compare) state.comparison = results[5]?.status === "fulfilled" ? results[5].value.data : null;
 
       renderAll();
       setBadge($("systemBadge"), "Actualizado", "green");
@@ -342,7 +343,7 @@
                 <strong>${money(record.amount)}</strong>
                 ${record.manualOverride ? '<span class="adjusted">AJUSTADO</span>' : ""}
                 ${!closed && record.id ? `<button class="mini-btn edit-payment" data-record-id="${record.id}">Editar</button>` : ""}
-                ${!closed && record.id && record.manualOverride ? `<button class="mini-btn reset reset-payment" data-record-id="${record.id}">Restaurar</button>` : ""}
+                ${!closed && record.id && record.manualOverride ? `<button class="mini-btn reset delete-entry" data-record-id="${record.id}">Eliminar</button>` : ""}
               </div>
             </td>
           </tr>`).join("")
@@ -362,6 +363,7 @@
             <span class="chevron">⌄</span>
           </button>
           <div class="employee-detail">
+            ${!closed ? `<div style="padding:10px 0"><button class="mini-btn add-person-entry" data-employee="${escapeHtml(person.employee)}">+ Unidad, bono o descuento</button></div>` : ""}
             <table class="detail-table">
               <thead><tr><th>Fecha</th><th>Unidad</th><th>Tipo</th><th>Pago</th></tr></thead>
               <tbody>${detailRows}</tbody>
@@ -376,13 +378,21 @@
     container.querySelectorAll(".edit-payment").forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        openAdjustment(Number(button.dataset.recordId));
+        openAdjustment(button.dataset.recordId);
       });
     });
-    container.querySelectorAll(".reset-payment").forEach((button) => {
+    container.querySelectorAll(".add-person-entry").forEach((button) => {
+      button.addEventListener("click", (event) => { event.stopPropagation(); openManualEntry(button.dataset.employee || ""); });
+    });
+    container.querySelectorAll(".delete-entry").forEach((button) => {
       button.addEventListener("click", async (event) => {
         event.stopPropagation();
-        await resetAdjustment(Number(button.dataset.recordId));
+        if (!confirm("¿Eliminar este movimiento manual de la nómina?")) return;
+        try {
+          await fetchJson(`/api/payroll/manual-entry/${encodeURIComponent(button.dataset.recordId)}`, { method: "DELETE" });
+          showToast("Movimiento eliminado.", "success");
+          await loadDashboard();
+        } catch (error) { showToast(error.message, "error"); }
       });
     });
   }
@@ -442,6 +452,30 @@
     $("manualRate").value = "";
     $("manualReason").value = "";
     openModal("manualHoursModal");
+  }
+
+  function openManualEntry(employee = "") {
+    $("entryEmployee").value = employee;
+    $("entryDate").value = state.start || isoLocal(new Date());
+    $("entryKind").value = "Bonus";
+    $("entryUnit").value = "";
+    $("entryAmount").value = "";
+    $("entryReason").value = "";
+    openModal("manualEntryModal");
+  }
+
+  async function saveManualEntry() {
+    try {
+      const payload = {
+        employee: $("entryEmployee").value.trim(), date: $("entryDate").value,
+        kind: $("entryKind").value, unit: $("entryUnit").value.trim(),
+        amount: Number($("entryAmount").value), reason: $("entryReason").value.trim(),
+      };
+      await fetchJson("/api/payroll/manual-entry", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      closeModal("manualEntryModal");
+      showToast("Movimiento agregado a la nómina.", "success");
+      await loadDashboard();
+    } catch (error) { showToast(error.message, "error"); }
   }
 
   async function saveManualHours() {
@@ -577,7 +611,7 @@
   }
 
   function findRecord(recordId) {
-    return (state.raw?.records || []).find((record) => Number(record.id) === Number(recordId));
+    return (state.raw?.records || []).find((record) => String(record.id) === String(recordId));
   }
 
   function openAdjustment(recordId) {
@@ -593,7 +627,7 @@
   async function saveAdjustment() {
     try {
       if (!state.selectedRecord?.id) throw new Error("Registro no seleccionado");
-      await fetchJson(`/api/payroll/records/${state.selectedRecord.id}`, {
+      await fetchJson(`/api/payroll/records/${encodeURIComponent(state.selectedRecord.id)}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: Number($("adjustAmount").value), reason: $("adjustReason").value, changedBy: "Admin" }),
       });
@@ -727,6 +761,8 @@
     document.querySelectorAll(".modal-backdrop").forEach((modal) => modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(modal.id); }));
     $("excelButton").addEventListener("click", downloadExcel);
     $("manualHoursButton").addEventListener("click", openManualHours);
+    $("manualEntryButton").addEventListener("click", () => openManualEntry());
+    $("saveManualEntryButton").addEventListener("click", saveManualEntry);
     $("saveManualHoursButton").addEventListener("click", saveManualHours);
     $("refreshButton").addEventListener("click", () => loadDashboard());
     $("startDate").addEventListener("change", () => {
