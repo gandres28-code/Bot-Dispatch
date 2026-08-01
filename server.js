@@ -74,6 +74,7 @@ const {
 const {
   createAIOperationsDirector,
 } = require("./services/aiOperationsDirector");
+const { qualityEngine: QualityEngine } = require("./services/intelligence");
 const {
   initializeFirebaseAdmin,
   registerPushToken,
@@ -2114,11 +2115,7 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
     .map((page) => {
       const p = page.properties;
 
-      const entryTitle = p.Entry?.title?.map((t) => t.plain_text).join("") || "";
-      const manual = entryTitle.startsWith("Manual Payroll -");
-
       return {
-        id: page.id,
         employee: p.Employee?.rich_text?.map((t) => t.plain_text).join("") || "",
         code: p.Code?.rich_text?.map((t) => t.plain_text).join("") || "",
         role: p.Role?.select?.name || "",
@@ -2129,8 +2126,6 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
         total: p.Total?.number || 0,
         workLocation: p["Location Status"]?.select?.name || "Unspecified",
         status: p.Status?.select?.name || "",
-        manual,
-        reason: manual ? entryTitle.replace(/^Manual Payroll -\s*/, "") : "",
       };
     })
     .filter((r) => {
@@ -5641,6 +5636,45 @@ app.post("/action", async (req, res) => {
 
 
 // =========================================================
+// OPERATIONS INTELLIGENCE · QUALITY CORE v1
+// =========================================================
+app.post("/api/intelligence/quality/refresh", async (req, res) => {
+  try {
+    const date = String(req.body?.date || req.query.date || todayISO()).trim();
+    const result = await QualityEngine.refreshDate(date);
+    io.emit("quality:intelligence-refreshed", result);
+    return res.json(result);
+  } catch (error) {
+    console.error("Quality intelligence refresh error:", error.message);
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/intelligence/quality/cleaners", async (req, res) => {
+  try {
+    const to = String(req.query.to || todayISO()).trim();
+    const from = String(req.query.from || dayjs(to).subtract(29, "day").format("YYYY-MM-DD")).trim();
+    const cleaners = await QualityEngine.cleanerLeaderboard({ from, to });
+    return res.json({ ok: true, from, to, cleaners });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message, cleaners: [] });
+  }
+});
+
+app.get("/api/intelligence/quality/rooms", async (req, res) => {
+  try {
+    const date = String(req.query.date || todayISO()).trim();
+    const result = await postgresQuery(
+      `SELECT * FROM room_metrics WHERE work_date=$1::date ORDER BY overall_score ASC, room_number`,
+      [date]
+    );
+    return res.json({ ok: true, date, rooms: result.rows });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message, rooms: [] });
+  }
+});
+
+// =========================================================
 // STILL WATERS QUALITY GAME
 // =========================================================
 app.get("/api/quality/rooms", async (req, res) => {
@@ -5707,6 +5741,12 @@ app.post("/api/quality/reviews", async (req, res) => {
     );
     const review = result.rows[0];
     io.emit("quality:updated", { unit, inspector, overallScore, status: finalStatus, updatedAt: new Date().toISOString() });
+
+    QualityEngine.refreshRoomMetric({ date, normalizedRoom })
+      .then(() => QualityEngine.refreshEmployeeMetrics(date))
+      .then(() => io.emit("quality:intelligence-refreshed", { date, unit, cleaner }))
+      .catch((qualityError) => console.error("Quality intelligence background error:", qualityError.message));
+
     res.json({ ok: true, review });
   } catch (error) {
     console.error("Quality review error:", error.message);
@@ -6152,105 +6192,6 @@ app.get("/api/payroll/week", async (req, res) => {
     ]);
     res.json({ ok: true, weekStart, weekEnd, status: week?.status || "open", week, validation });
   } catch (error) {
-    res.status(500).json({ ok: false, message: error.message });
-  }
-});
-
-app.get("/api/payroll/hourly", async (req, res) => {
-  try {
-    const requestedStart = String(req.query.start || "").trim();
-    const requestedEnd = String(req.query.end || "").trim();
-    const week = requestedStart && requestedEnd
-      ? { weekStart: requestedStart, weekEnd: requestedEnd }
-      : getPayrollWeek(new Date(`${req.query.date || todayISO()}T12:00:00`));
-    validatePayrollRange(week.weekStart, week.weekEnd);
-    const records = await getHourlyPayrollRecords(week.weekStart, week.weekEnd);
-    const totalHours = records.reduce((sum, record) => sum + Number(record.hours || 0), 0);
-    const totalPay = records.reduce((sum, record) => sum + Number(record.total || 0), 0);
-
-    res.json({
-      ok: true,
-      weekStart: week.weekStart,
-      weekEnd: week.weekEnd,
-      count: records.length,
-      totalHours: Number(totalHours.toFixed(2)),
-      totalPay: Number(totalPay.toFixed(2)),
-      records,
-    });
-  } catch (error) {
-    console.error("Error en /api/payroll/hourly:", error.message);
-    res.status(500).json({ ok: false, message: error.message });
-  }
-});
-
-app.post("/api/payroll/hourly/manual", async (req, res) => {
-  try {
-    if (!NOTION_TIME_CLOCK_DATABASE_ID) {
-      return res.status(503).json({ ok: false, message: "Time Clock database is not configured." });
-    }
-
-    const employee = String(req.body.employee || "").trim();
-    const role = String(req.body.role || "Hourly").trim() || "Hourly";
-    const date = String(req.body.date || "").trim();
-    const clockInText = String(req.body.clockIn || "").trim();
-    const clockOutText = String(req.body.clockOut || "").trim();
-    const hourlyRate = Number(req.body.hourlyRate || 0);
-    const reason = String(req.body.reason || "Manual entry").trim() || "Manual entry";
-
-    if (!employee || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(clockInText) || !/^\d{2}:\d{2}$/.test(clockOutText)) {
-      return res.status(400).json({ ok: false, message: "Employee, date, Clock In and Clock Out are required." });
-    }
-    if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) {
-      return res.status(400).json({ ok: false, message: "Hourly rate must be greater than zero." });
-    }
-
-    const clockIn = new Date(`${date}T${clockInText}:00`);
-    const clockOut = new Date(`${date}T${clockOutText}:00`);
-    if (!Number.isFinite(clockIn.getTime()) || !Number.isFinite(clockOut.getTime()) || clockOut <= clockIn) {
-      return res.status(400).json({ ok: false, message: "Clock Out must be after Clock In." });
-    }
-
-    const hours = Number(((clockOut - clockIn) / 3600000).toFixed(2));
-    const total = Number((hours * hourlyRate).toFixed(2));
-    const created = await notion.pages.create({
-      parent: { database_id: NOTION_TIME_CLOCK_DATABASE_ID },
-      properties: {
-        Entry: { title: [{ text: { content: `Manual Payroll - ${reason}` } }] },
-        Employee: { rich_text: [{ text: { content: employee } }] },
-        Code: { rich_text: [] },
-        Role: { select: { name: role } },
-        "Hourly Rate": { number: hourlyRate },
-        "Clock In": { date: { start: clockIn.toISOString() } },
-        "Clock Out": { date: { start: clockOut.toISOString() } },
-        Hours: { number: hours },
-        Total: { number: total },
-        "Location Status": { select: { name: "Manual" } },
-        Status: { select: { name: "Completed" } },
-      },
-    });
-
-    res.status(201).json({ ok: true, id: created.id, employee, hours, hourlyRate, total, manual: true });
-  } catch (error) {
-    console.error("Error en /api/payroll/hourly/manual:", error.message);
-    res.status(500).json({ ok: false, message: error.message });
-  }
-});
-
-app.delete("/api/payroll/hourly/manual/:id", async (req, res) => {
-  try {
-    const pageId = String(req.params.id || "").trim();
-    if (!pageId) return res.status(400).json({ ok: false, message: "Manual hour ID is required." });
-
-    const page = await notion.pages.retrieve({ page_id: pageId });
-    const title = page.properties?.Entry?.title?.map((t) => t.plain_text).join("") || "";
-    if (!title.startsWith("Manual Payroll -")) {
-      return res.status(403).json({ ok: false, message: "Only manual payroll hours can be deleted here." });
-    }
-
-    await notion.pages.update({ page_id: pageId, archived: true });
-    res.json({ ok: true, id: pageId, message: "Manual hours deleted." });
-  } catch (error) {
-    console.error("Error deleting manual payroll hours:", error.message);
     res.status(500).json({ ok: false, message: error.message });
   }
 });
