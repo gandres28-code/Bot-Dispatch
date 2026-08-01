@@ -709,3 +709,78 @@ CREATE INDEX IF NOT EXISTS service_order_events_order_idx ON service_order_event
 INSERT INTO schema_migrations (migration_name) VALUES ('010_service_orders') ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS room_metrics (
+  id BIGSERIAL PRIMARY KEY,
+  work_date DATE NOT NULL,
+  room_id BIGINT REFERENCES rooms(id) ON DELETE SET NULL,
+  review_id BIGINT REFERENCES quality_reviews(id) ON DELETE SET NULL,
+  room_number TEXT NOT NULL,
+  normalized_room TEXT NOT NULL,
+  room_type TEXT NOT NULL DEFAULT '',
+  building TEXT NOT NULL DEFAULT 'OTHER',
+  cleaner TEXT NOT NULL DEFAULT '',
+  normalized_cleaner TEXT NOT NULL DEFAULT '',
+  inspector TEXT NOT NULL DEFAULT '',
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  clean_time_minutes NUMERIC(8,1) NOT NULL DEFAULT 0,
+  expected_time_minutes NUMERIC(8,1) NOT NULL DEFAULT 0,
+  inspection_time_minutes NUMERIC(8,1) NOT NULL DEFAULT 0,
+  difficulty TEXT NOT NULL DEFAULT 'standard' CHECK (difficulty IN ('standard','medium','hard')),
+  arrival BOOLEAN NOT NULL DEFAULT FALSE,
+  guest_out BOOLEAN NOT NULL DEFAULT FALSE,
+  inspection_score INTEGER NOT NULL DEFAULT 100 CHECK (inspection_score BETWEEN 0 AND 100),
+  quality_score INTEGER NOT NULL DEFAULT 100 CHECK (quality_score BETWEEN 0 AND 100),
+  efficiency_score INTEGER NOT NULL DEFAULT 100 CHECK (efficiency_score BETWEEN 0 AND 100),
+  overall_score INTEGER NOT NULL DEFAULT 100 CHECK (overall_score BETWEEN 0 AND 100),
+  first_pass BOOLEAN NOT NULL DEFAULT TRUE,
+  critical_errors INTEGER NOT NULL DEFAULT 0,
+  major_errors INTEGER NOT NULL DEFAULT 0,
+  medium_errors INTEGER NOT NULL DEFAULT 0,
+  minor_errors INTEGER NOT NULL DEFAULT 0,
+  issue_categories JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (work_date, normalized_room)
+);
+
+CREATE INDEX IF NOT EXISTS room_metrics_cleaner_idx ON room_metrics (normalized_cleaner, work_date DESC);
+CREATE INDEX IF NOT EXISTS room_metrics_room_idx ON room_metrics (normalized_room, work_date DESC);
+CREATE INDEX IF NOT EXISTS room_metrics_building_idx ON room_metrics (building, work_date DESC);
+CREATE INDEX IF NOT EXISTS room_metrics_quality_idx ON room_metrics (work_date, overall_score);
+
+CREATE TABLE IF NOT EXISTS employee_metrics (
+  id BIGSERIAL PRIMARY KEY,
+  work_date DATE NOT NULL,
+  employee TEXT NOT NULL,
+  normalized_employee TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'Cleaner',
+  rooms_completed INTEGER NOT NULL DEFAULT 0,
+  average_clean_time NUMERIC(8,1) NOT NULL DEFAULT 0,
+  average_expected_time NUMERIC(8,1) NOT NULL DEFAULT 0,
+  average_quality_score NUMERIC(5,1) NOT NULL DEFAULT 100,
+  average_efficiency_score NUMERIC(5,1) NOT NULL DEFAULT 100,
+  overall_score NUMERIC(5,1) NOT NULL DEFAULT 100,
+  first_pass_rate NUMERIC(5,1) NOT NULL DEFAULT 100,
+  critical_errors INTEGER NOT NULL DEFAULT 0,
+  major_errors INTEGER NOT NULL DEFAULT 0,
+  medium_errors INTEGER NOT NULL DEFAULT 0,
+  minor_errors INTEGER NOT NULL DEFAULT 0,
+  recurring_issues JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (work_date, normalized_employee, role)
+);
+
+CREATE INDEX IF NOT EXISTS employee_metrics_employee_idx ON employee_metrics (normalized_employee, work_date DESC);
+CREATE INDEX IF NOT EXISTS employee_metrics_score_idx ON employee_metrics (work_date, overall_score DESC);
+
+INSERT INTO schema_migrations (migration_name)
+VALUES ('010_operations_intelligence_quality_core')
+ON CONFLICT (migration_name) DO NOTHING;
+
+COMMIT;
