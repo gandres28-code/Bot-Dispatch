@@ -2052,7 +2052,7 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
       const splitCount = cleaners.length;
       cleaners.forEach((cleaner, index) => {
         records.push({
-          id: null,
+          id: page.id,
           date: workDate,
           cleaner: normalizeCleaner(cleaner),
           unit,
@@ -2087,57 +2087,52 @@ async function getPayrollRecordsWithSource(
   { source = "central", allowFallback = false } = {}
 ) {
   validatePayrollRange(weekStart, weekEnd);
-  if (!NOTION_PAYROLL_DATABASE_ID) {
-    throw new Error("Falta NOTION_PAYROLL_DATABASE_ID. Payroll Records de Notion es la fuente oficial de la nómina.");
-  }
+  const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
 
-  let pages = [];
-  let cursor;
-  do {
-    const body = {
-      database_id: NOTION_PAYROLL_DATABASE_ID,
-      page_size: 100,
-      filter: { and: [
-        { property: "Date", date: { on_or_after: weekStart } },
-        { property: "Date", date: { on_or_before: weekEnd } },
-      ] },
-      sorts: [{ property: "Date", direction: "ascending" }],
-    };
-    if (cursor) body.start_cursor = cursor;
-    const response = await notion.databases.query(body);
-    pages = pages.concat(response.results || []);
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
+  // La página central siempre es la fuente del pago base. Payroll Records sólo
+  // guarda movimientos manuales claramente identificados (bonos, descuentos,
+  // reembolsos o unidades extra) para sumarlos sin duplicar la nómina normal.
+  if (NOTION_PAYROLL_DATABASE_ID) {
+    let pages = [];
+    let cursor;
+    do {
+      const body = {
+        database_id: NOTION_PAYROLL_DATABASE_ID,
+        page_size: 100,
+        filter: { and: [
+          { property: "Date", date: { on_or_after: weekStart } },
+          { property: "Date", date: { on_or_before: weekEnd } },
+        ] },
+      };
+      if (cursor) body.start_cursor = cursor;
+      const response = await notion.databases.query(body);
+      pages = pages.concat(response.results || []);
+      cursor = response.has_more ? response.next_cursor : undefined;
+    } while (cursor);
 
-  const records = [];
-  for (const page of pages) {
-    const mapped = await getPayrollRecordsFromNotionPage(page);
-    for (const item of mapped) {
-      records.push({
-        id: item.sourceNotionId || page.id,
-        date: item.workDate,
-        cleaner: item.employee,
-        unit: item.unit,
-        roomType: item.roomType,
-        propertyName: item.propertyName,
-        grossUnitAmount: item.grossUnitAmount,
-        splitCount: item.splitCount,
-        splitPercent: item.splitPercent,
-        amount: item.amount,
-        notionId: item.notionId,
-        sourcePageId: item.sourceNotionId || page.id,
-        payType: item.payType,
-        roleWorked: item.roleWorked,
-        manualOverride: /manual|bonus|deduction|adjust|reimbursement|extra unit/i.test(`${item.payType} ${item.roleWorked} ${item.roomType}`),
-        adjustmentReason: readCentralPropertyText(page.properties?.Reason) || readCentralPropertyText(page.properties?.Notes),
-        status: item.status,
-        source: "payroll-records-notion",
-      });
+    for (const page of pages) {
+      const mapped = await getPayrollRecordsFromNotionPage(page);
+      for (const item of mapped) {
+        const manual = /manual|bonus|deduction|adjust|reimbursement|extra unit/i.test(`${item.payType} ${item.roleWorked} ${item.roomType} ${item.unit}`);
+        if (!manual) continue;
+        records.push({
+          id: item.sourceNotionId || page.id, date: item.workDate, cleaner: item.employee,
+          unit: item.unit, roomType: item.roomType, propertyName: item.propertyName,
+          grossUnitAmount: item.grossUnitAmount, splitCount: item.splitCount,
+          splitPercent: item.splitPercent, amount: item.amount, notionId: item.notionId,
+          sourcePageId: item.sourceNotionId || page.id, payType: item.payType,
+          roleWorked: item.roleWorked, manualOverride: true,
+          adjustmentReason: readCentralPropertyText(page.properties?.Reason) || readCentralPropertyText(page.properties?.Notes),
+          status: item.status, source: "manual-adjustment-notion",
+        });
+      }
     }
   }
+
+  records.sort((a, b) => `${a.date}|${a.cleaner}|${a.unit}`.localeCompare(`${b.date}|${b.cleaner}|${b.unit}`));
   return {
     records,
-    source: "payroll-records-notion",
+    source: "central-notion",
     requestedSource: String(source || "central"),
     fallback: false,
     fallbackReason: "",
@@ -6277,6 +6272,7 @@ async function createManualPayrollEntry(body) {
   const date = String(body.date || "").slice(0, 10);
   const kind = String(body.kind || "Adjustment").trim();
   const unit = String(body.unit || kind).trim();
+  const storedUnit = `MANUAL ${kind} · ${unit}`;
   const reason = String(body.reason || "").trim();
   const amount = roundMoney(body.amount);
   if (!employee) throw new Error("Selecciona o escribe el empleado");
@@ -6287,7 +6283,7 @@ async function createManualPayrollEntry(body) {
   const properties = {};
   setNotionAlias(properties, schema, ["Cleaner", "Employee", "Name"], employee);
   setNotionAlias(properties, schema, ["Date", "Work Date"], date);
-  setNotionAlias(properties, schema, ["Unit", "Room", "Room Number"], unit || kind);
+  setNotionAlias(properties, schema, ["Unit", "Room", "Room Number"], storedUnit);
   setNotionAlias(properties, schema, ["Amount", "Total", "Pay Amount"], amount);
   setNotionAlias(properties, schema, ["Room Type", "Type"], kind);
   setNotionAlias(properties, schema, ["Pay Type", "Payment Type"], `Manual ${kind}`);
@@ -6410,7 +6406,7 @@ app.patch("/api/payroll/records/:id", async (req, res) => {
     const page = await notion.pages.retrieve({ page_id: req.params.id });
     const properties = {};
     const pageSchema = page.properties || {};
-    setNotionAlias(properties, pageSchema, ["Amount", "Total", "Pay Amount"], amount);
+    setNotionAlias(properties, pageSchema, ["Rate", "Amount", "Payroll Rate", "Cleaning Rate", "Total", "Pay Amount"], amount);
     setNotionAlias(properties, pageSchema, ["Reason", "Notes", "Note"], reason);
     const updated = await notion.pages.update({ page_id: req.params.id, properties });
     const record = { id: updated.id, amount, adjustmentReason: reason, manualOverride: true };
