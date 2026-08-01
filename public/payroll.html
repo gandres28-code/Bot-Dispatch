@@ -544,6 +544,7 @@
         <button class="btn amber" id="weekLockButton" hidden disabled>🔒 Cerrar semana</button>
         <button class="btn ghost" id="auditButton" hidden disabled>🧾 Historial</button>
         <button class="btn violet" id="manualHoursButton">➕ Agregar horas</button>
+        <button class="btn secondary" id="manualEntryButton">＋ Unidad / bono / descuento</button>
         <button class="btn success" id="excelButton">⬇️ Descargar Excel</button>
         <button class="btn ghost" id="refreshButton">↻ Actualizar vista</button>
       </div>
@@ -664,6 +665,24 @@
           <div class="field full"><label>Motivo</label><textarea id="manualReason" placeholder="Ejemplo: olvidó hacer Clock In, capacitación, trabajo adicional..."></textarea></div>
         </div>
         <div class="modal-actions"><button class="btn ghost" data-close-modal="manualHoursModal">Cancelar</button><button class="btn violet" id="saveManualHoursButton">Guardar horas</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="manualEntryModal">
+    <div class="modal">
+      <div class="modal-head"><h3>Agregar movimiento de nómina</h3><button class="mini-btn" data-close-modal="manualEntryModal">✕</button></div>
+      <div class="modal-body">
+        <p class="panel-subtitle">Se guardará directamente en Payroll Records de Notion y aparecerá en el total y en el Excel.</p>
+        <div class="modal-grid">
+          <div class="field full"><label>Empleado</label><input id="entryEmployee" placeholder="Nombre exacto"></div>
+          <div class="field"><label>Fecha</label><input id="entryDate" type="date"></div>
+          <div class="field"><label>Concepto</label><select id="entryKind"><option>Bonus</option><option>Extra Unit</option><option>Deduction</option><option>Reimbursement</option><option>Other Adjustment</option></select></div>
+          <div class="field full"><label>Unidad o descripción</label><input id="entryUnit" placeholder="Ejemplo: 334 B o Bono de calidad"></div>
+          <div class="field"><label>Monto (+ o -)</label><input id="entryAmount" type="number" step="0.01" placeholder="50.00 o -25.00"></div>
+          <div class="field full"><label>Motivo obligatorio</label><textarea id="entryReason" placeholder="Explica por qué se agrega o descuenta"></textarea></div>
+        </div>
+        <div class="modal-actions"><button class="btn ghost" data-close-modal="manualEntryModal">Cancelar</button><button class="btn secondary" id="saveManualEntryButton">Guardar movimiento</button></div>
       </div>
     </div>
   </div>
