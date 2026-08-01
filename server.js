@@ -3298,21 +3298,37 @@ const allowedActions = [
 if (!allowedActions.includes(action)) {
 throw new Error("Acción no permitida");
 }
-const pages = await queryTodayRooms();
+let pages = await queryTodayRooms();
 const normalizedTarget = normalizeRoom(unit);
 const targetDigits = roomDigits(unit);
-let matches = pages.filter((page) => {
-const title =
-page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
-return normalizeRoom(title) === normalizedTarget;
-});
+
+const findMatches = (roomPages) => {
+  const exactNormalized = roomPages.filter((page) => {
+    const title =
+      page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+    return normalizeRoom(title) === normalizedTarget;
+  });
+
+  if (exactNormalized.length > 0) return exactNormalized;
+
+  // Compatibilidad con títulos decorados, por ejemplo: "334 B (M) - H".
+  // Solo usamos números cuando no existe una coincidencia normalizada.
+  return roomPages.filter((page) => {
+    const title =
+      page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+    return targetDigits && roomDigits(title) === targetDigits;
+  });
+};
+
+let matches = findMatches(pages);
+
+// El caché puede estar desactualizado cuando una unidad acaba de agregarse,
+// renombrarse o sincronizarse. Antes de fallar, consultar Notion directamente.
 if (matches.length === 0) {
-matches = pages.filter((page) => {
-const title =
-page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
-return roomDigits(title) === targetDigits;
-});
+  pages = await queryTodayRooms(true);
+  matches = findMatches(pages);
 }
+
 if (matches.length === 0) {
   throw new Error(`No encontré la unidad ${unit} en Notion para hoy`);
 }
