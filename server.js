@@ -2052,7 +2052,7 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
       const splitCount = cleaners.length;
       cleaners.forEach((cleaner, index) => {
         records.push({
-          id: page.id,
+          id: null,
           date: workDate,
           cleaner: normalizeCleaner(cleaner),
           unit,
@@ -2088,48 +2088,6 @@ async function getPayrollRecordsWithSource(
 ) {
   validatePayrollRange(weekStart, weekEnd);
   const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
-
-  // La página central siempre es la fuente del pago base. Payroll Records sólo
-  // guarda movimientos manuales claramente identificados (bonos, descuentos,
-  // reembolsos o unidades extra) para sumarlos sin duplicar la nómina normal.
-  if (NOTION_PAYROLL_DATABASE_ID) {
-    let pages = [];
-    let cursor;
-    do {
-      const body = {
-        database_id: NOTION_PAYROLL_DATABASE_ID,
-        page_size: 100,
-        filter: { and: [
-          { property: "Date", date: { on_or_after: weekStart } },
-          { property: "Date", date: { on_or_before: weekEnd } },
-        ] },
-      };
-      if (cursor) body.start_cursor = cursor;
-      const response = await notion.databases.query(body);
-      pages = pages.concat(response.results || []);
-      cursor = response.has_more ? response.next_cursor : undefined;
-    } while (cursor);
-
-    for (const page of pages) {
-      const mapped = await getPayrollRecordsFromNotionPage(page);
-      for (const item of mapped) {
-        const manual = /manual|bonus|deduction|adjust|reimbursement|extra unit/i.test(`${item.payType} ${item.roleWorked} ${item.roomType} ${item.unit}`);
-        if (!manual) continue;
-        records.push({
-          id: item.sourceNotionId || page.id, date: item.workDate, cleaner: item.employee,
-          unit: item.unit, roomType: item.roomType, propertyName: item.propertyName,
-          grossUnitAmount: item.grossUnitAmount, splitCount: item.splitCount,
-          splitPercent: item.splitPercent, amount: item.amount, notionId: item.notionId,
-          sourcePageId: item.sourceNotionId || page.id, payType: item.payType,
-          roleWorked: item.roleWorked, manualOverride: true,
-          adjustmentReason: readCentralPropertyText(page.properties?.Reason) || readCentralPropertyText(page.properties?.Notes),
-          status: item.status, source: "manual-adjustment-notion",
-        });
-      }
-    }
-  }
-
-  records.sort((a, b) => `${a.date}|${a.cleaner}|${a.unit}`.localeCompare(`${b.date}|${b.cleaner}|${b.unit}`));
   return {
     records,
     source: "central-notion",
@@ -2147,24 +2105,17 @@ async function getPayrollRecords(weekStart, weekEnd, options = {}) {
 // ■ Generar / actualizar Excel semanal con hoja por limpiador
 async function getHourlyPayrollRecords(weekStart, weekEnd) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
-  let pages = [];
-  let cursor;
-  do {
-    const response = await notion.databases.query({
-      database_id: NOTION_TIME_CLOCK_DATABASE_ID,
-      page_size: 100,
-      ...(cursor ? { start_cursor: cursor } : {}),
-    });
-    pages = pages.concat(response.results || []);
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
 
-  return pages
+  const response = await notion.databases.query({
+    database_id: NOTION_TIME_CLOCK_DATABASE_ID,
+    page_size: 100,
+  });
+
+  return response.results
     .map((page) => {
       const p = page.properties;
 
       return {
-        id: page.id,
         employee: p.Employee?.rich_text?.map((t) => t.plain_text).join("") || "",
         code: p.Code?.rich_text?.map((t) => t.plain_text).join("") || "",
         role: p.Role?.select?.name || "",
@@ -2175,8 +2126,6 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
         total: p.Total?.number || 0,
         workLocation: p["Location Status"]?.select?.name || "Unspecified",
         status: p.Status?.select?.name || "",
-        manual: /manual/i.test(readCentralPropertyText(p.Source) || readCentralPropertyText(p.Reason)),
-        workDate: (p["Clock In"]?.date?.start || "").slice(0, 10),
       };
     })
     .filter((r) => {
@@ -5721,9 +5670,19 @@ app.get("/api/intelligence/quality/cleaners", async (req, res) => {
   try {
     const to = String(req.query.to || todayISO()).trim();
     const from = String(req.query.from || dayjs(to).subtract(29, "day").format("YYYY-MM-DD")).trim();
-    const cleaners = await QualityEngine.cleanerLeaderboard({ from, to });
-    return res.json({ ok: true, from, to, cleaners });
+    let cleaners = await QualityEngine.cleanerLeaderboard({ from, to });
+    let autoRefresh = null;
+
+    // Para consultas de un solo día, genera las métricas automáticamente si aún no existen.
+    // Esto evita devolver una lista vacía solo porque nadie ejecutó previamente el POST /refresh.
+    if (!cleaners.length && from === to) {
+      autoRefresh = await QualityEngine.refreshDate(to);
+      cleaners = await QualityEngine.cleanerLeaderboard({ from, to });
+    }
+
+    return res.json({ ok: true, from, to, cleaners, autoRefresh });
   } catch (error) {
+    console.error("Quality cleaners leaderboard error:", error.message);
     return res.status(500).json({ ok: false, message: error.message, cleaners: [] });
   }
 });
@@ -5731,12 +5690,23 @@ app.get("/api/intelligence/quality/cleaners", async (req, res) => {
 app.get("/api/intelligence/quality/rooms", async (req, res) => {
   try {
     const date = String(req.query.date || todayISO()).trim();
-    const result = await postgresQuery(
+    let result = await postgresQuery(
       `SELECT * FROM room_metrics WHERE work_date=$1::date ORDER BY overall_score ASC, room_number`,
       [date]
     );
-    return res.json({ ok: true, date, rooms: result.rows });
+    let autoRefresh = null;
+
+    if (!result.rows.length) {
+      autoRefresh = await QualityEngine.refreshDate(date);
+      result = await postgresQuery(
+        `SELECT * FROM room_metrics WHERE work_date=$1::date ORDER BY overall_score ASC, room_number`,
+        [date]
+      );
+    }
+
+    return res.json({ ok: true, date, rooms: result.rows, autoRefresh });
   } catch (error) {
+    console.error("Quality room metrics error:", error.message);
     return res.status(500).json({ ok: false, message: error.message, rooms: [] });
   }
 });
@@ -6247,111 +6217,6 @@ app.post("/api/hotsos/guest-out", async (req, res) => {
 // =========================================================
 // PAYROLL 2.0 · TARIFAS, AJUSTES, BLOQUEO Y AUDITORÍA
 // =========================================================
-function notionTextValue(type, value) {
-  const content = String(value ?? "").trim();
-  if (type === "title") return { title: [{ text: { content: content || "Payroll entry" } }] };
-  if (type === "rich_text") return { rich_text: content ? [{ text: { content } }] : [] };
-  if (type === "select") return { select: content ? { name: content } : null };
-  if (type === "status") return { status: content ? { name: content } : null };
-  if (type === "number") return { number: Number(value || 0) };
-  if (type === "date") return { date: content ? { start: content } : null };
-  if (type === "checkbox") return { checkbox: Boolean(value) };
-  return null;
-}
-
-function setNotionAlias(properties, schema, aliases, value) {
-  const key = aliases.find((name) => schema?.[name]);
-  if (!key) return "";
-  const encoded = notionTextValue(schema[key].type, value);
-  if (encoded) properties[key] = encoded;
-  return key;
-}
-
-async function createManualPayrollEntry(body) {
-  const employee = String(body.employee || "").trim();
-  const date = String(body.date || "").slice(0, 10);
-  const kind = String(body.kind || "Adjustment").trim();
-  const unit = String(body.unit || kind).trim();
-  const storedUnit = `MANUAL ${kind} · ${unit}`;
-  const reason = String(body.reason || "").trim();
-  const amount = roundMoney(body.amount);
-  if (!employee) throw new Error("Selecciona o escribe el empleado");
-  if (!isISODate(date)) throw new Error("Selecciona una fecha válida");
-  if (!Number.isFinite(Number(body.amount))) throw new Error("Escribe un monto válido");
-  if (!reason) throw new Error("Escribe el motivo del cambio");
-  const schema = await getNotionDatabaseSchema(NOTION_PAYROLL_DATABASE_ID);
-  const properties = {};
-  setNotionAlias(properties, schema, ["Cleaner", "Employee", "Name"], employee);
-  setNotionAlias(properties, schema, ["Date", "Work Date"], date);
-  setNotionAlias(properties, schema, ["Unit", "Room", "Room Number"], storedUnit);
-  setNotionAlias(properties, schema, ["Amount", "Total", "Pay Amount"], amount);
-  setNotionAlias(properties, schema, ["Room Type", "Type"], kind);
-  setNotionAlias(properties, schema, ["Pay Type", "Payment Type"], `Manual ${kind}`);
-  setNotionAlias(properties, schema, ["Role Worked", "Role"], kind);
-  setNotionAlias(properties, schema, ["Reason", "Notes", "Note"], reason);
-  setNotionAlias(properties, schema, ["Status", "Payroll Status"], "Pending");
-  const titleKey = Object.keys(schema || {}).find((key) => schema[key]?.type === "title");
-  if (titleKey && !properties[titleKey]) properties[titleKey] = notionTextValue("title", `${employee} · ${kind}`);
-  const page = await notion.pages.create({ parent: { database_id: NOTION_PAYROLL_DATABASE_ID }, properties });
-  return { id: page.id, employee, date, kind, unit, amount, reason };
-}
-
-app.get("/api/payroll/hourly", async (req, res) => {
-  try {
-    const currentWeek = getPayrollWeek(new Date());
-    const weekStart = String(req.query.start || currentWeek.weekStart).trim();
-    const weekEnd = String(req.query.end || currentWeek.weekEnd).trim();
-    validatePayrollRange(weekStart, weekEnd);
-    const records = await getHourlyPayrollRecords(weekStart, weekEnd);
-    res.json({ ok: true, records, totalHours: records.reduce((s,r) => s + Number(r.hours || 0), 0), totalPay: roundMoney(records.reduce((s,r) => s + Number(r.total || 0), 0)) });
-  } catch (error) { res.status(500).json({ ok: false, message: error.message }); }
-});
-
-app.post("/api/payroll/hourly/manual", async (req, res) => {
-  try {
-    if (!NOTION_TIME_CLOCK_DATABASE_ID) throw new Error("Falta NOTION_TIME_CLOCK_DATABASE_ID");
-    const employee = String(req.body.employee || "").trim();
-    const date = String(req.body.date || "").slice(0, 10);
-    const clockIn = new Date(`${date}T${req.body.clockIn || "00:00"}:00-05:00`);
-    let clockOut = new Date(`${date}T${req.body.clockOut || "00:00"}:00-05:00`);
-    if (clockOut <= clockIn) clockOut.setDate(clockOut.getDate() + 1);
-    const hours = Number(((clockOut - clockIn) / 3600000).toFixed(2));
-    const hourlyRate = Number(req.body.hourlyRate || 0);
-    const total = roundMoney(hours * hourlyRate);
-    if (!employee || !isISODate(date) || !(hours > 0) || !(hourlyRate >= 0)) throw new Error("Revisa empleado, fecha, horas y tarifa");
-    const schema = await getNotionDatabaseSchema(NOTION_TIME_CLOCK_DATABASE_ID);
-    const properties = {};
-    setNotionAlias(properties, schema, ["Employee", "Name"], employee);
-    setNotionAlias(properties, schema, ["Role"], req.body.role || "Hourly");
-    setNotionAlias(properties, schema, ["Clock In"], clockIn.toISOString());
-    setNotionAlias(properties, schema, ["Clock Out"], clockOut.toISOString());
-    setNotionAlias(properties, schema, ["Hours"], hours);
-    setNotionAlias(properties, schema, ["Hourly Rate", "Rate"], hourlyRate);
-    setNotionAlias(properties, schema, ["Total", "Amount"], total);
-    setNotionAlias(properties, schema, ["Status"], "Completed");
-    setNotionAlias(properties, schema, ["Reason", "Notes", "Source"], `Manual · ${String(req.body.reason || "").trim()}`);
-    const titleKey = Object.keys(schema || {}).find((key) => schema[key]?.type === "title");
-    if (titleKey && !properties[titleKey]) properties[titleKey] = notionTextValue("title", `${employee} · ${date}`);
-    const page = await notion.pages.create({ parent: { database_id: NOTION_TIME_CLOCK_DATABASE_ID }, properties });
-    res.json({ ok: true, id: page.id, hours, total });
-  } catch (error) { res.status(400).json({ ok: false, message: error.message }); }
-});
-
-app.delete("/api/payroll/hourly/manual/:id", async (req, res) => {
-  try { await notion.pages.update({ page_id: req.params.id, archived: true }); res.json({ ok: true }); }
-  catch (error) { res.status(400).json({ ok: false, message: error.message }); }
-});
-
-app.post("/api/payroll/manual-entry", async (req, res) => {
-  try { const entry = await createManualPayrollEntry(req.body); io.emit("payroll-record-updated", entry); res.json({ ok: true, entry }); }
-  catch (error) { res.status(400).json({ ok: false, message: error.message }); }
-});
-
-app.delete("/api/payroll/manual-entry/:id", async (req, res) => {
-  try { await notion.pages.update({ page_id: req.params.id, archived: true }); res.json({ ok: true }); }
-  catch (error) { res.status(400).json({ ok: false, message: error.message }); }
-});
-
 app.get("/api/payroll/week", async (req, res) => {
   try {
     const currentWeek = getPayrollWeek(new Date());
@@ -6399,17 +6264,12 @@ app.post("/api/payroll/rates", async (req, res) => {
 
 app.patch("/api/payroll/records/:id", async (req, res) => {
   try {
-    const amount = roundMoney(req.body.amount);
-    const reason = String(req.body.reason || "").trim();
-    if (!Number.isFinite(Number(req.body.amount))) throw new Error("Escribe un monto válido");
-    if (!reason) throw new Error("Debes escribir el motivo del ajuste");
-    const page = await notion.pages.retrieve({ page_id: req.params.id });
-    const properties = {};
-    const pageSchema = page.properties || {};
-    setNotionAlias(properties, pageSchema, ["Rate", "Amount", "Payroll Rate", "Cleaning Rate", "Total", "Pay Amount"], amount);
-    setNotionAlias(properties, pageSchema, ["Reason", "Notes", "Note"], reason);
-    const updated = await notion.pages.update({ page_id: req.params.id, properties });
-    const record = { id: updated.id, amount, adjustmentReason: reason, manualOverride: true };
+    const record = await updatePayrollRecordAmount({
+      recordId: Number(req.params.id),
+      amount: req.body.amount,
+      reason: req.body.reason,
+      changedBy: req.body.changedBy || "Admin",
+    });
     io.emit("payroll-record-updated", record);
     res.json({ ok: true, record });
   } catch (error) {
