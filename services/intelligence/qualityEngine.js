@@ -162,13 +162,15 @@ async function refreshEmployeeMetrics(date) {
        average_expected_time, average_quality_score, average_efficiency_score, overall_score,
        first_pass_rate, critical_errors, major_errors, medium_errors, minor_errors, recurring_issues, updated_at
      )
-     SELECT work_date, MAX(cleaner), normalized_cleaner, 'Cleaner', COUNT(*)::int,
-            ROUND(AVG(NULLIF(clean_time_minutes,0))::numeric,1),
-            ROUND(AVG(NULLIF(expected_time_minutes,0))::numeric,1),
-            ROUND(AVG(quality_score)::numeric,1), ROUND(AVG(efficiency_score)::numeric,1),
-            ROUND(AVG(overall_score)::numeric,1),
-            ROUND((100.0 * COUNT(*) FILTER (WHERE first_pass) / NULLIF(COUNT(*),0))::numeric,1),
-            SUM(critical_errors)::int, SUM(major_errors)::int, SUM(medium_errors)::int, SUM(minor_errors)::int,
+     SELECT work_date, COALESCE(MAX(cleaner), ''), normalized_cleaner, 'Cleaner', COUNT(*)::int,
+            COALESCE(ROUND(AVG(NULLIF(clean_time_minutes,0))::numeric,1), 0),
+            COALESCE(ROUND(AVG(NULLIF(expected_time_minutes,0))::numeric,1), 0),
+            COALESCE(ROUND(AVG(quality_score)::numeric,1), 100),
+            COALESCE(ROUND(AVG(efficiency_score)::numeric,1), 100),
+            COALESCE(ROUND(AVG(overall_score)::numeric,1), 100),
+            COALESCE(ROUND((100.0 * COUNT(*) FILTER (WHERE first_pass) / NULLIF(COUNT(*),0))::numeric,1), 100),
+            COALESCE(SUM(critical_errors),0)::int, COALESCE(SUM(major_errors),0)::int,
+            COALESCE(SUM(medium_errors),0)::int, COALESCE(SUM(minor_errors),0)::int,
             COALESCE(jsonb_object_agg(category, category_count) FILTER (WHERE category IS NOT NULL), '{}'::jsonb), NOW()
        FROM room_metrics rm
        LEFT JOIN LATERAL (
