@@ -973,6 +973,10 @@ app.get("/operations-intelligence", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "operations-intelligence.html"));
 });
 
+app.get("/quality-performance", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "quality-performance.html"));
+});
+
 app.get("/master", (req, res) => {
   res.sendFile(__dirname + "/public/master.html");
 });
@@ -5684,6 +5688,18 @@ app.get("/api/intelligence/quality/cleaners", async (req, res) => {
   } catch (error) {
     console.error("Quality cleaners leaderboard error:", error.message);
     return res.status(500).json({ ok: false, message: error.message, cleaners: [] });
+  }
+});
+
+app.get("/api/intelligence/quality/summary", async (req, res) => {
+  try {
+    const to = String(req.query.to || todayISO()).trim();
+    const from = String(req.query.from || to).trim();
+    const summary = await QualityEngine.qualitySummary({ from, to });
+    return res.json({ ok: true, from, to, summary });
+  } catch (error) {
+    console.error("Quality summary error:", error.message);
+    return res.status(500).json({ ok: false, message: error.message, summary: {} });
   }
 });
 
