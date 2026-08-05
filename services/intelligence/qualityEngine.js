@@ -204,19 +204,64 @@ async function refreshDate(date) {
 
 async function cleanerLeaderboard({ from, to }) {
   const result = await dbQuery(
-    `SELECT employee, SUM(rooms_completed)::int AS rooms_completed,
-            ROUND(AVG(average_clean_time)::numeric,1) AS average_clean_time,
-            ROUND(AVG(average_quality_score)::numeric,1) AS quality_score,
-            ROUND(AVG(average_efficiency_score)::numeric,1) AS efficiency_score,
-            ROUND(AVG(overall_score)::numeric,1) AS overall_score,
-            ROUND(AVG(first_pass_rate)::numeric,1) AS first_pass_rate,
-            SUM(critical_errors)::int AS critical_errors, SUM(major_errors)::int AS major_errors,
-            SUM(medium_errors)::int AS medium_errors, SUM(minor_errors)::int AS minor_errors
-       FROM employee_metrics WHERE role='Cleaner' AND work_date BETWEEN $1::date AND $2::date
-      GROUP BY normalized_employee, employee ORDER BY overall_score DESC, rooms_completed DESC`,
+    `SELECT COALESCE(MAX(cleaner), '') AS employee,
+            COUNT(*)::int AS rooms_completed,
+            COUNT(*) FILTER (WHERE clean_time_minutes BETWEEN 10 AND 240)::int AS valid_time_rooms,
+            COUNT(*) FILTER (WHERE clean_time_minutes = 0)::int AS missing_time_rooms,
+            COUNT(*) FILTER (WHERE clean_time_minutes > 0 AND clean_time_minutes < 10)::int AS suspicious_short_rooms,
+            COUNT(*) FILTER (WHERE clean_time_minutes > 240)::int AS suspicious_long_rooms,
+            COUNT(*) FILTER (WHERE review_id IS NOT NULL)::int AS inspected_rooms,
+            ROUND(AVG(clean_time_minutes) FILTER (WHERE clean_time_minutes BETWEEN 10 AND 240)::numeric,1) AS average_clean_time,
+            ROUND(AVG(expected_time_minutes) FILTER (WHERE expected_time_minutes > 0)::numeric,1) AS average_expected_time,
+            ROUND(AVG(quality_score) FILTER (WHERE review_id IS NOT NULL)::numeric,1) AS quality_score,
+            ROUND(AVG(efficiency_score) FILTER (WHERE clean_time_minutes BETWEEN 10 AND 240)::numeric,1) AS efficiency_score,
+            ROUND(AVG(overall_score) FILTER (WHERE review_id IS NOT NULL OR clean_time_minutes BETWEEN 10 AND 240)::numeric,1) AS overall_score,
+            ROUND((100.0 * COUNT(*) FILTER (WHERE review_id IS NOT NULL AND first_pass) /
+              NULLIF(COUNT(*) FILTER (WHERE review_id IS NOT NULL),0))::numeric,1) AS first_pass_rate,
+            COALESCE(SUM(critical_errors),0)::int AS critical_errors,
+            COALESCE(SUM(major_errors),0)::int AS major_errors,
+            COALESCE(SUM(medium_errors),0)::int AS medium_errors,
+            COALESCE(SUM(minor_errors),0)::int AS minor_errors
+       FROM room_metrics
+      WHERE work_date BETWEEN $1::date AND $2::date AND normalized_cleaner <> ''
+      GROUP BY normalized_cleaner
+      ORDER BY COALESCE(AVG(overall_score) FILTER (WHERE review_id IS NOT NULL OR clean_time_minutes BETWEEN 10 AND 240),-1) DESC,
+               COUNT(*) DESC`,
     [from, to]
   );
-  return result.rows;
+  return result.rows.map((row) => ({
+    ...row,
+    data_status: Number(row.inspected_rooms) > 0 && Number(row.valid_time_rooms) === Number(row.rooms_completed)
+      ? "complete"
+      : Number(row.valid_time_rooms) === 0 && Number(row.inspected_rooms) === 0
+        ? "missing"
+        : "partial",
+    is_team: /[&/]|\band\b|\by\b/i.test(String(row.employee || "")),
+  }));
+}
+
+async function qualitySummary({ from, to }) {
+  const result = await dbQuery(
+    `SELECT COUNT(*)::int AS rooms_processed,
+            COUNT(DISTINCT normalized_cleaner)::int AS cleaners,
+            COUNT(*) FILTER (WHERE clean_time_minutes BETWEEN 10 AND 240)::int AS valid_time_rooms,
+            COUNT(*) FILTER (WHERE clean_time_minutes = 0)::int AS missing_time_rooms,
+            COUNT(*) FILTER (WHERE clean_time_minutes > 0 AND clean_time_minutes < 10)::int AS suspicious_short_rooms,
+            COUNT(*) FILTER (WHERE clean_time_minutes > 240)::int AS suspicious_long_rooms,
+            COUNT(*) FILTER (WHERE review_id IS NOT NULL)::int AS inspected_rooms,
+            ROUND(AVG(clean_time_minutes) FILTER (WHERE clean_time_minutes BETWEEN 10 AND 240)::numeric,1) AS average_clean_time,
+            ROUND(AVG(quality_score) FILTER (WHERE review_id IS NOT NULL)::numeric,1) AS average_quality_score,
+            ROUND((100.0 * COUNT(*) FILTER (WHERE review_id IS NOT NULL AND first_pass) /
+              NULLIF(COUNT(*) FILTER (WHERE review_id IS NOT NULL),0))::numeric,1) AS first_pass_rate,
+            COALESCE(SUM(critical_errors),0)::int AS critical_errors,
+            COALESCE(SUM(major_errors),0)::int AS major_errors,
+            COALESCE(SUM(medium_errors),0)::int AS medium_errors,
+            COALESCE(SUM(minor_errors),0)::int AS minor_errors
+       FROM room_metrics
+      WHERE work_date BETWEEN $1::date AND $2::date`,
+    [from, to]
+  );
+  return result.rows[0] || {};
 }
 
 module.exports = {
@@ -227,4 +272,5 @@ module.exports = {
   refreshEmployeeMetrics,
   refreshDate,
   cleanerLeaderboard,
+  qualitySummary,
 };
