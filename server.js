@@ -234,8 +234,13 @@ app.get("/api/cache-status", (req, res) => {
   });
 });
 const multer = require("multer");
+const { File } = require("node:buffer");
 const cloudinary = require("cloudinary").v2;
 const upload = multer({ storage: multer.memoryStorage() });
+const voiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 12 * 1024 * 1024, files: 1 },
+});
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -10339,6 +10344,88 @@ app.get("/service-orders", (req, res) => {
 
 app.get("/runner-orders", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "runner-orders.html"));
+});
+
+const VOICE_REQUEST_ITEM_ALIASES = {
+  "king sheet":"King sheet", "king sheets":"King sheet", "sabana king":"King sheet", "sabanas king":"King sheet",
+  "queen sheet":"Queen sheet", "queen sheets":"Queen sheet", "sabana queen":"Queen sheet", "sabanas queen":"Queen sheet",
+  pillowcase:"Pillowcase", pillowcases:"Pillowcase", funda:"Pillowcase", fundas:"Pillowcase",
+  "bath towel":"Bath towel", "bath towels":"Bath towel", "toalla grande":"Bath towel", "toallas grandes":"Bath towel",
+  "hand towel":"Hand towel", "hand towels":"Hand towel", "toalla de mano":"Hand towel", "toallas de mano":"Hand towel",
+  washcloth:"Washcloth", washcloths:"Washcloth", "face towel":"Washcloth", "face towels":"Washcloth", "toalla facial":"Washcloth", "toallas faciales":"Washcloth",
+  duvet:"Duvet", duvets:"Duvet", comforter:"Duvet", comforters:"Duvet", blanket:"Blanket", blankets:"Blanket", cobija:"Blanket", cobijas:"Blanket",
+  pillow:"Pillow", pillows:"Pillow", almohada:"Pillow", almohadas:"Pillow",
+  "trash bag":"Trash bag", "trash bags":"Trash bag", "bolsa de basura":"Trash bag", "bolsas de basura":"Trash bag",
+  "toilet paper":"Toilet paper", "papel de bano":"Toilet paper", "paper towel":"Paper towel", "paper towels":"Paper towel", "papel de cocina":"Paper towel",
+  soap:"Soap", jabon:"Soap", shampoo:"Shampoo", conditioner:"Conditioner", coffee:"Coffee", cafe:"Coffee",
+};
+
+function foldVoiceText(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function normalizeVoiceRequestItems(items) {
+  const merged = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const rawName = String(item?.name || "").trim();
+    const name = VOICE_REQUEST_ITEM_ALIASES[foldVoiceText(rawName)] || rawName;
+    const quantity = Math.min(100, Math.max(1, Math.round(Number(item?.quantity) || 1)));
+    if (name) merged.set(name, (merged.get(name) || 0) + quantity);
+  });
+  return [...merged.entries()].map(([name, quantity]) => ({ name, quantity }));
+}
+
+app.post("/api/voice-supply-request/interpret", voiceUpload.single("audio"), async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) return res.status(503).json({ ok:false, error:"Falta OPENAI_API_KEY en Render." });
+    if (!req.file?.buffer?.length) return res.status(400).json({ ok:false, error:"No se recibió el audio." });
+
+    const room = String(req.body.room || "").trim().toUpperCase();
+    const requestedBy = String(req.body.requestedBy || "Cleaner").trim();
+    const mimeType = String(req.file.mimetype || "audio/webm");
+    const extension = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
+    const audioFile = new File([req.file.buffer], `voice-request.${extension}`, { type:mimeType });
+    const transcription = await openai.audio.transcriptions.create({
+      file:audioFile,
+      model:"gpt-4o-mini-transcribe",
+      response_format:"json",
+      prompt:"Housekeeping hotel request. The speaker may mix Spanish and English. Preserve room numbers, linen names, supply names and exact quantities.",
+    });
+    const transcript = String(transcription?.text || "").trim();
+    if (!transcript) return res.status(422).json({ ok:false, error:"No pude escuchar una solicitud. Intenta grabarla otra vez." });
+
+    const interpretation = await openai.chat.completions.create({
+      model:"gpt-4o-mini",
+      temperature:0,
+      response_format:{ type:"json_schema", json_schema:{ name:"housekeeping_supply_request", strict:true, schema:{
+        type:"object", additionalProperties:false,
+        properties:{
+          category:{type:"string",enum:["Linen","Amenities","Cleaning Supplies","Maintenance","Other"]},
+          priority:{type:"string",enum:["normal","high","urgent"]},
+          items:{type:"array",items:{type:"object",additionalProperties:false,properties:{name:{type:"string"},quantity:{type:"integer",minimum:1,maximum:100}},required:["name","quantity"]}},
+          notes:{type:"string"}, needs_clarification:{type:"boolean"}, clarification_question:{type:"string"}
+        },
+        required:["category","priority","items","notes","needs_clarification","clarification_question"]
+      }}},
+      messages:[
+        {role:"system",content:"Extract a hotel housekeeping delivery request. The transcript may mix Spanish and English. Never invent an item or quantity. Use urgent only for an immediate safety or guest-impacting emergency; use high for a blocked room turnover; otherwise normal. If an item is mentioned without a clear quantity, include quantity 1 and set needs_clarification true. Keep standard hotel supply names in concise English."},
+        {role:"user",content:`Assigned room: ${room || "unknown"}\nCleaner: ${requestedBy}\nTranscript: ${transcript}`},
+      ],
+    });
+    const parsed = JSON.parse(interpretation.choices?.[0]?.message?.content || "{}");
+    const items = normalizeVoiceRequestItems(parsed.items);
+    const needsClarification = Boolean(parsed.needs_clarification) || !items.length;
+    return res.json({ok:true,request:{
+      room, requestedBy, category:parsed.category || "Other",
+      priority:["normal","high","urgent"].includes(parsed.priority) ? parsed.priority : "normal",
+      items, notes:String(parsed.notes || "").trim(), transcript, needsClarification,
+      clarificationQuestion:String(parsed.clarification_question || (items.length ? "" : "¿Qué necesitas y cuántos?")).trim(),
+    }});
+  } catch (error) {
+    console.error("VOICE SUPPLY REQUEST ERROR:", error.message);
+    const tooLarge = error?.code === "LIMIT_FILE_SIZE";
+    return res.status(tooLarge ? 413 : 500).json({ok:false,error:tooLarge ? "El audio es demasiado largo." : "No pude interpretar el audio. Intenta nuevamente."});
+  }
 });
 
 function normalizeServiceOrder(row) {
