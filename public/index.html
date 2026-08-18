@@ -1134,6 +1134,30 @@
       line-height:1;
     }
 
+    .inline-voice{width:46px;height:46px;min-width:46px;margin:0;padding:0;border-radius:16px;display:grid;place-items:center;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;box-shadow:none;font-size:20px;line-height:1;}
+    .voice-sheet{z-index:160;}
+    .voice-help{margin:0 0 14px;color:#667085;font-size:14px;line-height:1.45;font-weight:750;}
+    .voice-recorder{display:grid;place-items:center;gap:10px;padding:16px 8px 18px;}
+    .voice-record-button{width:92px;height:92px;border:0;border-radius:999px;background:#4f46e5;color:#fff;font-size:34px;box-shadow:0 14px 30px rgba(79,70,229,.28);}
+    .voice-record-button.recording{background:#dc2626;animation:voicePulse 1.2s infinite;}
+    .voice-record-status{font-size:14px;font-weight:950;color:#344054;text-align:center;}
+    .voice-timer{font-variant-numeric:tabular-nums;color:#667085;font-weight:900;}
+    .voice-review{display:grid;gap:12px;}
+    .voice-transcript{background:#f8fafc;border:1px solid #e4e7ec;border-radius:16px;padding:12px;color:#475467;font-size:13px;line-height:1.4;}
+    .voice-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .voice-field label{display:block;margin:0 0 5px;color:#667085;font-size:11px;font-weight:950;text-transform:uppercase;}
+    .voice-field input,.voice-field select,.voice-item input{width:100%;border:1px solid #d0d5dd;border-radius:12px;padding:11px;background:#fff;color:#101828;font:inherit;}
+    .voice-items{display:grid;gap:8px;}
+    .voice-item{display:grid;grid-template-columns:74px 1fr 42px;gap:8px;align-items:center;}
+    .voice-remove{height:42px;border:0;border-radius:12px;background:#fee2e2;color:#b91c1c;font-weight:1000;}
+    .voice-add{border:1px dashed #a5b4fc;background:#eef2ff;color:#4338ca;border-radius:13px;padding:10px;font-weight:950;}
+    .voice-warning{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:11px;font-size:13px;font-weight:850;}
+    .voice-actions{display:grid;grid-template-columns:1fr 1.5fr;gap:9px;margin-top:4px;}
+    .voice-actions button{min-height:50px;border:0;border-radius:14px;font-weight:1000;}
+    .voice-cancel{background:#f2f4f7;color:#344054;}
+    .voice-confirm{background:#0f766e;color:#fff;}
+    @keyframes voicePulse{50%{transform:scale(1.06);box-shadow:0 0 0 13px rgba(220,38,38,.12)}}
+
     .footer-right{
       display:flex;
       align-items:center;
@@ -1675,6 +1699,31 @@
     </button>
   </section>
 
+  <section id="voiceRequestPanel" class="report-sheet voice-sheet hidden">
+    <div class="report-sheet-head">
+      <div><span>Solicitud por voz</span><strong id="voiceUnitLabel">Unidad</strong></div>
+      <button class="sheet-close" onclick="closeVoiceRequest()">Cerrar</button>
+    </div>
+    <p class="voice-help">Di claramente el artículo y la cantidad. Puedes hablar en español, inglés o mezclar ambos.</p>
+    <div id="voiceRecorder" class="voice-recorder">
+      <button id="voiceRecordButton" class="voice-record-button" type="button" onclick="toggleVoiceRecording()">🎙</button>
+      <div id="voiceRecordStatus" class="voice-record-status">Toca para comenzar a grabar</div>
+      <div id="voiceTimer" class="voice-timer">00:00</div>
+    </div>
+    <div id="voiceReview" class="voice-review hidden">
+      <div id="voiceTranscript" class="voice-transcript"></div>
+      <div id="voiceWarning" class="voice-warning hidden"></div>
+      <div class="voice-fields">
+        <div class="voice-field"><label>Categoría</label><select id="voiceCategory"><option>Linen</option><option>Amenities</option><option>Cleaning Supplies</option><option>Maintenance</option><option>Other</option></select></div>
+        <div class="voice-field"><label>Prioridad</label><select id="voicePriority"><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></div>
+      </div>
+      <div class="voice-field"><label>Artículos y cantidades</label><div id="voiceItems" class="voice-items"></div></div>
+      <button class="voice-add" type="button" onclick="addVoiceItem()">+ Agregar artículo</button>
+      <div class="voice-field"><label>Notas</label><input id="voiceNotes" placeholder="Detalles opcionales"></div>
+      <div class="voice-actions"><button class="voice-cancel" type="button" onclick="resetVoiceRecorder()">Grabar otra vez</button><button id="voiceConfirmButton" class="voice-confirm" type="button" onclick="confirmVoiceRequest()">Enviar solicitud</button></div>
+    </div>
+  </section>
+
   <section class="card">
     <div class="section-title">
       <h2>Historial de hoy</h2>
@@ -1727,6 +1776,13 @@ let selectedUnit = "";
 let selectedUnitStatus = "";
 let selectedUnitArrival = false;
 let cleanerDataSource = "postgres";
+let voiceMediaRecorder = null;
+let voiceMediaStream = null;
+let voiceAudioChunks = [];
+let voiceTimerHandle = null;
+let voiceStartedAt = 0;
+let voiceRequestUnit = "";
+let interpretedVoiceRequest = null;
 
 function todayChicagoISO(){
   return new Intl.DateTimeFormat("en-CA", {
@@ -2365,6 +2421,8 @@ function renderCleanerAssignments(units){
               ${escapeHtml(footerRight)}
             </strong>
 
+            <button class="inline-voice" title="Solicitar supplies por voz" aria-label="Solicitar supplies por voz" onclick="openVoiceRequest(event, '${safeJsString(item.unit)}')">🎙</button>
+
             <button
               class="inline-report"
               title="Reporte"
@@ -2517,6 +2575,150 @@ function openReportForUnit(event, unit, status, arrival){
     setTimeout(() => {
       note.focus();
     }, 160);
+  }
+}
+
+function openVoiceRequest(event, unit){
+  event?.stopPropagation();
+  event?.preventDefault();
+  voiceRequestUnit = String(unit || "").trim().toUpperCase();
+  document.getElementById("voiceUnitLabel").textContent = voiceRequestUnit;
+  resetVoiceRecorder();
+  document.getElementById("voiceRequestPanel").classList.remove("hidden");
+  document.body.classList.add("report-open");
+}
+
+function closeVoiceRequest(){
+  stopVoiceTracks();
+  clearInterval(voiceTimerHandle);
+  document.getElementById("voiceRequestPanel").classList.add("hidden");
+  document.body.classList.remove("report-open");
+}
+
+function stopVoiceTracks(){
+  if(voiceMediaStream) voiceMediaStream.getTracks().forEach(track => track.stop());
+  voiceMediaStream = null;
+}
+
+function resetVoiceRecorder(){
+  if(voiceMediaRecorder?.state === "recording") voiceMediaRecorder.stop();
+  stopVoiceTracks();
+  clearInterval(voiceTimerHandle);
+  voiceMediaRecorder = null;
+  voiceAudioChunks = [];
+  interpretedVoiceRequest = null;
+  document.getElementById("voiceReview").classList.add("hidden");
+  document.getElementById("voiceRecorder").classList.remove("hidden");
+  document.getElementById("voiceRecordButton").classList.remove("recording");
+  document.getElementById("voiceRecordButton").textContent = "🎙";
+  document.getElementById("voiceRecordStatus").textContent = "Toca para comenzar a grabar";
+  document.getElementById("voiceTimer").textContent = "00:00";
+}
+
+async function toggleVoiceRecording(){
+  if(voiceMediaRecorder?.state === "recording") return voiceMediaRecorder.stop();
+  if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder){
+    alert("Este dispositivo no permite grabar audio desde el navegador.");
+    return;
+  }
+  try{
+    voiceMediaStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+    const preferred = ["audio/webm;codecs=opus","audio/mp4","audio/webm"].find(type => MediaRecorder.isTypeSupported(type));
+    voiceMediaRecorder = preferred ? new MediaRecorder(voiceMediaStream,{mimeType:preferred}) : new MediaRecorder(voiceMediaStream);
+    voiceAudioChunks = [];
+    voiceMediaRecorder.ondataavailable = event => { if(event.data?.size) voiceAudioChunks.push(event.data); };
+    voiceMediaRecorder.onstop = interpretVoiceRecording;
+    voiceMediaRecorder.start(250);
+    voiceStartedAt = Date.now();
+    const button = document.getElementById("voiceRecordButton");
+    button.classList.add("recording");
+    button.textContent = "■";
+    document.getElementById("voiceRecordStatus").textContent = "Grabando… toca para terminar";
+    voiceTimerHandle = setInterval(() => {
+      const seconds = Math.floor((Date.now()-voiceStartedAt)/1000);
+      document.getElementById("voiceTimer").textContent = `${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
+      if(seconds >= 45 && voiceMediaRecorder?.state === "recording") voiceMediaRecorder.stop();
+    },250);
+  }catch(error){
+    alert("Necesitas permitir acceso al micrófono para enviar una solicitud por voz.");
+  }
+}
+
+async function interpretVoiceRecording(){
+  clearInterval(voiceTimerHandle);
+  stopVoiceTracks();
+  document.getElementById("voiceRecordButton").classList.remove("recording");
+  document.getElementById("voiceRecordButton").textContent = "🎙";
+  document.getElementById("voiceRecordStatus").textContent = "Interpretando solicitud…";
+  try{
+    if(!voiceAudioChunks.length) throw new Error("No se grabó audio.");
+    const blob = new Blob(voiceAudioChunks,{type:voiceAudioChunks[0].type || "audio/webm"});
+    const form = new FormData();
+    form.append("audio",blob,blob.type.includes("mp4") ? "request.m4a" : "request.webm");
+    form.append("room",voiceRequestUnit);
+    form.append("requestedBy",document.getElementById("name").value.trim());
+    const response = await fetch("/api/voice-supply-request/interpret",{method:"POST",body:form});
+    const data = await response.json();
+    if(!response.ok || !data.ok) throw new Error(data.error || "No pude interpretar el audio.");
+    interpretedVoiceRequest = data.request;
+    renderVoiceReview(data.request);
+  }catch(error){
+    document.getElementById("voiceRecordStatus").textContent = error.message;
+    showBigStatus(error.message,"error");
+  }
+}
+
+function renderVoiceReview(request){
+  document.getElementById("voiceRecorder").classList.add("hidden");
+  document.getElementById("voiceReview").classList.remove("hidden");
+  document.getElementById("voiceTranscript").textContent = `Escuché: “${request.transcript}”`;
+  document.getElementById("voiceCategory").value = request.category || "Other";
+  document.getElementById("voicePriority").value = request.priority || "normal";
+  document.getElementById("voiceNotes").value = request.notes || "";
+  const warning = document.getElementById("voiceWarning");
+  warning.textContent = request.clarificationQuestion || "Revisa los artículos y cantidades antes de enviar.";
+  warning.classList.toggle("hidden",!request.needsClarification);
+  const box = document.getElementById("voiceItems");
+  box.innerHTML = "";
+  (request.items || []).forEach(item => addVoiceItem(item));
+  if(!(request.items || []).length) addVoiceItem();
+}
+
+function addVoiceItem(item={name:"",quantity:1}){
+  const row = document.createElement("div");
+  row.className = "voice-item";
+  row.innerHTML = `<input class="voice-quantity" type="number" min="1" max="100" value="${Math.max(1,Number(item.quantity)||1)}" aria-label="Cantidad"><input class="voice-item-name" value="${escapeHtml(item.name || "")}" placeholder="Artículo" aria-label="Artículo"><button class="voice-remove" type="button" aria-label="Eliminar">×</button>`;
+  row.querySelector(".voice-remove").onclick = () => row.remove();
+  document.getElementById("voiceItems").appendChild(row);
+}
+
+async function confirmVoiceRequest(){
+  const items = [...document.querySelectorAll("#voiceItems .voice-item")].map(row => ({
+    quantity:Math.max(1,Number(row.querySelector(".voice-quantity").value)||1),
+    name:row.querySelector(".voice-item-name").value.trim()
+  })).filter(item => item.name);
+  if(!items.length){ alert("Agrega al menos un artículo."); return; }
+  const button = document.getElementById("voiceConfirmButton");
+  button.disabled = true;
+  button.textContent = "Enviando…";
+  try{
+    const transcript = interpretedVoiceRequest?.transcript || "";
+    const notes = document.getElementById("voiceNotes").value.trim();
+    const response = await fetch("/api/service-orders",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({room:voiceRequestUnit,category:document.getElementById("voiceCategory").value,priority:document.getElementById("voicePriority").value,items,assignedTo:"Runner",requestedBy:document.getElementById("name").value.trim(),notes:[notes,transcript ? `Voice: ${transcript}` : ""].filter(Boolean).join(" · ")})
+    });
+    const data = await response.json();
+    if(!response.ok || !data.ok) throw new Error(data.error || "No se pudo enviar la solicitud.");
+    closeVoiceRequest();
+    showBigStatus(`Solicitud #${data.order.id} enviada al runner`,"success");
+    playBeep("success");
+    vibratePhone("success");
+  }catch(error){
+    showBigStatus(error.message,"error");
+  }finally{
+    button.disabled = false;
+    button.textContent = "Enviar solicitud";
   }
 }
 
