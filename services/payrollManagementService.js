@@ -217,6 +217,88 @@ async function resetPayrollRecordAmount({ recordId, reason, changedBy = 'Admin' 
   return result.rows[0];
 }
 
+function payrollWeekForDate(dateValue) {
+  const date = new Date(`${String(dateValue || '').slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(date.getTime())) throw new Error('La fecha del movimiento no es válida');
+  const day = date.getDay();
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return {
+    weekStart: monday.toISOString().slice(0, 10),
+    weekEnd: sunday.toISOString().slice(0, 10),
+  };
+}
+
+async function createManualPayrollEntry({ employee, workDate, kind, unit = '', amount, reason = '', changedBy = 'Admin' }) {
+  const cleanEmployee = String(employee || '').trim();
+  const cleanDate = String(workDate || '').slice(0, 10);
+  const cleanKind = String(kind || '').trim();
+  const cleanReason = String(reason || '').trim();
+  const allowedKinds = new Set(['Bonus', 'Extra Unit', 'Deduction', 'Reimbursement', 'Other Adjustment']);
+  if (!cleanEmployee) throw new Error('El empleado es obligatorio');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) throw new Error('La fecha es obligatoria');
+  if (!allowedKinds.has(cleanKind)) throw new Error('El concepto del movimiento no es válido');
+  if (!cleanReason) throw new Error('Debes escribir el motivo del movimiento');
+
+  let numericAmount = Math.abs(roundMoney(amount));
+  if (!(numericAmount > 0)) throw new Error('El monto debe ser mayor que cero');
+  if (cleanKind === 'Deduction') numericAmount *= -1;
+  const { weekStart, weekEnd } = payrollWeekForDate(cleanDate);
+  await assertPayrollWeekOpen(weekStart, weekEnd);
+
+  const payType = cleanKind === 'Extra Unit' ? 'unit' : 'adjustment';
+  const displayUnit = String(unit || '').trim() || cleanKind;
+  const result = await query(
+    `INSERT INTO payroll_records (
+       work_date, employee, normalized_employee, unit, room_type,
+       gross_unit_amount, split_count, split_percent, amount, pay_type,
+       role_worked, week_start, week_end, status, source, raw_data,
+       manual_override, adjustment_reason, adjusted_by, adjusted_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,1,1,$6,$7,'Cleaner',$8,$9,'Pending','manual',$10::jsonb,TRUE,$11,$12,NOW())
+     RETURNING *`,
+    [cleanDate, cleanEmployee, normalizeEmployeeName(cleanEmployee), displayUnit,
+      cleanKind, numericAmount, payType, weekStart, weekEnd,
+      JSON.stringify({ kind: cleanKind, reason: cleanReason, enteredUnit: String(unit || '').trim() }),
+      cleanReason, changedBy]
+  );
+  const record = result.rows[0];
+  await writePayrollAudit({
+    weekStart, weekEnd, action: 'MANUAL_ENTRY_CREATED', employee: cleanEmployee,
+    unit: displayUnit, recordId: record.id, changedBy, reason: cleanReason, after: record,
+  });
+  return record;
+}
+
+async function listManualPayrollEntries(weekStart, weekEnd) {
+  const result = await query(
+    `SELECT * FROM payroll_records
+     WHERE work_date BETWEEN $1 AND $2 AND source = 'manual'
+     ORDER BY work_date ASC, id ASC`,
+    [weekStart, weekEnd]
+  );
+  return result.rows;
+}
+
+async function deleteManualPayrollEntry({ recordId, changedBy = 'Admin' }) {
+  const currentResult = await query(
+    `SELECT * FROM payroll_records WHERE id = $1 AND source = 'manual' LIMIT 1`,
+    [recordId]
+  );
+  const current = currentResult.rows[0];
+  if (!current) throw new Error('Movimiento manual no encontrado');
+  const weekStart = String(current.week_start).slice(0, 10);
+  const weekEnd = String(current.week_end).slice(0, 10);
+  await assertPayrollWeekOpen(weekStart, weekEnd);
+  await query(`DELETE FROM payroll_records WHERE id = $1 AND source = 'manual'`, [recordId]);
+  await writePayrollAudit({
+    weekStart, weekEnd, action: 'MANUAL_ENTRY_DELETED', employee: current.employee,
+    unit: current.unit, recordId, changedBy, reason: 'Movimiento manual eliminado', before: current,
+  });
+  return current;
+}
+
 async function validatePayrollWeek(weekStart, weekEnd) {
   const result = await query(
     `
@@ -226,7 +308,7 @@ async function validatePayrollWeek(weekStart, weekEnd) {
         COALESCE(SUM(amount),0)::numeric(12,2) AS total,
         COUNT(*) FILTER (WHERE TRIM(employee) = '')::integer AS missing_employee,
         COUNT(*) FILTER (WHERE TRIM(unit) = '' AND pay_type = 'unit')::integer AS missing_unit,
-        COUNT(*) FILTER (WHERE amount <= 0)::integer AS invalid_amount,
+        COUNT(*) FILTER (WHERE amount <= 0 AND pay_type <> 'adjustment')::integer AS invalid_amount,
         COUNT(*) FILTER (WHERE manual_override = TRUE)::integer AS manual_adjustments
       FROM payroll_records
       WHERE work_date BETWEEN $1 AND $2
@@ -302,6 +384,9 @@ module.exports = {
   savePayrollRate,
   updatePayrollRecordAmount,
   resetPayrollRecordAmount,
+  createManualPayrollEntry,
+  listManualPayrollEntries,
+  deleteManualPayrollEntry,
   validatePayrollWeek,
   closePayrollWeek,
   reopenPayrollWeek,
