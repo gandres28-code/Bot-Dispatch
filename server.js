@@ -44,6 +44,9 @@ const {
   savePayrollRate,
   updatePayrollRecordAmount,
   resetPayrollRecordAmount,
+  createManualPayrollEntry,
+  listManualPayrollEntries,
+  deleteManualPayrollEntry,
   validatePayrollWeek,
   closePayrollWeek,
   reopenPayrollWeek,
@@ -2097,6 +2100,24 @@ async function getPayrollRecordsWithSource(
 ) {
   validatePayrollRange(weekStart, weekEnd);
   const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
+  if (postgresStatus.connected) {
+    const manualRecords = await listManualPayrollEntries(weekStart, weekEnd);
+    records.push(...manualRecords.map((record) => ({
+      id: record.id,
+      date: String(record.work_date).slice(0, 10),
+      workDate: String(record.work_date).slice(0, 10),
+      cleaner: record.employee,
+      employee: record.employee,
+      unit: record.unit,
+      roomType: record.room_type,
+      amount: Number(record.amount || 0),
+      payType: record.pay_type,
+      roleWorked: record.role_worked,
+      manualOverride: true,
+      adjustmentReason: record.adjustment_reason,
+      source: 'manual',
+    })));
+  }
   return {
     records,
     source: "central-notion",
@@ -6238,6 +6259,43 @@ app.post("/api/hotsos/guest-out", async (req, res) => {
 // =========================================================
 // PAYROLL 2.0 · TARIFAS, AJUSTES, BLOQUEO Y AUDITORÍA
 // =========================================================
+app.post("/api/payroll/manual-entry", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({ ok: false, message: "PostgreSQL no está conectado." });
+    }
+    const record = await createManualPayrollEntry({
+      employee: req.body.employee,
+      workDate: req.body.date,
+      kind: req.body.kind,
+      unit: req.body.unit,
+      amount: req.body.amount,
+      reason: req.body.reason,
+      changedBy: req.body.changedBy || "Admin",
+    });
+    io.emit("payroll-record-updated", record);
+    return res.status(201).json({ ok: true, record });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
+app.delete("/api/payroll/manual-entry/:id", async (req, res) => {
+  try {
+    if (!postgresStatus.connected) {
+      return res.status(503).json({ ok: false, message: "PostgreSQL no está conectado." });
+    }
+    const record = await deleteManualPayrollEntry({
+      recordId: Number(req.params.id),
+      changedBy: req.body?.changedBy || "Admin",
+    });
+    io.emit("payroll-record-updated", record);
+    return res.json({ ok: true, record });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message });
+  }
+});
+
 app.get("/api/payroll/week", async (req, res) => {
   try {
     const currentWeek = getPayrollWeek(new Date());
@@ -6433,10 +6491,11 @@ app.get("/payroll-preview", async (req, res) => {
 
     records.forEach((record) => {
       const person = ensure(record.cleaner);
-      person.units += 1;
+      if (String(record.payType || "unit").toLowerCase() === "unit") person.units += 1;
       person.cleaningPay += Number(record.amount || 0);
       person.roles.add("Cleaner");
-      if (!record.roomType || Number(record.amount || 0) <= 0) {
+      if (String(record.payType || "unit").toLowerCase() === "unit" &&
+          (!record.roomType || Number(record.amount || 0) <= 0)) {
         warnings.push(`${record.unit || "Unidad desconocida"}: tarifa o tipo inválido`);
       }
     });
@@ -6469,7 +6528,7 @@ app.get("/payroll-preview", async (req, res) => {
       fallbackReason: payrollRead.fallbackReason || "",
       totals: {
         employees: people.length,
-        units: records.length,
+        units: records.filter((record) => String(record.payType || "unit").toLowerCase() === "unit").length,
         hourlyEntries: hourlyRecords.length,
         amount: roundMoney(people.reduce((sum, person) => sum + person.total, 0)),
       },
