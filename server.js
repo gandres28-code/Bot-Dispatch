@@ -1749,67 +1749,49 @@ return;
 }
 const now = new Date().toISOString();
 try {
-const schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
-const alreadyExists = await dailyLogAlreadyExists(
-action,
-unit,
-employee,
-inspector
-);
-if (alreadyExists) {
-console.log("■■ Registro duplicado, no se guardó en Daily Cleaning Logs");
-return;
+let schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
+if (!Object.keys(schema || {}).length) {
+  const dataSourceId = await resolveDataSourceId(NOTION_LOG_DATABASE_ID);
+  const source = await notionRest(`/data_sources/${dataSourceId}`, { method: "GET" }, "logs.schema");
+  schema = source.properties || {};
 }
-const props = {};
-const fields = [
-buildTextProperty(schema, ["log", "Log"], `${unit} - ${action} - ${employee || inspector || ""}`),
-buildDateProperty(schema, ["date", "Date"], todayISO()),
-buildDateProperty(schema, ["time", "Time"], now),
-buildTextProperty(schema, ["unit", "Unit"], unit),
-buildTextProperty(schema, ["cleaner", "Cleaner"], employee || ""),
-buildTextProperty(schema, ["inspector", "Inspector"], inspector || ""),
-buildSelectProperty(schema, ["action", "Action"], action),
-buildTextProperty(schema, ["note", "Note"], note || ""),
-buildSelectProperty(schema, ["category", "Category"], ai?.category || "Other"),
-buildSelectProperty(schema, ["priority", "Priority"], ai?.priority || "Normal"),
-buildSelectProperty(schema, ["status", "Status"], notionStatusFromAction(action) || action),
-buildTextProperty(schema, ["cleaner error", "Cleaner Error"], assignedCleaner || ""),
-];
-fields.forEach((field) => {
-if (field) {
-props[field.name] = field.value;
-}
-});
-// Usa el tipo verdadero del esquema: una propiedad Status no acepta {select}.
-for (const names of [["action", "Action"], ["category", "Category"], ["priority", "Priority"], ["status", "Status"]]) {
-  const name = findPropName(schema, names);
-  if (name && schema[name]?.type !== "select") {
-    const value = name.toLowerCase() === "action" ? action
-      : name.toLowerCase() === "category" ? ai?.category || "Other"
-      : name.toLowerCase() === "priority" ? ai?.priority || "Normal"
-      : notionStatusFromAction(action) || action;
-    delete props[name];
-    addNotionProp(props, schema, names, value);
-  }
-}
-if (!findPropName(schema, ["Date", "date"]) || !findPropName(schema, ["Unit", "unit"]) || !findPropName(schema, ["Action", "action"])) {
-  throw new Error("Daily Cleaning Logs necesita las propiedades Date, Unit y Action");
+if (!Object.keys(schema || {}).length) {
+  const sample = await notion.databases.query({ database_id: NOTION_LOG_DATABASE_ID, page_size: 1 });
+  schema = sample.results?.[0]?.properties || {};
 }
 const titleName = Object.keys(schema).find((key) => schema[key]?.type === "title");
-if (titleName && !props[titleName]) {
-  props[titleName] = { title: [{ text: { content: `${unit} - ${action} - ${employee || inspector || ""}`.slice(0, 180) } }] };
+if (!titleName) {
+  throw new Error(`Daily Cleaning Logs no tiene un campo título accesible. Columnas: ${Object.keys(schema).join(", ") || "ninguna"}`);
 }
-if (schema["Photo URL"] && photoUrl) {
-  props["Photo URL"] = {
-    url: photoUrl,
-  };
-}
-
-if (schema["Lost and Found"]) {
-  props["Lost and Found"] = {
-    checkbox: !!lostAndFound,
-  };
-}
+const person = employee || inspector || "";
+const title = [unit, action, person, note || ""].join(" | ").slice(0, 180);
+const props = { [titleName]: { title: [{ text: { content: title } }] } };
+const dateField = findPropName(schema, ["Date", "Work Date", "Fecha"]);
+const timeField = findPropName(schema, ["Time", "Event Time", "Timestamp"]);
+const unitField = findPropName(schema, ["Unit", "Room", "Room Number", "Room number", "Habitación"]);
+const actionField = findPropName(schema, ["Action", "Event", "Acción"]);
+if (dateField && schema[dateField]?.type === "date") addNotionProp(props, schema, [dateField], todayISO());
+if (timeField && schema[timeField]?.type === "date") addNotionProp(props, schema, [timeField], now);
+if (unitField && unitField !== titleName) addNotionProp(props, schema, [unitField], unit);
+if (actionField && actionField !== titleName) addNotionProp(props, schema, [actionField], action);
+addNotionProp(props, schema, ["Cleaner", "Employee", "Person"], employee || "");
+addNotionProp(props, schema, ["Inspector"], inspector || "");
+addNotionProp(props, schema, ["Note", "Message", "Notes"], note || "");
+addNotionProp(props, schema, ["Category"], ai?.category || "Other");
+addNotionProp(props, schema, ["Priority"], ai?.priority || "Normal");
+addNotionProp(props, schema, ["Photo URL"], photoUrl || "");
+addNotionProp(props, schema, ["Lost and Found"], lostAndFound);
+// Evita alertas y registros duplicados al reintentar una acción ya guardada.
+const recent = await notion.databases.query({
+  database_id: NOTION_LOG_DATABASE_ID,
+  page_size: 30,
+  sorts: [{ timestamp: "created_time", direction: "descending" }],
+});
+const duplicate = (recent.results || []).some((page) => {
+  const existing = page.properties?.[titleName]?.title?.map((item) => item.plain_text || item.text?.content || "").join("") || "";
+  return existing === title && Date.now() - new Date(page.created_time).getTime() < 5 * 60 * 1000;
+});
+if (duplicate) return { duplicate: true };
 const response = await notion.pages.create({
 parent: {
   database_id: NOTION_LOG_DATABASE_ID,
@@ -3392,6 +3374,7 @@ if (needsAI) {
   ai = await analyzeNoteWithAI(action, note);
 }
 
+let actionLogSaved = true;
 for (const page of matches) {
   const assignedCleaner = getAssignedCleaner(page);
   const officialCleaner = assignedCleaner || employee;
@@ -3406,8 +3389,7 @@ for (const page of matches) {
     `${photoUrl ? ` - Photo: ${photoUrl}` : ""}` +
     `${ai ? ` | ${ai.category} | ${ai.priority} | ${ai.summary}` : ""}`;
 
-  const oldLastMessage =
-    page.properties["Last Message"]?.rich_text?.map((t) => t.plain_text).join("") || "";
+  const oldLastMessage = readRoomTextProperty(page.properties, ["Last Message", "Last Update", "Activity Log"]);
 
   const newLastMessage = oldLastMessage
     ? `${oldLastMessage}\n${historyLine}`
@@ -3614,6 +3596,34 @@ for (const page of matches) {
   // Evento ligero para actualizar solo una tarjeta en todos los teléfonos.
   io.emit("room-updated", roomUpdatePayload);
 
+  // Evento general como respaldo para cambios de asignación o cambios externos.
+  broadcastAssignmentUpdate("server-room-update", {
+    pageId: page.id,
+    unit: fullUnitTitle,
+    action,
+    lightweight: true,
+  });
+
+  let logSaved = true;
+  let logDuplicate = false;
+  try {
+    const logResult = await saveDailyLog({
+    action,
+    unit: fullUnitTitle,
+    employee: mode === "cleaner" ? officialCleaner : officialCleaner,
+    inspector: mode === "inspector" ? employee : "",
+    assignedCleaner: mode === "inspector" ? officialCleaner : "",
+    note,
+    ai,
+    photoUrl: photoUrl || "",
+    lostAndFound: action === "LOST_FOUND",
+    });
+    logDuplicate = Boolean(logResult?.duplicate);
+  } catch (error) {
+    logSaved = false;
+    actionLogSaved = false;
+    console.error("NOTION ACTION LOG ERROR:", error.message);
+  }
   // Alertas administrativas: limpieza iniciada, terminada y solicitudes operativas.
   const adminAlertConfig = {
     START: {
@@ -3649,7 +3659,7 @@ for (const page of matches) {
   };
 
   const adminAlert = adminAlertConfig[action];
-  if (adminAlert) {
+  if (adminAlert && logSaved && !logDuplicate) {
     const adminPayload = {
       ...adminAlert,
       action,
@@ -3675,25 +3685,6 @@ for (const page of matches) {
     }).catch(error => console.error("ADMIN OPERATIONS PUSH ERROR:", error.message));
   }
 
-  // Evento general como respaldo para cambios de asignación o cambios externos.
-  broadcastAssignmentUpdate("server-room-update", {
-    pageId: page.id,
-    unit: fullUnitTitle,
-    action,
-    lightweight: true,
-  });
-
-  await saveDailyLog({
-    action,
-    unit: fullUnitTitle,
-    employee: mode === "cleaner" ? officialCleaner : officialCleaner,
-    inspector: mode === "inspector" ? employee : "",
-    assignedCleaner: mode === "inspector" ? officialCleaner : "",
-    note,
-    ai,
-    photoUrl: photoUrl || "",
-    lostAndFound: action === "LOST_FOUND",
-  });
   broadcastOpsUpdate({ type: "action", action, unit: fullUnitTitle, employee, message: note || "" });
 
   if (autoCloseCleaning) {
@@ -3727,6 +3718,7 @@ return {
   label,
   ai,
   status,
+  logSaved: actionLogSaved,
 };
 }
 
@@ -4431,10 +4423,13 @@ function reportPageToObject(page) {
   const p = page.properties || {};
   const dateValue = readPlainTextFromProp(p.Date || p.date);
   const timeValue = readPlainTextFromProp(p.Time || p.time || p["Created At"]);
+  const reportTitle = readRoomTextProperty(p, ["Report ID", "Report", "Name", "Title"])
+    || readPlainTextFromProp(Object.values(p).find((property) => property?.type === "title"));
+  const unitFromTitle = reportTitle.match(/^RPT-\d+\s+-\s+(.+)$/i)?.[1] || "";
 
   return {
     id: page.id,
-    reportId: readPlainTextFromProp(p["Report ID"] || p.Report || p.Name || p.Title),
+    reportId: reportTitle.split(/\s+-\s+/)[0],
     date: dateValue,
     timeRaw: timeValue,
     time: timeValue
@@ -4445,7 +4440,7 @@ function reportPageToObject(page) {
           hour12: true,
         })
       : "",
-    unit: readPlainTextFromProp(p.Unit || p.unit),
+    unit: readRoomTextProperty(p, ["Unit", "Room", "Room number", "Habitación"]) || unitFromTitle,
     employee: readPlainTextFromProp(p.Employee || p["Employee Name"] || p.Name),
     role: readPlainTextFromProp(p.Role || p.role),
     action: readPlainTextFromProp(p.Action || p.action),
@@ -5603,8 +5598,11 @@ app.post("/action", async (req, res) => {
       source: "notion",
       eventId: eventId || requestId || "",
       notionSync: "saved",
+      logSaved: result.logSaved,
       status: result.status || notionStatusFromAction(action) || "",
-      message: `Guardado en Notion: ${result.label} - ${unit}`,
+      message: result.logSaved
+        ? `Guardado en Notion: ${result.label} - ${unit}`
+        : `Habitación actualizada en Notion; el historial de Operaciones necesita revisión: ${unit}`,
     });
   } catch (error) {
     console.error("Error en /action:", error.message);
@@ -5852,33 +5850,41 @@ app.post("/inspector-action", async (req, res) => {
 
 app.get("/operations-events", async (req, res) => {
   try {
-    if (!NOTION_LOG_DATABASE_ID) {
-      return res.json({
-        count: 0,
-        events: [],
-      });
+    const date = String(req.query.date || todayISO()).trim();
+    const pages = [];
+    if (NOTION_LOG_DATABASE_ID) {
+      try {
+        let cursor;
+        do {
+          const body = {
+            database_id: NOTION_LOG_DATABASE_ID,
+            page_size: 100,
+            sorts: [{ timestamp: "created_time", direction: "descending" }],
+          };
+          if (cursor) body.start_cursor = cursor;
+          const response = await notion.databases.query(body);
+          pages.push(...(response.results || []));
+          cursor = response.has_more && pages.length < 500 ? response.next_cursor : null;
+        } while (cursor);
+      } catch (error) {
+        console.warn("Historial de limpieza no disponible; consultando actividad de habitaciones:", error.message);
+      }
     }
 
-    const date = String(req.query.date || todayISO()).trim();
-    const schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
-    const dateName = ["Date", "date"].find((key) => schema[key]?.type === "date");
-    const pages = [];
-    let cursor;
-    do {
-      const body = {
-        database_id: NOTION_LOG_DATABASE_ID,
-        page_size: 100,
-        sorts: [{ timestamp: "created_time", direction: "descending" }],
-      };
-      if (dateName) body.filter = { property: dateName, date: { equals: date } };
-      if (cursor) body.start_cursor = cursor;
-      const response = await notion.databases.query(body);
-      pages.push(...(response.results || []));
-      cursor = response.has_more && pages.length < 500 ? response.next_cursor : null;
-    } while (cursor);
-
-    const events = pages.map((page) => {
+    const localDate = (timestamp) => new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(timestamp));
+    const events = pages.filter((page) => {
+      const dateProp = Object.entries(page.properties || {}).find(([name, property]) =>
+        ["date", "work date", "fecha"].includes(name.trim().toLowerCase()) && property?.type === "date"
+      )?.[1];
+      return (dateProp?.date?.start?.slice(0, 10) || localDate(page.created_time)) === date;
+    }
+    ).map((page) => {
       const props = page.properties;
+      const logTitle = Object.values(props || {}).find((property) => property?.type === "title")?.title
+        ?.map((item) => item.plain_text || item.text?.content || "").join("") || "";
+      const [titleUnit, titleAction, titlePerson, ...titleNote] = logTitle.split(" | ");
 
       return {
         id: page.id,
@@ -5893,18 +5899,41 @@ app.get("/operations-events", async (req, res) => {
               })
             : "",
 
-        unit: readRoomTextProperty(props, ["Unit", "unit"]),
+        unit: readRoomTextProperty(props, ["Unit", "Room", "Room number", "Habitación"]) || titleUnit || "",
 
-        action: readRoomTextProperty(props, ["Action", "action"]),
+        action: readRoomTextProperty(props, ["Action", "action"]) || titleAction || "",
 
-        person: readRoomTextProperty(props, ["Cleaner", "cleaner", "Inspector", "inspector"]),
+        person: readRoomTextProperty(props, ["Cleaner", "cleaner", "Inspector", "inspector"]) || titlePerson || "",
 
-        note: readRoomTextProperty(props, ["Note", "note"]),
+        note: readRoomTextProperty(props, ["Note", "note"]) || titleNote.join(" | "),
         
         photoUrl:
           props["Photo URL"]?.url || "",
       };
     });
+
+    // La habitación también guarda cada START/DONE en Last message. Recuperar esos
+    // eventos cuando la base de logs todavía no tiene las columnas esperadas.
+    try {
+      const rooms = await queryRoomsByDate(date);
+      for (const room of rooms) {
+        const unit = getRoomTitleFromPage(room);
+        const history = readRoomTextProperty(room.properties, ["Last Message", "Last Update", "Activity Log"]);
+        for (const [index, line] of history.split("\n").entries()) {
+          const action = /limpieza iniciada/i.test(line) ? "START"
+            : /limpieza terminada/i.test(line) ? "DONE" : "";
+          if (!action) continue;
+          const match = line.match(/^(.*?)\s+-\s+(.*?)\s+-\s+/);
+          const time = match?.[1]?.trim() || "";
+          const person = match?.[2]?.trim() || "";
+          if (events.some((event) => event.unit === unit && event.action === action &&
+            (!time || event.time === time || event.person === person))) continue;
+          events.push({ id: `${room.id}-${index}-${action}`, unit, action, person, time, note: "", photoUrl: "" });
+        }
+      }
+    } catch (error) {
+      console.warn("No se pudo consultar actividad de habitaciones:", error.message);
+    }
 
     res.json({
       count: events.length,
@@ -7629,6 +7658,7 @@ async function getDashboardReports(date, forceRefresh = false) {
 
 async function getDashboardTimeClock(date, forceRefresh = false) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
+  if (Date.now() < (getDashboardTimeClock.unavailableUntil || 0)) return [];
 
   const cacheKey = `dashboard:timeclock:${date}`;
   const cached = !forceRefresh ? getCache(cacheKey) : null;
@@ -7645,7 +7675,17 @@ async function getDashboardTimeClock(date, forceRefresh = false) {
 
     if (cursor) query.start_cursor = cursor;
 
-    const response = await notion.databases.query(query);
+    let response;
+    try {
+      response = await notion.databases.query(query);
+    } catch (error) {
+      if (error.status === 404 || error.code === "object_not_found") {
+        getDashboardTimeClock.unavailableUntil = Date.now() + 10 * 60 * 1000;
+        console.warn("Time Clock no accesible para Care OS; se reintentará en 10 minutos.");
+        return [];
+      }
+      throw error;
+    }
     results = results.concat(response.results || []);
     cursor = response.has_more ? response.next_cursor : undefined;
   } while (cursor);

@@ -2438,14 +2438,14 @@ function mergeCleanerRoomUpdate(update){
 
   const status=String(update.status||"").toLowerCase();
 
-  if(status.includes("progress")){
+  if(status.includes("progress") || status === "started"){
     card.classList.remove("not-started","guest-out","pre-inspected","done");
     card.classList.add("started");
     updateCleanerCardState(update.unit,"half","Tap to Finish");
-    updateCachedCleanerUnit(update.unit, { status:update.status || "In Progress" });
+    updateCachedCleanerUnit(update.unit, { status:update.status || "Started" });
   }
 
-  if(status.includes("cleaned") || status.includes("awaiting") || status.includes("ready")){
+  if(status.includes("cleaned") || status.includes("awaiting") || status.includes("waiting for inspection") || status.includes("ready")){
     card.classList.remove("not-started","guest-out","pre-inspected","started");
     card.classList.add("done");
     updateCleanerCardState(update.unit,"full","Finished");
