@@ -1294,7 +1294,7 @@ function validatePayrollRange(weekStart, weekEnd) {
 
 // Leer título real de la unidad desde Notion, incluyendo paréntesis
 function getRoomTitleFromPage(page) {
-  return page.properties?.["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+  return readRoomTextProperty(page?.properties || {}, ["Room Number", "Unit", "Room", "Name"]);
 }
 // ■ Evitar acciones duplicadas
 function isDuplicateAction(action, unit, employee) {
@@ -1706,43 +1706,25 @@ name: String(value || "Other"),
 async function dailyLogAlreadyExists(action, unit, employee, inspector) {
   const today = todayISO();
   const person = employee || inspector || "";
-
-  const response = await notion.databases.query({
-    database_id: NOTION_LOG_DATABASE_ID,
-    filter: {
-      and: [
-        {
-          property: "Date",
-          date: {
-            equals: today,
-          },
-        },
-        {
-          property: "Unit",
-          rich_text: {
-            equals: unit,
-          },
-        },
-        {
-          property: "Action",
-          select: {
-            equals: action,
-          },
-        },
-      ],
-    },
-    page_size: 10,
-  });
-
-  return response.results.some((page) => {
-    const cleaner =
-      page.properties.Cleaner?.rich_text?.map((t) => t.plain_text).join("") || "";
-
-    const inspectorName =
-      page.properties.Inspector?.rich_text?.map((t) => t.plain_text).join("") || "";
-
-    return cleaner === person || inspectorName === person;
-  });
+  const schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
+  const dateName = ["Date", "date"].find((key) => schema[key]?.type === "date");
+  let cursor;
+  do {
+    const body = { database_id: NOTION_LOG_DATABASE_ID, page_size: 100 };
+    if (dateName) body.filter = { property: dateName, date: { equals: today } };
+    if (cursor) body.start_cursor = cursor;
+    const response = await notion.databases.query(body);
+    if ((response.results || []).some((page) => {
+      const props = page.properties || {};
+      return readRoomTextProperty(props, ["Unit", "unit"]) === unit &&
+        readRoomTextProperty(props, ["Action", "action"]) === action &&
+        ["Cleaner", "cleaner", "Inspector", "inspector"].some((key) =>
+          readRoomTextProperty(props, [key]) === person
+        );
+    })) return true;
+    cursor = response.has_more ? response.next_cursor : null;
+  } while (cursor);
+  return false;
 }
 async function saveDailyLog({
 action,
@@ -1792,6 +1774,25 @@ if (field) {
 props[field.name] = field.value;
 }
 });
+// Usa el tipo verdadero del esquema: una propiedad Status no acepta {select}.
+for (const names of [["action", "Action"], ["category", "Category"], ["priority", "Priority"], ["status", "Status"]]) {
+  const name = findPropName(schema, names);
+  if (name && schema[name]?.type !== "select") {
+    const value = name.toLowerCase() === "action" ? action
+      : name.toLowerCase() === "category" ? ai?.category || "Other"
+      : name.toLowerCase() === "priority" ? ai?.priority || "Normal"
+      : notionStatusFromAction(action) || action;
+    delete props[name];
+    addNotionProp(props, schema, names, value);
+  }
+}
+if (!findPropName(schema, ["Date", "date"]) || !findPropName(schema, ["Unit", "unit"]) || !findPropName(schema, ["Action", "action"])) {
+  throw new Error("Daily Cleaning Logs necesita las propiedades Date, Unit y Action");
+}
+const titleName = Object.keys(schema).find((key) => schema[key]?.type === "title");
+if (titleName && !props[titleName]) {
+  props[titleName] = { title: [{ text: { content: `${unit} - ${action} - ${employee || inspector || ""}`.slice(0, 180) } }] };
+}
 if (schema["Photo URL"] && photoUrl) {
   props["Photo URL"] = {
     url: photoUrl,
@@ -1813,6 +1814,7 @@ parent: {
 console.log("■ Daily Cleaning Log guardado");
 } catch (error) {
 console.log("■ ERROR guardando Daily Cleaning Log:", error.body || error.message);
+throw error;
 }
 }
 // ■ Evitar duplicados en Payroll Records
@@ -3340,8 +3342,7 @@ const targetDigits = roomDigits(unit);
 
 const findMatches = (roomPages) => {
   const exactNormalized = roomPages.filter((page) => {
-    const title =
-      page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+    const title = getRoomTitleFromPage(page);
     return normalizeRoom(title) === normalizedTarget;
   });
 
@@ -3350,8 +3351,7 @@ const findMatches = (roomPages) => {
   // Compatibilidad con títulos decorados, por ejemplo: "334 B (M) - H".
   // Solo usamos números cuando no existe una coincidencia normalizada.
   return roomPages.filter((page) => {
-    const title =
-      page.properties["Room Number"]?.title?.map((t) => t.plain_text).join("") || "";
+    const title = getRoomTitleFromPage(page);
     return targetDigits && roomDigits(title) === targetDigits;
   });
 };
@@ -3407,54 +3407,22 @@ for (const page of matches) {
     ? `${oldLastMessage}\n${historyLine}`
     : historyLine;
 
-  const props = {
-    "Last Whatsapp Update ": {
-      date: {
-        start: now,
-      },
-    },
-    "Last Message": {
-      rich_text: [
-        {
-          text: {
-            content: newLastMessage.slice(-1900),
-          },
-        },
-      ],
-    },
-    "Last Update By": {
-      rich_text: [
-        {
-          text: {
-            content: employee,
-          },
-        },
-      ],
-    },
-  };
+  const schema = await getDatabaseSchema(NOTION_DATABASE_ID);
+  const props = {};
+  addNotionProp(props, schema, ["Last Whatsapp Update ", "Last Whatsapp Update", "Last Update At"], now);
+  addNotionProp(props, schema, ["Last Message", "Last Update", "Activity Log"], newLastMessage.slice(-1900));
+  addNotionProp(props, schema, ["Last Update By", "Updated By"], employee);
 
   if (status) {
-    props["Cleaning Status"] = {
-      status: {
-        name: status,
-      },
-    };
+    addNotionProp(props, schema, ["Cleaning Status", "Status"], status);
   }
 
   if (action === "START") {
-    props["Started At"] = {
-      date: {
-        start: now,
-      },
-    };
+    addNotionProp(props, schema, ["Started At", "Cleaning Started At"], now);
   }
 
   if (action === "DONE") {
-    props["Finished At"] = {
-      date: {
-        start: now,
-      },
-    };
+    addNotionProp(props, schema, ["Finished At", "Cleaning Finished At"], now);
   }
 
   if (action === "INSPECTION_START") {
@@ -3572,33 +3540,21 @@ for (const page of matches) {
   }
 
   if (needsAI) {
-    props["Issues Notes"] = {
-      rich_text: [
-        {
-          text: {
-            content: ai ? ai.summary : note || label,
-          },
-        },
-      ],
-    };
-
-    props["Issue Category"] = {
-      select: {
-        name: ai ? ai.category : "Other",
-      },
-    };
-
-    props["Priority"] = {
-      select: {
-        name: ai ? ai.priority : "Normal",
-      },
-    };
+    addNotionProp(props, schema, ["Issues Notes", "Issue Notes"], ai ? ai.summary : note || label);
+    addNotionProp(props, schema, ["Issue Category", "Category"], ai ? ai.category : "Other");
+    addNotionProp(props, schema, ["Priority"], ai ? ai.priority : "Normal");
   }
 
-  await notion.pages.update({
-    page_id: page.id,
-    properties: props,
-  });
+  if (status && !Object.keys(props).some((key) => ["Cleaning Status", "Status"].includes(key))) {
+    throw new Error("La base de habitaciones no tiene un campo Cleaning Status o Status editable");
+  }
+
+  if (Object.keys(props).length) {
+    await notion.pages.update({
+      page_id: page.id,
+      properties: props,
+    });
+  }
 
   clearRoomCache(todayISO());
   clearAssignmentCaches(todayISO());
@@ -3730,6 +3686,7 @@ for (const page of matches) {
     photoUrl: photoUrl || "",
     lostAndFound: action === "LOST_FOUND",
   });
+  broadcastOpsUpdate({ type: "action", action, unit: fullUnitTitle, employee, message: note || "" });
 
   if (autoCloseCleaning) {
     await saveDailyLog({
@@ -3746,7 +3703,7 @@ for (const page of matches) {
       cleaner: officialCleaner,
       unit: fullUnitTitle,
       date: todayISO(),
-    });
+    }).catch((error) => console.error("PAYROLL RECORD ERROR:", error.message));
   }
 
   if (mode === "cleaner" && action === "DONE") {
@@ -3754,7 +3711,7 @@ for (const page of matches) {
       cleaner: officialCleaner,
       unit: fullUnitTitle,
       date: todayISO(),
-    });
+    }).catch((error) => console.error("PAYROLL RECORD ERROR:", error.message));
   }
 }
 
@@ -4667,26 +4624,24 @@ app.get("/operations-reports", async (req, res) => {
       return res.json(cached);
     }
 
-    const response = await notion.databases.query({
-      database_id: NOTION_REPORTS_DATABASE_ID,
-      page_size: 100,
-      filter: {
-        property: "Date",
-        date: {
-          equals: date,
-        },
-      },
-      sorts: [
-        {
-          property: "Time",
-          direction: "descending",
-        },
-      ],
-    });
+    const reportPages = [];
+    let cursor;
+    do {
+      const body = {
+        database_id: NOTION_REPORTS_DATABASE_ID,
+        page_size: 100,
+        filter: { property: "Date", date: { equals: date } },
+        sorts: [{ timestamp: "created_time", direction: "descending" }],
+      };
+      if (cursor) body.start_cursor = cursor;
+      const response = await notion.databases.query(body);
+      reportPages.push(...(response.results || []));
+      cursor = response.has_more && reportPages.length < 500 ? response.next_cursor : null;
+    } while (cursor);
 
     const reports = [];
 
-    for (const page of response.results) {
+    for (const page of reportPages) {
       const report = reportPageToObject(page);
     if (report.reportId) {
   let cleanReportId = String(report.reportId || "").trim().split(" - ")[0];
@@ -4696,8 +4651,13 @@ app.get("/operations-reports", async (req, res) => {
   }
 
   report.reportId = cleanReportId;
-  report.photos = await getReportPhotosByReportId(cleanReportId);
-  report.photosCount = report.photos.length;
+  report.photos = (Number(report.photosCount || 0) > 0)
+    ? await getReportPhotosByReportId(cleanReportId).catch((error) => {
+        console.warn("No se pudieron cargar fotos del reporte:", error.message);
+        return [];
+      })
+    : [];
+  report.photosCount = Math.max(Number(report.photosCount || 0), report.photos.length);
 }
       reports.push(report);
     }
@@ -5624,59 +5584,22 @@ app.post("/action", async (req, res) => {
       return res.status(400).json({ success: false, message: "Debes escribir una nota" });
     }
 
-    try {
-      const eventResult = await RoomEngine.handleCleanerAction({
-        eventId,
-        requestId,
-        action,
-        unit,
-        cleaner: name,
-        note,
-        photoUrl,
-      });
-
-      if (action === "DONE") {
-        runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
-      }
-
-      return res.json({
-        success: true,
-        source: "postgres",
-        eventId: eventResult?.eventId || "",
-        duplicate: Boolean(eventResult?.duplicate),
-        postgresUpdated: true,
-        notionSync: "queued",
-        payroll: eventResult?.payroll || null,
-        status: eventResult?.status || notionStatusFromAction(action) || "",
-        message: `Enviado correctamente: ${actionLabel(action)} - ${unit}`,
-      });
-    } catch (postgresError) {
-      console.error("⚠️ Event Engine cleaner falló; fallback en background:", postgresError.message);
-
-      if (isDuplicateAction(action, unit, name)) {
-        return res.status(400).json({
-          success: false,
-          message: "Acción ya registrada recientemente",
-        });
-      }
-
-      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Cleaner" });
-
-      return res.status(202).json({
-        success: true,
-        accepted: true,
-        source: "background-fallback",
-        eventId: eventId || requestId || "",
-        duplicate: false,
-        postgresUpdated: false,
-        notionSync: "processing",
-        status: notionStatusFromAction(action) || "",
-        message: `Acción recibida y procesándose: ${actionLabel(action)} - ${unit}`,
-      });
+    // La respuesta sólo confirma éxito después de actualizar la habitación en Notion.
+    const result = await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl || "");
+    if (action === "DONE") {
+      runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
     }
+    return res.json({
+      success: true,
+      source: "notion",
+      eventId: eventId || requestId || "",
+      notionSync: "saved",
+      status: notionStatusFromAction(action) || "",
+      message: `Guardado en Notion: ${result.label} - ${unit}`,
+    });
   } catch (error) {
     console.error("Error en /action:", error.message);
-    return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
+    return res.status(error.status || 503).json({ success: false, retryable:false, message: error.message });
   }
 });
 
@@ -5927,26 +5850,33 @@ app.get("/operations-events", async (req, res) => {
       });
     }
 
-    const response = await notion.databases.query({
-      database_id: NOTION_LOG_DATABASE_ID,
-      page_size: 20,
-      sorts: [
-        {
-          property: "Time",
-          direction: "descending",
-        },
-      ],
-    });
+    const date = String(req.query.date || todayISO()).trim();
+    const schema = await getDatabaseSchema(NOTION_LOG_DATABASE_ID);
+    const dateName = ["Date", "date"].find((key) => schema[key]?.type === "date");
+    const pages = [];
+    let cursor;
+    do {
+      const body = {
+        database_id: NOTION_LOG_DATABASE_ID,
+        page_size: 100,
+        sorts: [{ timestamp: "created_time", direction: "descending" }],
+      };
+      if (dateName) body.filter = { property: dateName, date: { equals: date } };
+      if (cursor) body.start_cursor = cursor;
+      const response = await notion.databases.query(body);
+      pages.push(...(response.results || []));
+      cursor = response.has_more && pages.length < 500 ? response.next_cursor : null;
+    } while (cursor);
 
-    const events = response.results.map((page) => {
+    const events = pages.map((page) => {
       const props = page.properties;
 
       return {
         id: page.id,
 
         time:
-          props.Time?.date?.start
-            ? new Date(props.Time.date.start).toLocaleString("en-US", {
+          (props.Time?.date?.start || props.time?.date?.start || page.created_time)
+            ? new Date(props.Time?.date?.start || props.time?.date?.start || page.created_time).toLocaleString("en-US", {
                 timeZone: "America/Chicago",
                 hour: "2-digit",
                 minute: "2-digit",
@@ -5954,27 +5884,13 @@ app.get("/operations-events", async (req, res) => {
               })
             : "",
 
-        unit:
-          props.Unit?.rich_text
-            ?.map((t) => t.plain_text)
-            .join("") || "",
+        unit: readRoomTextProperty(props, ["Unit", "unit"]),
 
-        action:
-          props.Action?.select?.name || "",
+        action: readRoomTextProperty(props, ["Action", "action"]),
 
-        person:
-          props.Cleaner?.rich_text
-            ?.map((t) => t.plain_text)
-            .join("") ||
-          props.Inspector?.rich_text
-            ?.map((t) => t.plain_text)
-            .join("") ||
-          "",
+        person: readRoomTextProperty(props, ["Cleaner", "cleaner", "Inspector", "inspector"]),
 
-        note:
-          props.Note?.rich_text
-            ?.map((t) => t.plain_text)
-            .join("") || "",
+        note: readRoomTextProperty(props, ["Note", "note"]),
         
         photoUrl:
           props["Photo URL"]?.url || "",
@@ -10561,6 +10477,21 @@ app.post("/api/service-orders", async (req, res) => {
     await client.query("COMMIT");
     const order = normalizeServiceOrder(result.rows[0]);
     io.emit("service-order:created", order);
+    // El mensaje de la orden también queda visible en Reportes de Operaciones.
+    const orderMessage = [
+      `Orden #${order.id}: ${items.map((item) => `${item.quantity} × ${item.name}`).join(" · ")}`,
+      notes,
+    ].filter(Boolean).join(" · ");
+    await createReportMessage({
+      unit: room,
+      employee: requestedBy || "Cleaner",
+      role: "Cleaner",
+      action: "SUPPLIES",
+      message: orderMessage,
+      ai: { category, priority: priority === "urgent" ? "Urgent" : priority === "high" ? "High" : "Normal", summary: orderMessage },
+      sourcePanel: "Service Orders",
+    }).catch((error) => console.error("ORDER NOTION REPORT ERROR:", error.message));
+    broadcastOpsUpdate({ type: "service-order-created", unit: room, employee: requestedBy, message: orderMessage });
 
     // Push notification for runners. The API response is not delayed if push fails.
     const itemSummary = items.slice(0, 3).map(item => `${item.quantity} ${item.name}`).join(" · ");

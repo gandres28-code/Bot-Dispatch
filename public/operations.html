@@ -107,34 +107,35 @@ function renderReports(){const items=filteredReports();$("reportsCount").textCon
 function renderEvents(){const items=filteredEvents();$("eventsCount").textContent=items.length;if(!items.length){$("events").innerHTML='<div class="empty">No hay actividad con este filtro.</div>';return}const groups={};items.forEach(e=>{const u=e.unit||"General";(groups[u]??=[]).push(e)});$("events").innerHTML=Object.entries(groups).map(([unit,events])=>`<article class="card"><div class="unit">${esc(unit)}</div><div class="timeline-group">${events.slice(0,10).map(e=>`<div class="event"><div class="row"><div class="event-title">${esc(e.action||e.type||"Actualización")}</div><div class="time">${esc(e.time||"")}</div></div><div class="event-note">${esc(e.person||e.employee||"")}${(e.note||e.message)?" · "+esc(e.note||e.message):""}</div>${e.photoUrl?`<div class="photo-grid"><a href="${esc(e.photoUrl)}" target="_blank"><img src="${esc(e.photoUrl)}"></a></div>`:""}</div>`).join("")}</div></article>`).join("")}
 function updateStats(){const pending=allReports.filter(r=>!isSent(r)).length;const urgent=[...allReports,...allEvents].filter(x=>/urgent|urgente|blocking|high/.test((reportText(x)+" "+eventText(x)))).length;$("statEvents").textContent=allEvents.length;$("statReports").textContent=allReports.length;$("statPending").textContent=pending;$("statUrgent").textContent=urgent}
 function renderAll(){renderReports();renderEvents();updateStats();$("status").textContent=`Actualizado ${new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}`}
-async function loadReports(){try{const r=await fetch("/operations-reports?includePhotos=true");const d=await r.json();allReports=d.reports||d.events||d.items||[];const newest=allReports[0];if(!firstLoad&&newest&&reportId(newest)!==lastReportId){playAlert();browserNotice("Nuevo reporte",`${newest.unit||"Unidad"} · ${newest.employee||newest.person||""}`)}if(newest)lastReportId=reportId(newest);renderAll()}catch(e){$("status").textContent="Error cargando reportes"}}
+async function loadReports(){try{const r=await fetch(`/operations-reports?includePhotos=true&date=${encodeURIComponent($("reportDate").value||todayISO())}`,{cache:"no-store"});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||"No se pudieron cargar los reportes");allReports=d.reports||d.events||d.items||[];const newest=allReports[0];if(!firstLoad&&newest&&reportId(newest)!==lastReportId){playAlert();browserNotice("Nuevo reporte",`${newest.unit||"Unidad"} · ${newest.employee||newest.person||""}`)}if(newest)lastReportId=reportId(newest);renderAll()}catch(e){$("status").textContent="Error cargando reportes"}}
 async function loadEvents(){
   const date=$("reportDate").value||todayISO();
-  let source="postgres";
-
   try{
-    let r=await fetch(`/api/v2/operations?date=${encodeURIComponent(date)}&limit=300`,{
-      cache:"no-store"
-    });
-    let d=await r.json();
-
-    if(!r.ok||!d.ok){
-      throw new Error(d.message||"PostgreSQL no disponible");
-    }
-
-    allEvents=d.events||[];
-  }catch(primaryError){
-    source="notion-fallback";
-
+    const response=await fetch(`/operations-events?date=${encodeURIComponent(date)}`,{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||"No se pudo cargar la actividad de Notion");
+    allEvents=data.events||[];
+    // Las órdenes de voz y los pedidos al runner también son actividad operativa.
     try{
-      const r=await fetch("/operations-events",{cache:"no-store"});
-      const d=await r.json();
-      allEvents=d.events||[];
-    }catch(fallbackError){
-      $("status").textContent="Error cargando actividad";
-      $("liveSource").textContent="Sin conexión";
-      return;
-    }
+      const ordersResponse=await fetch("/api/service-orders?status=all",{cache:"no-store"});
+      const ordersData=await ordersResponse.json();
+      if(ordersResponse.ok&&ordersData.ok){
+        const day=$("reportDate").value||todayISO();
+        const orders=(ordersData.orders||[]).filter(order=>{
+          const created=new Date(order.created_at||order.createdAt||0);
+          return !Number.isNaN(created.getTime())&&new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(created)===day;
+        }).map(order=>({
+          id:`order-${order.id}`,unit:order.room,action:`Orden #${order.id} · ${order.status||"new"}`,
+          person:order.requested_by||"",note:[(order.items||[]).map(item=>`${item.quantity||1} × ${item.name}`).join(" · "),order.notes||""].filter(Boolean).join(" · "),
+          priority:order.priority,time:new Date(order.created_at||order.createdAt).toLocaleTimeString("en-US",{timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit"})
+        }));
+        allEvents=[...orders,...allEvents];
+      }
+    }catch(error){console.warn("Órdenes:",error.message)}
+  }catch(error){
+    $("status").textContent=error.message;
+    $("liveSource").textContent="Sin conexión";
+    return;
   }
 
   const newest=allEvents[0];
@@ -149,10 +150,7 @@ async function loadEvents(){
 
   if(newest)lastEventId=String(newest.id);
 
-  $("liveSource").textContent=
-    source==="postgres"
-      ?"PostgreSQL en vivo"
-      :"Fallback Notion";
+  $("liveSource").textContent="Notion en vivo";
 
   renderAll();
   firstLoad=false;
@@ -166,6 +164,7 @@ $("reportDate").addEventListener("change",()=>{
   lastEventId="";
   firstLoad=true;
   loadEvents();
+  loadReports();
 });
 
 setInterval(loadEvents,60000);
@@ -174,7 +173,7 @@ setInterval(loadReports,60000);
 const socket=io();
 
 socket.on("connect",()=>{
-  $("liveSource").textContent="PostgreSQL en vivo";
+  $("liveSource").textContent="Notion en vivo";
 });
 
 socket.on("disconnect",()=>{
@@ -195,6 +194,8 @@ socket.on("room-updated",refreshLiveOperations);
 socket.on("rooms-updated",refreshLiveOperations);
 socket.on("assignments-updated",refreshLiveOperations);
 socket.on("data-api-updated",refreshLiveOperations);
+socket.on("service-order:created",refreshLiveOperations);
+socket.on("service-order:updated",refreshLiveOperations);
 </script>
 
 <script src="/js/push-notifications.js"></script>

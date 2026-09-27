@@ -2793,7 +2793,12 @@ async function sendAction(action){
           body:JSON.stringify(payload)
         }).then(response => response.json());
 
-    if(data.success){
+    if(data.queuedOffline){
+      setStatus("Pendiente de conexión");
+      showBigStatus("Sin conexión. La acción está pendiente; todavía no aparece en Notion.", "error");
+      return;
+    }
+    if(data.success && data.notionSync === "saved"){
       actionSucceeded=true;
       setStatus(data.message || "Enviado");
       showBigStatus(data.message || "Enviado correctamente", "success");
@@ -2812,14 +2817,15 @@ async function sendAction(action){
       }
 
       // Solo actualizamos historial; la tarjeta ya cambió localmente.
-      await loadMyReports(true);
+      loadMyReports(true).catch(error => console.warn("Historial:", error.message));
     }else{
       throw new Error(data.message || "Error");
     }
 
   }catch(error){
-    setStatus("Reconectando…");
-    showBigStatus("No se perdió tu acción. Reintentando automáticamente…", "loading");
+    lastSendKey = "";
+    setStatus("No se guardó la acción");
+    showBigStatus(error.message || "No se guardó en Notion. Intenta de nuevo.", "error");
   }finally{
     if(!actionSucceeded){
       setCleanerCardLoading(unit,false);
