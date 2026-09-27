@@ -1390,9 +1390,9 @@ async function queryRoomsByDate(date, forceRefresh = false) {
 }
 // ■ Status de Notion
 function notionStatusFromAction(action) {
-if (action === "START") return "In Progress";
-if (action === "DONE") return "Cleaned - Awaiting Inspection";
-if (action === "INSPECTION_START") return "Inspection Started";
+if (action === "START") return "Started";
+if (action === "DONE") return "Waiting for inspection";
+if (action === "INSPECTION_START") return "Waiting for inspection";
 if (action === "READY_GUEST") return "Ready for Guest";
 return null;
 }
@@ -3407,7 +3407,9 @@ for (const page of matches) {
     ? `${oldLastMessage}\n${historyLine}`
     : historyLine;
 
-  const schema = await getDatabaseSchema(NOTION_DATABASE_ID);
+  // La página consultada ya trae los tipos reales de cada propiedad. Evita
+  // confiar en un esquema de otra data source o en una caché anterior.
+  const schema = page.properties || {};
   const props = {};
   addNotionProp(props, schema, ["Last Whatsapp Update ", "Last Whatsapp Update", "Last Update At"], now);
   addNotionProp(props, schema, ["Last Message", "Last Update", "Activity Log"], newLastMessage.slice(-1900));
@@ -3546,7 +3548,7 @@ for (const page of matches) {
   }
 
   if (status && !Object.keys(props).some((key) => ["Cleaning Status", "Status"].includes(key))) {
-    throw new Error("La base de habitaciones no tiene un campo Cleaning Status o Status editable");
+    throw new Error(`No se pudo escribir Cleaning Status. Propiedades recibidas: ${Object.keys(schema).join(", ")}`);
   }
 
   if (Object.keys(props).length) {
@@ -3718,6 +3720,7 @@ for (const page of matches) {
 return {
   label,
   ai,
+  status,
 };
 }
 
@@ -5594,7 +5597,7 @@ app.post("/action", async (req, res) => {
       source: "notion",
       eventId: eventId || requestId || "",
       notionSync: "saved",
-      status: notionStatusFromAction(action) || "",
+      status: result.status || notionStatusFromAction(action) || "",
       message: `Guardado en Notion: ${result.label} - ${unit}`,
     });
   } catch (error) {

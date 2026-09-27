@@ -96,9 +96,11 @@ function getRoomFromNotionPage(page, fallbackDate = "") {
 
   const roomNumber =
     readTextProperty(properties["Room Number"]) ||
+    readTextProperty(properties["Room number"]) ||
     readTextProperty(properties.Unit) ||
     readTextProperty(properties.Room) ||
-    readTextProperty(properties.Name);
+    readTextProperty(properties.Name) ||
+    readTextProperty(Object.values(properties).find((property) => property?.type === "title"));
 
   const workDate =
     properties.Date?.date?.start?.slice(0, 10) ||

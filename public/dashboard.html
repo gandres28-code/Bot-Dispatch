@@ -186,6 +186,7 @@
         // Naranja: terminó limpieza o ya está en proceso de inspección.
         if(
           status.includes("awaiting inspection") ||
+          status.includes("waiting for inspection") ||
           status.includes("inspection started") ||
           status === "cleaned" ||
           status.includes("ready for inspection")

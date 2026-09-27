@@ -2068,7 +2068,7 @@ function isPreInspected(item){
 function getCleanerState(item){
   const cleanStatus = String(item?.status || "").toLowerCase();
 
-  if(cleanStatus.includes("cleaned") || cleanStatus.includes("awaiting") || cleanStatus.includes("ready")){
+  if(cleanStatus.includes("cleaned") || cleanStatus.includes("awaiting") || cleanStatus.includes("waiting for inspection") || cleanStatus.includes("ready")){
     return {
       key:"done",
       title:"Finished",
@@ -2078,7 +2078,7 @@ function getCleanerState(item){
     };
   }
 
-  if(cleanStatus.includes("progress")){
+  if(cleanStatus.includes("progress") || cleanStatus === "started"){
     return {
       key:"started",
       title:"In Progress",
@@ -2129,10 +2129,10 @@ function getStatusLabel(status, arrival){
 
 function updateCleanerDashboard(units){
   const total = Array.isArray(units) ? units.length : 0;
-  const started = (units || []).filter(item => String(item.status || "").toLowerCase().includes("progress")).length;
+  const started = (units || []).filter(item => /progress|^started$/i.test(String(item.status || ""))).length;
   const done = (units || []).filter(item => {
     const s = String(item.status || "").toLowerCase();
-    return s.includes("cleaned") || s.includes("awaiting") || s.includes("ready");
+    return s.includes("cleaned") || s.includes("awaiting") || s.includes("waiting for inspection") || s.includes("ready");
   }).length;
   const arrivals = (units || []).filter(item => item.arrival).length;
 
@@ -2807,12 +2807,12 @@ async function sendAction(action){
 
       if(action === "START"){
         updateCleanerCardState(unit,"half","Tap to Finish");
-        updateCachedCleanerUnit(unit, { status:"In Progress" });
+        updateCachedCleanerUnit(unit, { status:"Started" });
       }
 
       if(action === "DONE"){
         updateCleanerCardState(unit,"full","Finished");
-        updateCachedCleanerUnit(unit, { status:"Cleaned - Awaiting Inspection" });
+        updateCachedCleanerUnit(unit, { status:"Waiting for inspection" });
         document.getElementById("note").value = "";
       }
 
