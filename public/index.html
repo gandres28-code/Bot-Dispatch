@@ -2745,6 +2745,7 @@ async function uploadPhotosWithReport({ unit, name, action, note, role }){
 
 async function sendAction(action){
   let actionSucceeded=false;
+  let previousStatus="";
 
   if(isSending){
     return;
@@ -2776,12 +2777,19 @@ async function sendAction(action){
   }
 
   isSending = true;
-  setCleanerCardLoading(unit,true);
+  previousStatus = cachedCleanerUnits.find(item => String(item?.unit || "").toUpperCase() === unit)?.status || "Not Started";
+  if(action === "START" || action === "DONE"){
+    updateCachedCleanerUnit(unit, { status: action === "START" ? "Started" : "Waiting for inspection" });
+    setStatus(action === "START" ? "Limpieza iniciada" : "Limpieza terminada");
+    showBigStatus(action === "START" ? "Limpieza iniciada" : "Limpieza terminada", "success");
+  }
   lastSendKey = sendKey;
   lastSendTime = now;
   setButtonsDisabled(true);
-  setStatus("Enviando...");
-  showBigStatus("Enviando acción...", "loading");
+  if(action !== "START" && action !== "DONE"){
+    setStatus("Enviando...");
+    showBigStatus("Enviando acción...", "loading");
+  }
 
   try{
     const payload = { action, unit, note, name, photoUrl:"" };
@@ -2794,6 +2802,7 @@ async function sendAction(action){
         }).then(response => response.json());
 
     if(data.queuedOffline){
+      if(action === "START" || action === "DONE") updateCachedCleanerUnit(unit, { status:previousStatus });
       setStatus("Pendiente de conexión");
       showBigStatus("Sin conexión. La acción está pendiente; todavía no aparece en Notion.", "error");
       return;
@@ -2824,12 +2833,11 @@ async function sendAction(action){
 
   }catch(error){
     lastSendKey = "";
+    if(action === "START" || action === "DONE") updateCachedCleanerUnit(unit, { status:previousStatus });
     setStatus("No se guardó la acción");
     showBigStatus(error.message || "No se guardó en Notion. Intenta de nuevo.", "error");
   }finally{
-    if(!actionSucceeded){
-      setCleanerCardLoading(unit,false);
-    }else{
+    if(actionSucceeded){
       const cardId="card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,"");
       const card=document.getElementById(cardId);
 

@@ -3383,7 +3383,7 @@ for (const page of matches) {
     page.properties["Finished At"]?.date?.start || "";
 
   const historyLine =
-    `${localTime()} - ${employee} - ${label}` +
+    `${localTime()} - ${employee} - ${label} (${now})` +
     `${assignedCleaner && mode === "inspector" ? ` - Cleaner: ${assignedCleaner}` : ""}` +
     `${note ? ` - ${note}` : ""}` +
     `${photoUrl ? ` - Photo: ${photoUrl}` : ""}` +
@@ -3399,6 +3399,10 @@ for (const page of matches) {
   // confiar en un esquema de otra data source o en una caché anterior.
   const schema = page.properties || {};
   const props = {};
+  const currentStatus = readRoomTextProperty(schema, ["Cleaning Status", "Status"]).toLowerCase();
+  const alreadyStarted = action === "START" && (currentStatus === "started" || currentStatus === "in progress" || currentStatus === "waiting for inspection" || currentStatus === "ready for guest");
+  const alreadyFinished = action === "DONE" && (currentStatus === "waiting for inspection" || currentStatus === "ready for guest");
+  if (alreadyStarted || alreadyFinished) continue;
   addNotionProp(props, schema, ["Last Whatsapp Update ", "Last Whatsapp Update", "Last Update At"], now);
   addNotionProp(props, schema, ["Last Message", "Last Update", "Activity Log"], newLastMessage.slice(-1900));
   addNotionProp(props, schema, ["Last Update By", "Updated By"], employee);
@@ -3408,7 +3412,10 @@ for (const page of matches) {
   }
 
   if (action === "START") {
-    addNotionProp(props, schema, ["Started At", "Cleaning Started At"], now);
+    const startField = findPropName(schema, ["Started At", "Cleaning Started At"]);
+    if (!startField || !schema[startField]?.date?.start) {
+      addNotionProp(props, schema, ["Started At", "Cleaning Started At"], now);
+    }
   }
 
   if (action === "DONE") {
@@ -3604,6 +3611,7 @@ for (const page of matches) {
     lightweight: true,
   });
 
+  runDetached(`cleaning-log:${action}:${fullUnitTitle}`, async () => {
   let logSaved = true;
   let logDuplicate = false;
   try {
@@ -3621,7 +3629,6 @@ for (const page of matches) {
     logDuplicate = Boolean(logResult?.duplicate);
   } catch (error) {
     logSaved = false;
-    actionLogSaved = false;
     console.error("NOTION ACTION LOG ERROR:", error.message);
   }
   // Alertas administrativas: limpieza iniciada, terminada y solicitudes operativas.
@@ -3712,6 +3719,7 @@ for (const page of matches) {
       date: todayISO(),
     }).catch((error) => console.error("PAYROLL RECORD ERROR:", error.message));
   }
+  });
 }
 
 return {
@@ -4461,29 +4469,48 @@ function reportPageToObject(page) {
 
 async function getReportPhotosByReportId(reportId) {
   if (!NOTION_REPORT_PHOTOS_DATABASE_ID || !reportId) return [];
+  const cacheKey = `report-photos:${reportId}`;
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
 
-  const response = await notion.databases.query({
-    database_id: NOTION_REPORT_PHOTOS_DATABASE_ID,
-    page_size: 100,
-    filter: {
-      property: "Report ID",
-      rich_text: {
-        equals: reportId,
-      },
-    },
-  });
+  const schema = await getDatabaseSchema(NOTION_REPORT_PHOTOS_DATABASE_ID);
+  const reportField = findPropName(schema, ["Report ID", "Report"]);
+  const titleField = Object.keys(schema || {}).find((key) => schema[key]?.type === "title");
+  const filter = reportField && ["rich_text", "title"].includes(schema[reportField]?.type)
+    ? { property: reportField, [schema[reportField].type]: { equals: reportId } }
+    : titleField
+      ? { property: titleField, title: { contains: reportId } }
+      : null;
+  const pages = [];
+  let cursor;
+  do {
+    const body = { database_id: NOTION_REPORT_PHOTOS_DATABASE_ID, page_size: 100 };
+    if (filter) body.filter = filter;
+    if (cursor) body.start_cursor = cursor;
+    const response = await notion.databases.query(body);
+    pages.push(...(response.results || []));
+    cursor = response.has_more && pages.length < 500 ? response.next_cursor : null;
+  } while (cursor);
 
-  return response.results.map((page) => {
+  const photos = pages.filter((page) => {
+    const props = page.properties || {};
+    const title = readRoomTextProperty(props, ["Photo ID", "Photo", "Name", "Title"])
+      || readPlainTextFromProp(Object.values(props).find((property) => property?.type === "title"));
+    const storedReportId = readRoomTextProperty(props, ["Report ID", "Report"]);
+    return storedReportId === reportId || title.startsWith(`${reportId}-PHOTO-`);
+  }).map((page) => {
     const p = page.properties || {};
     return {
       id: page.id,
-      photoId: readPlainTextFromProp(p["Photo ID"] || p.Photo || p.Name || p.Title),
-      reportId: readPlainTextFromProp(p["Report ID"] || p.Report),
-      unit: readPlainTextFromProp(p.Unit || p.unit),
-      employee: readPlainTextFromProp(p.Employee || p["Employee Name"] || p.Name),
-      url: (p["Photo URL"] || p.URL || p["Image URL"] || {})?.url || "",
+      photoId: readRoomTextProperty(p, ["Photo ID", "Photo", "Name", "Title"]),
+      reportId,
+      unit: readRoomTextProperty(p, ["Unit", "Room", "Room number"]),
+      employee: readRoomTextProperty(p, ["Employee", "Employee Name", "Name"]),
+      url: (p[findPropName(p, ["Photo URL", "URL", "Image URL"])] || {})?.url || "",
     };
   });
+  setCache(cacheKey, photos, 15000);
+  return photos;
 }
 
 
@@ -5600,9 +5627,7 @@ app.post("/action", async (req, res) => {
       notionSync: "saved",
       logSaved: result.logSaved,
       status: result.status || notionStatusFromAction(action) || "",
-      message: result.logSaved
-        ? `Guardado en Notion: ${result.label} - ${unit}`
-        : `Habitación actualizada en Notion; el historial de Operaciones necesita revisión: ${unit}`,
+      message: `Guardado en Notion: ${result.label} - ${unit}`,
     });
   } catch (error) {
     console.error("Error en /action:", error.message);
