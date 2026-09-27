@@ -124,6 +124,7 @@ function getRoomFromNotionPage(page, fallbackDate = "") {
     building: getBuilding(roomNumber),
     cleaningStatus:
       readTextProperty(properties["Cleaning Status"]) ||
+      readTextProperty(properties["Cleaning Status "]) ||
       readTextProperty(properties.Status),
     guestOut: readBooleanProperty(properties, [
       "Guest Out",

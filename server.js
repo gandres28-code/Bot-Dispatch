@@ -1643,7 +1643,13 @@ setCache(cacheKey, db.properties, 10 * 60 * 1000);
 return db.properties;
 }
 function findPropName(schema, possibleNames) {
-return possibleNames.find((name) => schema[name]);
+const keys = Object.keys(schema || {});
+for (const candidate of possibleNames) {
+  if (schema?.[candidate]) return candidate;
+  const match = keys.find((key) => key.trim().toLowerCase() === candidate.trim().toLowerCase());
+  if (match) return match;
+}
+return undefined;
 }
 function buildTextProperty(schema, possibleNames, value) {
 const name = findPropName(schema, possibleNames);
@@ -3547,7 +3553,7 @@ for (const page of matches) {
     addNotionProp(props, schema, ["Priority"], ai ? ai.priority : "Normal");
   }
 
-  if (status && !Object.keys(props).some((key) => ["Cleaning Status", "Status"].includes(key))) {
+  if (status && !Object.keys(props).some((key) => ["cleaning status", "status"].includes(key.trim().toLowerCase()))) {
     throw new Error(`No se pudo escribir Cleaning Status. Propiedades recibidas: ${Object.keys(schema).join(", ")}`);
   }
 
@@ -7503,7 +7509,8 @@ app.post("/upload-photo", upload.single("photo"), async (req, res) => {
 // =========================================================
 function readRoomTextProperty(props, names = []) {
   for (const name of names) {
-    const prop = props?.[name];
+    const key = Object.keys(props || {}).find((candidate) => candidate.trim().toLowerCase() === name.trim().toLowerCase());
+    const prop = key ? props[key] : null;
     if (!prop) continue;
 
     const value =
