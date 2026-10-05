@@ -1978,7 +1978,8 @@ function readCentralPropertyText(property) {
 
 function readCentralNumber(properties, names) {
   for (const name of names) {
-    const prop = properties?.[name];
+    const key = findPropName(properties, [name]);
+    const prop = properties?.[key];
     if (!prop) continue;
     if (prop.number != null && Number.isFinite(Number(prop.number))) return Number(prop.number);
     if (prop.formula?.number != null && Number.isFinite(Number(prop.formula.number))) return Number(prop.formula.number);
@@ -1990,18 +1991,18 @@ function readCentralNumber(properties, names) {
 }
 
 function centralCleanerText(properties) {
-  const names = ["Assigned Cleaner", "Cleaner", "Assigned Cleaners", "Housekeeper"];
+  const names = ["Assigned Cleaner", "Cleaner", "Assigned Cleaners", "Housekeeper", "Employee", "Limpiador"];
   for (const name of names) {
-    const value = readCentralPropertyText(properties?.[name]);
+    const value = readCentralPropertyText(properties?.[findPropName(properties, [name])]);
     if (value) return value;
   }
   return "";
 }
 
 function centralUnitText(properties) {
-  const names = ["Room Number", "Unit", "Room", "Unit Number", "Property Unit"];
+  const names = ["Room Number", "Unit", "Room", "Unit Number", "Property Unit", "Name", "Habitación"];
   for (const name of names) {
-    const value = readCentralPropertyText(properties?.[name]);
+    const value = readCentralPropertyText(properties?.[findPropName(properties, [name])]);
     if (value) return value;
   }
   return "";
@@ -2010,7 +2011,7 @@ function centralUnitText(properties) {
 function centralRoomType(properties, unit) {
   const names = ["Room Type", "Type", "Unit Type"];
   for (const name of names) {
-    const value = readCentralPropertyText(properties?.[name]);
+    const value = readCentralPropertyText(properties?.[findPropName(properties, [name])]);
     if (value) return value.toUpperCase();
   }
   return getRoomType(unit);
@@ -2021,25 +2022,40 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
 
   const records = [];
   const audit = { days: 0, pages: 0, included: 0, missingCleaner: 0, missingUnit: 0, zeroRate: 0 };
-  const startDate = new Date(`${weekStart}T12:00:00`);
-  const endDate = new Date(`${weekEnd}T12:00:00`);
-
-  for (let cursorDate = new Date(startDate); cursorDate <= endDate; cursorDate.setDate(cursorDate.getDate() + 1)) {
-    const date = cursorDate.toISOString().slice(0, 10);
-    const pages = await fetchRoomsFreshFromNotion(date);
-    audit.days += 1;
-    audit.pages += pages.length;
-
+  const schema = await getNotionDatabaseSchema(NOTION_DATABASE_ID);
+  const dateField = findPropName(schema, ["Date", "Work Date", "Cleaning Date", "Service Date", "Fecha"]);
+  if (!dateField || schema[dateField]?.type !== "date") {
+    throw new Error("La base central necesita un campo Date de tipo fecha para calcular la nómina semanal.");
+  }
+  const pages = [];
+  let cursor;
+  do {
+    const response = await notion.databases.query({
+      database_id: NOTION_DATABASE_ID, page_size: 100,
+      filter: { and: [
+        { property: dateField, date: { on_or_after: weekStart } },
+        { property: dateField, date: { on_or_before: weekEnd } },
+      ] },
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    pages.push(...(response.results || []));
+    cursor = response.has_more ? response.next_cursor : null;
+  } while (cursor);
+  audit.days = 7;
+  audit.pages = pages.length;
+  {
     for (const page of pages) {
       const properties = page?.properties || {};
-      const workDate = properties.Date?.date?.start?.slice(0, 10) || date;
+      const workDate = properties[dateField]?.date?.start?.slice(0, 10) || "";
       const unit = centralUnitText(properties);
       const cleanerText = centralCleanerText(properties);
       const cleaners = splitCleanerNames(cleanerText);
       const roomType = centralRoomType(properties, unit);
       const explicitRate = readCentralNumber(properties, ["Rate", "Amount", "Payroll Rate", "Cleaning Rate"]);
       const calculatedPay = getUnitPay(unit);
-      const grossAmount = roundMoney(explicitRate != null ? explicitRate : calculatedPay.amount || 0);
+      const typeAliases = { STUDIO: "S", MOTEL: "M", "1BR": "1", "2BR": "2", "3BR": "3", SUITE: "SUITES" };
+      const typeRate = ROOM_RATES[typeAliases[roomType] || roomType];
+      const grossAmount = roundMoney(explicitRate > 0 ? explicitRate : typeRate ?? calculatedPay.amount ?? 0);
       const propertyName = readCentralPropertyText(properties.Property)
         || readCentralPropertyText(properties.Hotel)
         || readCentralPropertyText(properties.Location)
@@ -2047,7 +2063,7 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
         || "ALL";
 
       if (!unit) { audit.missingUnit += 1; continue; }
-      if (!cleaners.length) { audit.missingCleaner += 1; continue; }
+      if (!cleaners.length) { audit.missingCleaner += 1; cleaners.push("Sin asignar"); }
       if (grossAmount <= 0) audit.zeroRate += 1;
 
       const splitCount = cleaners.length;
@@ -2062,14 +2078,16 @@ async function getPayrollRecordsFromNotion(weekStart, weekEnd) {
           grossUnitAmount: grossAmount,
           splitCount,
           splitPercent: Number((1 / splitCount).toFixed(4)),
-          amount: roundMoney(grossAmount / splitCount),
+          amount: String(process.env.PAYROLL_SPLIT_MODE || "equal").toLowerCase() === "full_each"
+            ? grossAmount
+            : (Math.floor(Math.round(grossAmount * 100) / splitCount) + (index < Math.round(grossAmount * 100) % splitCount ? 1 : 0)) / 100,
           notionId: `${page.id}:${index + 1}:${cleanEmployeeText(cleaner)}`,
           sourcePageId: page.id,
           payType: "unit",
           roleWorked: "Cleaner",
           manualOverride: false,
           adjustmentReason: "",
-          status: readCentralPropertyText(properties["Cleaning Status"]) || "Central",
+          status: readCentralPropertyText(properties[findPropName(properties, ["Cleaning Status", "Status"])]) || "Central",
           source: "central-notion",
         });
         audit.included += 1;
@@ -2125,34 +2143,47 @@ async function getPayrollRecords(weekStart, weekEnd, options = {}) {
 async function getHourlyPayrollRecords(weekStart, weekEnd) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
 
-  const response = await notion.databases.query({
-    database_id: NOTION_TIME_CLOCK_DATABASE_ID,
-    page_size: 100,
-  });
-
-  return response.results
-    .map((page) => {
-      const p = page.properties;
-
-      return {
-        employee: p.Employee?.rich_text?.map((t) => t.plain_text).join("") || "",
-        code: p.Code?.rich_text?.map((t) => t.plain_text).join("") || "",
-        role: p.Role?.select?.name || "",
-        clockIn: p["Clock In"]?.date?.start || "",
-        clockOut: p["Clock Out"]?.date?.start || "",
-        hours: p.Hours?.number || 0,
-        hourlyRate: p["Hourly Rate"]?.number || 0,
-        total: p.Total?.number || 0,
-        workLocation: p["Location Status"]?.select?.name || "Unspecified",
-        status: p.Status?.select?.name || "",
-      };
-    })
-    .filter((r) => {
-      if (!r.clockIn) return false;
-      const day = r.clockIn.slice(0, 10);
-      return day >= weekStart && day <= weekEnd && r.status === "Completed";
+  const pages = [];
+  let cursor;
+  do {
+    const response = await notion.databases.query({
+      database_id: NOTION_TIME_CLOCK_DATABASE_ID, page_size: 100,
+      ...(cursor ? { start_cursor: cursor } : {}),
     });
+    pages.push(...(response.results || []));
+    cursor = response.has_more ? response.next_cursor : null;
+  } while (cursor);
+  return pages.map((page) => {
+    const p = page.properties || {};
+    const clockIn = p[findPropName(p, ["Clock In", "Clock-in"])]?.date?.start || "";
+    const clockOut = p[findPropName(p, ["Clock Out", "Clock-out"])]?.date?.start || "";
+    const workDate = clockIn ? new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(clockIn)) : "";
+    const hours = readCentralNumber(p, ["Hours"]) ?? (clockIn && clockOut ? Math.max(0, (new Date(clockOut) - new Date(clockIn)) / 3600000) : 0);
+    const hourlyRate = readCentralNumber(p, ["Hourly Rate", "Rate"]) || 0;
+    return {
+      id: page.id, employee: readCentralPropertyText(p[findPropName(p, ["Employee", "Name", "Cleaner"])]),
+      code: readCentralPropertyText(p.Code), role: readCentralPropertyText(p.Role),
+      clockIn, clockOut, workDate, hours, hourlyRate,
+      total: readCentralNumber(p, ["Total", "Amount"]) ?? roundMoney(hours * hourlyRate),
+      workLocation: readCentralPropertyText(p["Location Status"]) || "Unspecified",
+      status: readCentralPropertyText(p.Status),
+    };
+  }).filter((r) => r.clockOut && r.workDate >= weekStart && r.workDate <= weekEnd);
 }
+
+app.get("/api/payroll/hourly", async (req, res) => {
+  try {
+    const { weekStart, weekEnd } = validatePayrollRange(String(req.query.start || ""), String(req.query.end || ""));
+    const records = await getHourlyPayrollRecords(weekStart, weekEnd);
+    res.json({ ok: true, records,
+      totalHours: roundMoney(records.reduce((sum, r) => sum + r.hours, 0)),
+      totalPay: roundMoney(records.reduce((sum, r) => sum + r.total, 0)),
+    });
+  } catch (error) { res.status(400).json({ ok: false, message: error.message }); }
+});
+
 async function getEmployeesCached(forceRefresh = false) {
   const legacyCacheKey = "employees:active";
   const coreCacheKey = "core:employees:active";
@@ -6442,17 +6473,20 @@ app.get("/payroll-preview", async (req, res) => {
     validatePayrollRange(weekStart, weekEnd);
 
     const requestedSource = String(req.query.source || "auto").trim().toLowerCase();
+    const warnings = [];
     const [payrollRead, hourlyRecords] = await Promise.all([
       getPayrollRecordsWithSource(weekStart, weekEnd, {
         source: requestedSource,
         allowFallback: requestedSource === "auto",
       }),
-      getHourlyPayrollRecords(weekStart, weekEnd),
+      getHourlyPayrollRecords(weekStart, weekEnd).catch((error) => {
+        warnings.push(`No se pudieron cargar las horas: ${error.message}. El total mostrado no incluye esos pagos.`);
+        return [];
+      }),
     ]);
     const records = payrollRead.records;
 
     const employees = new Map();
-    const warnings = [];
 
     const ensure = (name) => {
       const employee = normalizeCleaner(name || "Unknown");
@@ -6473,6 +6507,7 @@ app.get("/payroll-preview", async (req, res) => {
       if (String(record.payType || "unit").toLowerCase() === "unit") person.units += 1;
       person.cleaningPay += Number(record.amount || 0);
       person.roles.add("Cleaner");
+      if (record.cleaner === "Sin asignar") warnings.push(`${record.unit}: falta asignar limpiador`);
       if (String(record.payType || "unit").toLowerCase() === "unit" &&
           (!record.roomType || Number(record.amount || 0) <= 0)) {
         warnings.push(`${record.unit || "Unidad desconocida"}: tarifa o tipo inválido`);
@@ -6512,6 +6547,10 @@ app.get("/payroll-preview", async (req, res) => {
         amount: roundMoney(people.reduce((sum, person) => sum + person.total, 0)),
       },
       people,
+      records,
+      hourlyRecords,
+      count: records.length,
+      total: roundMoney(records.reduce((sum, r) => sum + Number(r.amount || 0), 0)),
       warnings: [...new Set(warnings)],
     });
   } catch (error) {

@@ -179,10 +179,8 @@
       const range = `start=${encodeURIComponent(state.start)}&end=${encodeURIComponent(state.end)}`;
       const requests = [
         fetchJson(`/payroll-preview?${range}`),
-        fetchJson(`/api/payroll/preview?${range}`),
         fetchJson(`/api/sync/payroll/status?${range}`),
         fetchJson(`/api/payroll/week?${range}`),
-        fetchJson(`/api/payroll/hourly?${range}`),
       ];
 
       if (compare) requests.push(fetchJson(`/api/payroll/compare?${range}`));
@@ -190,11 +188,11 @@
       const results = await Promise.allSettled(requests);
       if (results[0].status !== "fulfilled") throw results[0].reason;
       state.preview = results[0].value.data;
-      state.raw = results[1].status === "fulfilled" ? results[1].value.data : { records: state.preview.records || [], count: state.preview.count || 0, total: state.preview.total || 0, source: state.preview.source };
-      state.syncStatus = results[2].status === "fulfilled" ? results[2].value.data : { postgresConnected: false };
-      state.weekState = results[3].status === "fulfilled" ? results[3].value.data : { status: "open", validation: { valid: true, errors: [] } };
-      state.hourly = results[4].status === "fulfilled" ? results[4].value.data : { records: [], totalHours: 0, totalPay: 0 };
-      if (compare) state.comparison = results[5]?.status === "fulfilled" ? results[5].value.data : null;
+      state.raw = { records: state.preview.records || [], count: state.preview.count || 0, total: state.preview.total || 0, source: state.preview.source };
+      state.syncStatus = results[1].status === "fulfilled" ? results[1].value.data : { postgresConnected: false };
+      state.weekState = results[2].status === "fulfilled" ? results[2].value.data : { status: "open", validation: { valid: true, errors: [] } };
+      state.hourly = { records: state.preview.hourlyRecords || [], totalHours: (state.preview.hourlyRecords || []).reduce((sum, r) => sum + Number(r.hours || 0), 0), totalPay: (state.preview.hourlyRecords || []).reduce((sum, r) => sum + Number(r.total || 0), 0) };
+      if (compare) state.comparison = results[3]?.status === "fulfilled" ? results[3].value.data : null;
 
       renderAll();
       setBadge($("systemBadge"), "Actualizado", "green");
@@ -516,7 +514,7 @@
 
       const current = daily.get(date) || { date, total: 0, units: 0 };
       current.total += Number(record.amount ?? record.paid_amount ?? 0);
-      current.units += 1;
+      if (String(record.payType || "unit") === "unit") current.units += Number(record.splitPercent || 1);
       daily.set(date, current);
     }
 

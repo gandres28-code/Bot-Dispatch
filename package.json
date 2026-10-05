@@ -7,7 +7,8 @@
     "start": "node server.js",
     "check": "node --check server.js",
     "test:core": "node test/roomEngine.test.js",
-    "check:core": "node --check core/rooms/RoomEngine.js && node --check test/roomEngine.test.js"
+    "check:core": "node --check core/rooms/RoomEngine.js && node --check test/roomEngine.test.js",
+    "test:payroll": "node test/payroll.test.js"
   },
   "author": "Andres Garcia",
   "license": "ISC",
