@@ -3134,7 +3134,14 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     allowFallback: false,
   });
   const records = payrollRead.records;
-  const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd);
+  const warnings = [];
+  let hourlyUnavailable = false;
+  const hourlyRecords = await getHourlyPayrollRecords(weekStart, weekEnd).catch((error) => {
+    hourlyUnavailable = true;
+    console.warn("Payroll Excel: Time Clock no disponible:", error.message);
+    warnings.push({ type: "INCOMPLETE", detail: "TIME CLOCK NO DISPONIBLE: este archivo incluye los pagos por unidad disponibles. NO incluye pagos por hora. Revisa NOTION_TIME_CLOCK_DATABASE_ID y comparte esa base con Care OS antes de aprobar la nómina." });
+    return [];
+  });
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = process.env.COMPANY_NAME || "Care";
@@ -3147,7 +3154,6 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   const warningsSheet = workbook.addWorksheet("Payroll Warnings");
 
   const people = new Map();
-  const warnings = [];
 
   function getPerson(name) {
     const employee = normalizeCleaner(name || "Unknown");
@@ -3248,7 +3254,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     summarySheet.addRow({
       employee: person.employee,
       roles,
-      units: person.unitRecords.length,
+      units: person.unitRecords.filter((r) => String(r.payType || "unit") === "unit").length,
       unitPay,
       hours: Number(person.hours.toFixed(2)),
       hourlyPay,
@@ -3281,7 +3287,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     employeeSheet.addRow(["Date", "Role", "Work Location", "Clock In", "Clock Out", "Hours", "Rate", "Total"]);
     for (const r of person.hourlyRecords) {
       employeeSheet.addRow([
-        String(r.clockIn || "").slice(0, 10), r.role, r.workLocation || "Unspecified", r.clockIn, r.clockOut,
+        r.workDate || String(r.clockIn || "").slice(0, 10), r.role, r.workLocation || "Unspecified", r.clockIn, r.clockOut,
         Number(r.hours || 0), Number(r.hourlyRate || 0), roundMoney(r.total),
       ]);
     }
@@ -3303,6 +3309,11 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   ];
   if (warnings.length) warnings.forEach((warning) => warningsSheet.addRow(warning));
   else warningsSheet.addRow({ type: "OK", detail: "No payroll warnings found" });
+
+  if (hourlyUnavailable) {
+    summarySheet.addRow({ employee: "ADVERTENCIA: NÓMINA INCOMPLETA", roles: "No incluye pagos por hora. Ver Payroll Warnings." });
+    hourlySheet.addRow({ employee: "TIME CLOCK NO DISPONIBLE", role: "Revisar configuración de Notion" });
+  }
 
   for (const sheet of workbook.worksheets) {
     sheet.views = [{ state: "frozen", ySplit: 1 }];
