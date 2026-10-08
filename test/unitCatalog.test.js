@@ -1,0 +1,19 @@
+'use strict';
+const assert=require('assert');const Module=require('module');const original=Module._load;
+let modelCalls=0;const uploads=[];
+Module._load=function(name,...args){if(name==='multer'){const m=()=>({single:()=> (req,res,next)=>next()});m.memoryStorage=()=>({});return m;}if(name==='openai')return class{constructor(){this.chat={completions:{create:async()=>{modelCalls++;return {choices:[{message:{content:JSON.stringify({status:'no_visible_issues',summary:'Sin problemas visibles',issues:[],corrections:[],unseen:['Áreas fuera de la foto']})}}]};}}};}};return original.call(this,name,...args);};
+const register=require('../services/unitCatalog');Module._load=original;
+const routes=[],middleware=[];const app={get:(p,...h)=>routes.push({method:'GET',p,h}),post:(p,...h)=>routes.push({method:'POST',p,h}),use:(p,h)=>middleware.push(h)};
+const stored={id:1,unit:'101A',area:'Camas',kind:'evidence',employee_id:'c',public_id:'private/photo',ai_state:'pending'};
+register(app,{query:async(sql,params)=>{if(sql.includes('SELECT 1'))return {rows:[{}]};if(sql.includes('INSERT')){uploads.push(params);return {rows:[{id:1}]};}if(sql.includes('SELECT *'))return {rows:[stored]};if(sql.includes('SELECT public_id'))return {rows:[]};if(sql.includes('SET ai_result')){stored.ai_state='complete';stored.ai_result=JSON.parse(params[1]);}return {rows:[]};},cloudinary:{url:()=> 'https://example.org/private',uploader:{upload_stream:(opts,cb)=>({end:()=>{assert.equal(opts.type,'authenticated');cb(null,{public_id:'private/photo'});}})}},findEmployee:async code=>code==='cleaner'?{id:'c'}:code==='inspector'?{id:'i'}:null,toUser:p=>({id:p.id,name:p.id,role:p.id==='c'?'cleaner':'inspector',active:true})});
+async function call(method,path,req={}){let route=routes.find(x=>x.method===method&&x.p===path);const handlers=path==='/api/catalog/login'?route.h:[middleware[0],...route.h];return new Promise((resolve,reject)=>{const res={statusCode:200,status(n){this.statusCode=n;return this;},json(d){resolve({status:this.statusCode,...d});},sendStatus(n){resolve({status:n});}};let i=0;const next=e=>{if(e)return reject(e);try{const p=handlers[i++]?.(req,res,next);p?.catch(reject);}catch(e){reject(e);}};next();});}
+(async()=>{let denied=await call('GET','/api/catalog/units',{headers:{}});assert.equal(denied.status,401);
+const c=await call('POST','/api/catalog/login',{ip:'one',body:{code:'cleaner'}});assert(c.token);assert.equal(c.canManage,false);const headers={authorization:'Bearer '+c.token};
+const deniedRef=await call('POST','/api/catalog/units/:unit/photos',{headers,params:{unit:'101A'},body:{area:'Camas',kind:'reference'},file:{buffer:Buffer.from('image')}});assert.equal(deniedRef.status,403);
+const saved=await call('POST','/api/catalog/units/:unit/photos',{headers,params:{unit:'101A'},body:{area:'Camas',kind:'evidence'},file:{buffer:Buffer.from('image')}});assert.equal(saved.id,1);assert.equal(uploads[0][3],'c');
+const missing=await call('POST','/api/catalog/photos/:id/analyze',{headers,params:{id:'1'}});assert.equal(missing.status,503);process.env.OPENAI_API_KEY='test-only';
+const analysis=await call('POST','/api/catalog/photos/:id/analyze',{headers,params:{id:'1'}});assert.equal(analysis.result.status,'no_visible_issues');assert.equal(modelCalls,1);
+await call('POST','/api/catalog/photos/:id/analyze',{headers,params:{id:'1'}});assert.equal(modelCalls,1);
+const deniedReview=await call('POST','/api/catalog/photos/:id/review',{headers,params:{id:'1'},body:{review:'accepted'}});assert.equal(deniedReview.status,403);
+await call('POST','/api/catalog/logout',{headers});assert.equal((await call('GET','/api/catalog/units',{headers})).status,401);
+console.log('Catalog tests passed: authentication, reference permissions, private upload, evidence ownership, missing AI key, persisted AI and no duplicate analysis, inspector permissions and logout.');})().catch(e=>{console.error(e);process.exitCode=1;});

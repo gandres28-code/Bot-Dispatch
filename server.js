@@ -5753,6 +5753,9 @@ app.get("/api/intelligence/quality/rooms", async (req, res) => {
 // =========================================================
 // STILL WATERS QUALITY GAME
 // =========================================================
+require("./services/unitCatalog")(app, { query: postgresQuery, cloudinary, findEmployee: findEmployeeByCode, toUser: pageToUser });
+app.get("/unit-catalog", (req,res) => res.sendFile(path.join(__dirname,"public","unit-catalog.html")));
+
 app.get("/api/quality/rooms", async (req, res) => {
   try {
     const date = String(req.query.date || todayISO());

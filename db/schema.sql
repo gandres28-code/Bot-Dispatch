@@ -784,3 +784,14 @@ VALUES ('010_operations_intelligence_quality_core')
 ON CONFLICT (migration_name) DO NOTHING;
 
 COMMIT;
+
+-- Care unit catalog: private originals live in authenticated Cloudinary storage.
+CREATE TABLE IF NOT EXISTS care_unit_photos (
+ id BIGSERIAL PRIMARY KEY, unit TEXT NOT NULL, area TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('reference','evidence')),
+ employee_id TEXT NOT NULL, employee TEXT NOT NULL, work_date DATE NOT NULL,
+ public_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ ai_state TEXT NOT NULL DEFAULT 'pending', ai_result JSONB,
+ review TEXT, reviewer TEXT, reviewed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS care_unit_photos_unit_idx ON care_unit_photos(unit,created_at DESC);
