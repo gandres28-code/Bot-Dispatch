@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const PREFIX='care:outbox:v2:', LEGACY='care:pending-actions:v1', CACHE='care:cache:';
-  const ALLOWED=new Set(['/action','/inspector-action','/api/service-orders']);
+  const ALLOWED=new Set(['/action','/inspector-action','/api/service-orders','/submit-report']);
   const reads=new Map(), sending=new Map();
   let flushing=false, socket=null, socketBound=false, connected=false, httpHealthy=false, lastNetworkError=false;
   let badge=null, panel=null;
@@ -79,7 +79,7 @@
     const pending=(navigator.locks?.request?navigator.locks.request('care-outbox:'+item.id,send):send()).finally(()=>sending.delete(item.id));
     sending.set(item.id,pending);return pending;
   }
-  async function postAction(url,payload){
+  async function postAction(url,payload,config={}){
     if(!ALLOWED.has(url))throw new Error('Este tipo de guardado requiere conexión.');
     const currentOwner=owner();if(!currentOwner)throw new Error('Inicia sesión antes de guardar.');
     const body={...payload,requestId:payload.requestId||id(),workDate:payload.workDate||day(),occurredAt:payload.occurredAt||new Date().toISOString()};
@@ -90,6 +90,10 @@
     const previous=entries().some(e=>e.payload?.unit===body.unit&&e.payload?.room===body.room);
     persist(item); // Persist before the first HTTP call; safe if the tab closes after sending.
     if(navigator.onLine===false||previous)return resultQueued(item);
+    if(config.background){
+      sendStored(item).catch(error=>window.dispatchEvent(new CustomEvent('care:send-failed',{detail:{id:item.id,url:item.url,error:error.message}})));
+      return {...resultQueued(item),sending:true};
+    }
     return sendStored(item);
   }
   async function flushQueue(){
@@ -135,9 +139,10 @@
   function getSocket(){if(socket)return socket;if(window.OS?.socket)return attachSocket(OS.socket);if(typeof window.io==='function')return attachSocket(io({transports:['polling','websocket'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:500,reconnectionDelayMax:8000,randomizationFactor:.5,timeout:10000}));return null;}
   function renderStatus(){
     if(!badge)return;const pending=entries(),blocked=pending.filter(e=>e.state==='blocked').length;
+    const needsAttention=pending.some(e=>e.state==='blocked'||e.attempts>0||navigator.onLine===false||Date.now()-e.createdAt>7000);badge.hidden=!needsAttention;if(!pending.length&&panel)panel.hidden=true;
     badge.textContent=navigator.onLine===false?'Sin conexión':lastNetworkError?'Reintentando conexión':(connected||httpHealthy)?'En línea':'Reconectando';
     if(pending.length)badge.textContent+=` · ${pending.length} pendiente${pending.length===1?'':'s'}${blocked?' por revisar':''}`;
-    badge.style.background=pending.length||(!connected&&!httpHealthy)||lastNetworkError?'#80551d':'#176b46';
+    badge.style.background='#80551d'; badge.textContent=pending.length?`${pending.length} envío${pending.length===1?'':'s'} pendiente${pending.length===1?'':'s'}${blocked?' por revisar':''}`:'';
     if(panel&&!panel.hidden){
       panel.replaceChildren();const title=document.createElement('strong');title.textContent='Estado de conexión y guardados';panel.append(title);
       const hint=document.createElement('p');hint.textContent='“Pendiente” no significa guardado en el servidor. Las fotos y los pagos requieren conexión.';panel.append(hint);

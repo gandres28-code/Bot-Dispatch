@@ -4397,18 +4397,24 @@ async function createReportMessage({
   ai,
   photoUrls = [],
   sourcePanel = "Unknown",
+  providedReportId = "",
+  providedWorkDate = "",
 }) {
   if (!NOTION_REPORTS_DATABASE_ID) {
     throw new Error("Falta NOTION_REPORTS_DB_ID en Render");
   }
 
   const now = new Date().toISOString();
-  const reportId = `RPT-${Date.now()}`;
+  const reportId = providedReportId || `RPT-${Date.now()}`;
   const schema = await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID);
+  if (providedReportId) {
+    const titleKey=Object.keys(schema).find(key=>schema[key]?.type==="title");
+    if(titleKey){const existing=await notion.databases.query({database_id:NOTION_REPORTS_DATABASE_ID,page_size:1,filter:{property:titleKey,title:{equals:`${reportId} - ${unit}`}}});if(existing.results?.[0])return {reportId,notionPageId:existing.results[0].id,createdAt:now};}
+  }
   const props = {};
 
   addNotionProp(props, schema, ["Report ID", "Report", "Name", "Title"], `${reportId} - ${unit}`, "title");
-  addNotionProp(props, schema, ["Date", "date"], todayISO(), "date");
+  addNotionProp(props, schema, ["Date", "date"], providedWorkDate || todayISO(), "date");
   addNotionProp(props, schema, ["Time", "time", "Created At"], now, "date");
   addNotionProp(props, schema, ["Unit", "unit"], unit);
   addNotionProp(props, schema, ["Employee", "Employee Name", "Name"], employee);
@@ -4565,88 +4571,10 @@ async function getReportPhotosByReportId(reportId) {
 }
 
 
-app.post("/submit-report", upload.array("photos", 20), async (req, res) => {
-  try {
-    const unit = String(req.body.unit || "").trim();
-    const employee = String(req.body.employee || req.body.name || "").trim();
-    const role = String(req.body.role || "Cleaner").trim();
-    const action = String(req.body.action || "REPORT").trim();
-    const message = String(req.body.message || req.body.note || "").trim();
-    const sourcePanel = String(req.body.sourcePanel || role || "Unknown").trim();
-
-    if (!unit || !employee || !message) {
-      return res.status(400).json({
-        ok: false,
-        success: false,
-        message: "Falta unidad, empleado o mensaje",
-      });
-    }
-
-    const files = req.files || [];
-    const uploadResults = [];
-
-    for (const file of files) {
-      const uploaded = await uploadBufferToCloudinary(
-        file,
-        `housekeeping/reports/${todayISO()}/${normalizeRoom(unit) || "unknown"}`
-      );
-      uploadResults.push(uploaded.secure_url);
-    }
-
-    const ai = await analyzeReportMessageWithAI({
-      unit,
-      employee,
-      role,
-      message,
-      action,
-    });
-
-    const report = await createReportMessage({
-      unit,
-      employee,
-      role,
-      action,
-      message,
-      ai,
-      photoUrls: uploadResults,
-      sourcePanel,
-    });
-
-    const photos = await saveReportPhotos({
-      reportId: report.reportId,
-      reportPageId: report.notionPageId,
-      unit,
-      employee,
-      photoUrls: uploadResults,
-    });
-
-    broadcastOpsUpdate({
-      type: "report",
-      unit,
-      employee,
-      reportId: report.reportId,
-    });
-
-    res.json({
-      ok: true,
-      success: true,
-      message: "Reporte enviado correctamente",
-      reportId: report.reportId,
-      notionPageId: report.notionPageId,
-      photosCount: uploadResults.length,
-      photoUrls: uploadResults,
-      photos,
-      ai,
-    });
-  } catch (error) {
-    console.error("Error en /submit-report:", error.message);
-    res.status(500).json({
-      ok: false,
-      success: false,
-      message: error.message,
-    });
-  }
-});
+app.post("/submit-report",upload.array("photos",20),require("./services/fastReports").createFastReportHandler({
+  pool:getPool,today:todayISO,emit:broadcastOpsUpdate,normalizeUnit:normalizeRoom,
+  uploadPhoto:async(file,unit)=>{const uploaded=await uploadBufferToCloudinary(file,`housekeeping/reports/${todayISO()}/${normalizeRoom(unit)||"unknown"}`);return uploaded.secure_url;},
+}));
 
 app.get("/my-reports", async (req, res) => {
   try {
@@ -10248,6 +10176,13 @@ async function processNotionQueueOnce() {
     const result = await processNextSyncJob({
       destination: "notion",
       processors: {
+        "notion-report-create": async payload => {
+          const ai=await analyzeReportMessageWithAI(payload);
+          const report=await createReportMessage({...payload,ai,providedReportId:payload.reportId,providedWorkDate:payload.workDate});
+          await saveReportPhotos({reportId:report.reportId,reportPageId:report.notionPageId,unit:payload.unit,employee:payload.employee,photoUrls:payload.photoUrls});
+          broadcastOpsUpdate({type:"report-synced",unit:payload.unit,employee:payload.employee,reportId:report.reportId});
+          return report;
+        },
         "notion-service-report": async payload => {
           const schema=await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID), props={};
           addNotionProp(props,schema,["HotSOS Sent","HOTSOS Sent","Service Order Sent"],true,"checkbox");

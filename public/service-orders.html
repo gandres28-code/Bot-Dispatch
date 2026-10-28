@@ -12,7 +12,7 @@
 @media(max-width:950px){.orders{grid-template-columns:repeat(2,1fr)}.products{grid-template-columns:repeat(2,1fr)}.hidebed{grid-template-columns:repeat(2,1fr)}.cats{grid-template-columns:repeat(3,1fr)}}@media(max-width:620px){.shell{padding:13px}.top{align-items:flex-start}.brand h1{font-size:20px}.brand p{display:none}.create{padding:11px 13px}.stats{grid-template-columns:repeat(2,1fr)}.orders{grid-template-columns:1fr}.toolbar{display:block}.tabs{margin-bottom:9px}.search{width:100%}.grid2{grid-template-columns:1fr}.products{grid-template-columns:1fr 1fr}.cats{grid-template-columns:repeat(2,1fr)}.hidebed{grid-template-columns:1fr 1fr}.panel{max-height:96vh}.form{padding:14px}}
 .request-navigation{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}.request-navigation button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:12px 16px;border-radius:12px;font-weight:800;cursor:pointer}.request-navigation button.active{background:var(--nav);color:white}.request-hint{font-size:13px;color:var(--muted);margin:0 0 14px}[hidden]{display:none!important}
 </style>
-</head>
+<link rel="stylesheet" href="/css/supply-picker.css?v=catalog-v3"></head>
 <body>
 <div class="shell">
   <header class="top"><div class="brand"><button class="back" id="backBtn" onclick="goBack()">‹</button><div><h1>Solicitudes</h1><p>Artículos, problemas y entregas · una sola bandeja</p></div></div><button class="create" id="createBtn" onclick="openCreate()">＋ Nueva solicitud</button></header>
@@ -30,7 +30,7 @@
 <div class="grid2" style="margin-top:15px"><div class="field"><label for="priority">PRIORIDAD</label><select id="priority"><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></div><div class="field"><label for="assignedTo">ASIGNAR A</label><select id="assignedTo"><option value="Runner" selected>Runner</option><option value="Unassigned">Unassigned</option></select></div></div>
 <div class="field"><label for="scheduledFor">PROGRAMAR PARA</label><input type="datetime-local" id="scheduledFor"></div><div class="field"><label for="notes">NOTAS</label><textarea id="notes" placeholder="Ej. Guest requested before check-in"></textarea></div><div id="selectedReview" class="request-hint" aria-live="polite"></div><button class="submit" id="submitBtn">ENVIAR SOLICITUD</button>
 </form></div></div><div id="toast" class="toast"></div>
-<script src="/socket.io/socket.io.js"></script><script src="/js/resilience.js?v=reliability-v2"></script>
+<script src="/socket.io/socket.io.js"></script><script src="/js/resilience.js?v=reliability-v2"></script><script src="/js/supply-catalog-data.js?v=catalog-v3"></script><script src="/js/supply-picker.js?v=catalog-v3"></script>
 <script>
 const catalog={
  Linen:[
@@ -179,7 +179,7 @@ function configureAccess(){
 }
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function toast(msg){const e=document.getElementById('toast');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2500)}
-function openCreate(){if(!requestedBy.value)requestedBy.value=employeeName;const unit=new URLSearchParams(location.search).get('unit');if(unit&&!room.value)room.value=unit;document.getElementById('modal').classList.add('open');renderCats();renderProducts();setTimeout(()=>room.focus(),50)}function closeCreate(){document.getElementById('modal').classList.remove('open')}
+function openCreate(){CareSupplyPicker.open({onSent:()=>load()});return;if(!requestedBy.value)requestedBy.value=employeeName;const unit=new URLSearchParams(location.search).get('unit');if(unit&&!room.value)room.value=unit;document.getElementById('modal').classList.add('open');renderCats();renderProducts();setTimeout(()=>room.focus(),50)}function closeCreate(){document.getElementById('modal').classList.remove('open')}
 function renderCats(){cats.innerHTML=Object.keys(catalog).map(c=>`<button type="button" class="cat ${c===category?'active':''}" onclick="selectCat('${c}')">${icons[c]} ${c}</button>`).join('')}
 function selectCat(c){category=c;renderCats();renderProducts()}
 function productCard(item){return `<div class="product"><div class="product-name">🎁 ${esc(item.name)}<small>${esc(item.detail||'')}</small></div><div class="counter"><button type="button" onclick='changeQty(${JSON.stringify(item.name)},-1)'>−</button><span>${qty[item.name]||0}</span><button type="button" onclick='changeQty(${JSON.stringify(item.name)},1)'>＋</button></div></div>`}

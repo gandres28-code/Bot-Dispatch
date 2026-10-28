@@ -1575,7 +1575,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#111827">
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
-</head>
+<link rel="stylesheet" href="/css/supply-picker.css?v=catalog-v3"></head>
 
 <body>
 <div id="bigStatus"></div>
@@ -1758,7 +1758,7 @@
 </section>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/resilience.js?v=reliability-v2"></script>
+<script src="/js/resilience.js?v=reliability-v2"></script><script src="/js/supply-catalog-data.js?v=catalog-v3"></script><script src="/js/supply-picker.js?v=catalog-v3"></script>
 <script src="/js/maid-core.js"></script>
 
 
@@ -2339,7 +2339,7 @@ function renderCleanerAssignments(units){
               ${escapeHtml(footerRight)}
             </strong>
 
-            <button class="inline-voice" title="Solicitar supplies por voz" aria-label="Solicitar supplies por voz" onclick="openVoiceRequest(event, '${safeJsString(item.unit)}')">🎙</button>
+            <button class="inline-voice unit-supply-button" title="Pedir artículos" aria-label="Pedir artículos para ${escapeHtml(item.unit)}" onclick="event.stopPropagation();CareSupplyPicker.open({unit:'${safeJsString(item.unit)}'})">📦 Pedir</button>
 
             <button
               class="inline-report"
@@ -2701,6 +2701,9 @@ function updatePhotoCount(){
 }
 
 async function uploadPhotosWithReport({ unit, name, action, note, role }){
+  const fingerprint=JSON.stringify([unit,name,action,note,selectedReportFiles.map(f=>[f.name,f.size,f.lastModified])]);
+  if(window.careReportDraft?.fingerprint!==fingerprint)window.careReportDraft={fingerprint,id:OSResilience.requestId()};
+  const requestId=window.careReportDraft.id;
   const formData = new FormData();
 
   formData.append("unit", unit);
@@ -2715,16 +2718,9 @@ async function uploadPhotosWithReport({ unit, name, action, note, role }){
     formData.append("photos", file);
   });
 
-  const response = await fetch("/submit-report", {
-    method: "POST",
-    body: formData
-  });
-
-  const data = await response.json();
-
-  if(!response.ok || !data.ok){
-    throw new Error(data.message || data.error || "Error enviando reporte");
-  }
+  if(!selectedReportFiles.length)return OSResilience.postAction("/submit-report",{requestId,unit,employee:name,name,role,action,message:note,note,sourcePanel:"Cleaner"},{background:true});
+  formData.append("requestId",requestId);
+  const data=await OSResilience.fetchJson("/submit-report",{method:"POST",body:formData},{timeoutMs:120000,retries:0});
 
   return data;
 }
@@ -2898,6 +2894,8 @@ async function submitReportToAI(action){
       role:"Cleaner"
     });
 
+    if(data.queuedOffline){document.getElementById("note").value="";window.careReportDraft=null;setStatus("Mensaje pendiente de enviar");showBigStatus(data.sending?"Enviando mensaje…":"Mensaje guardado en este dispositivo; pendiente de enviar.","pending");closeReportPanel();return;}
+    window.careReportDraft=null;
     setStatus(data.message || "Reporte enviado");
     showBigStatus(data.message || "Reporte enviado", "success");
     playBeep("success");
@@ -2909,7 +2907,7 @@ async function submitReportToAI(action){
     updatePhotoCount();
 
     closeReportPanel();
-    await loadMyReports(true);
+    loadMyReports(true).catch(()=>{});
 
   }catch(error){
     setStatus("Error: " + error.message);
@@ -3129,7 +3127,9 @@ function handleRoomUpdated(update){
 
 connectCleanerRealtime();
 window.addEventListener("care:action-confirmed",event=>{
-  const item=event.detail;if(item?.url!=="/action")return;
+  const item=event.detail;
+  if(item?.url==="/submit-report"){setStatus("Mensaje enviado");showBigStatus("Mensaje enviado","success");loadMyReports(true).catch(()=>{});return;}
+  if(item?.url!=="/action")return;
   const {action,unit}=item.payload;
   if(action==="START"||action==="DONE")updateCachedCleanerUnit(unit,{status:action==="START"?"In Progress":"Cleaned - Awaiting Inspection"});
   setStatus(`Confirmado en Care OS · ${unit}`);showBigStatus(`Confirmado en Care OS · ${unit}`,"success");

@@ -1,14 +1,26 @@
-# Care OS · Estabilidad y operación delegada v2
+# Care OS · Catálogo por unidad y envíos ágiles v3
 
 Proyecto completo actualizado desde Bot-Dispatch-main-19 y la primera entrega de autonomía. Conserva tus conexiones; no crea un app aparte. Esta entrega aún no está desplegada en tu alojamiento activo.
 
-## Cambios
+
+## Cambios de esta entrega v3
+
+- Se retiró la barra verde permanente de “En línea”. Solo aparece un aviso discreto si hay un envío realmente pendiente o que necesita revisión.
+- Cada unidad tiene **Pedir**: abre un catálogo con la habitación precargada. Cleaners e inspectores utilizan el mismo recorrido: elegir, revisar y enviar.
+- Catálogo con artículos frecuentes, toallas, ropa de cama, consumibles, vajilla, cubiertos, cocina, sofá cama, paquetes de cama/toallas y herramientas/servicios. Los nombres de artículos existentes se conservan para los runners; las descripciones ayudan en español.
+- Búsqueda por palabras en español o inglés, cantidades con botones grandes y resumen antes de enviar. Cada unidad conserva su selección de forma independiente mientras la pantalla está abierta. Los borradores del catálogo no se conservan al cerrar el navegador; los pedidos ya enviados sí se guardan en la cola local antes de salir.
+- Desde Solicitudes → Nueva solicitud se utiliza ese mismo catálogo; ahí se elige primero la habitación.
+- Al enviar un pedido o un mensaje de texto, se guarda primero en el dispositivo y la pantalla queda libre mientras se envía. “Enviando” no equivale a confirmación; la notificación de éxito llega después de la respuesta del servidor.
+- Los mensajes se guardan en PostgreSQL y dejan el análisis de IA y la copia de Notion en una cola persistente. El envío ya no espera esos servicios externos. Las fotografías aún requieren subida y se procesan en lotes de hasta tres simultáneas.
+- Esta entrega añade el procesador de cola `notion-report-create`: sube el servidor completo junto con los archivos públicos; no actualices únicamente el catálogo.
+
+## Base de estabilidad incluida
 
 - START/DONE y acciones del inspector confirman únicamente después del guardado transaccional en PostgreSQL. Notion se sincroniza mediante la cola persistente existente, sin bloquear esos botones.
 - La lista del cleaner consulta la misma fuente PostgreSQL que inspecciones. Se conserva la última lista disponible si falla una actualización.
 - Solicitudes se guardan sin esperar el reporte externo ni las notificaciones. La marca de un reporte convertido a solicitud queda en una cola persistente.
 - Indicador de conexión y pendientes. Al tocarlo se puede revisar qué quedó pendiente o bloqueado.
-- Acciones de habitaciones y creación de solicitudes se guardan en el dispositivo antes del primer envío. Los reintentos conservan el identificador para evitar duplicados si se pierde la respuesta.
+- Acciones de habitaciones, mensajes de texto y creación de solicitudes se guardan en el dispositivo antes del primer envío. Los reintentos conservan el identificador para evitar duplicados si se pierde la respuesta.
 - Los errores permanentes quedan visibles. No se borran silenciosamente ni se reintentan sin límite.
 - Cambiar de usuario conserva el trabajo pendiente y no reenvía el de otra persona. Acciones de turnos anteriores requieren revisión antes de reenviarse; no se aplican al nuevo turno automáticamente.
 - Reconexión, revisión al volver a la pantalla y actualización periódica de respaldo. Se evitan lecturas iguales concurrentes, cargas superpuestas y dobles toques en estados de solicitudes.
@@ -48,7 +60,7 @@ El código no evita que el proveedor suspenda el servidor ni restaura internet. 
 
 ## Verificación realizada y límites
 
-`npm run verify` ejecuta sintaxis y ocho grupos: habitaciones, nómina, Excel, catálogo, Centro de Control, transporte/outbox, eventos y conciliación de nómina. Las bases y servicios externos de esos tests están aislados/simulados.
+`npm run verify` ejecuta sintaxis y nueve grupos: habitaciones, nómina, Excel, catálogo, Centro de Control, transporte/outbox, eventos y conciliación de nómina. Las bases y servicios externos de esos tests están aislados/simulados.
 
 En navegador con datos ficticios se probaron START/DONE, inspecciones, solicitud con servicio caído, recuperación sin recargar y pérdida de respuesta después de guardar sin generar una solicitud duplicada. READY se mantuvo pendiente durante el fallo y solo contó como completado tras confirmarse.
 
@@ -61,3 +73,13 @@ Los duplicados históricos no se borran automáticamente. Una relimpieza adicion
 ## Reversión
 
 Conserva el código anterior y respaldo de base. Las columnas/tablas nuevas son aditivas: no las elimines como parte de una reversión rápida. Revisa pendientes de los dispositivos y la cola de sincronización antes de volver a una versión antigua. No borres registros para resolver diferencias de nómina.
+
+## Prueba de aceptación v3
+
+1. En un teléfono, abre una unidad y toca Pedir. Debe aparecer esa habitación y ningún campo de responsable o prioridad que tengas que completar.
+2. Agrega dos toallas, busca “sábana queen”, cambia de categoría y verifica que conserva las cantidades. Revisa el pedido antes de enviarlo.
+3. Abre otra unidad: no debe heredar el pedido de la anterior. Confirma en el runner que unidad, artículos y cantidades coinciden.
+4. Envía un mensaje sin fotografías. Comprueba primero “Enviando” y después la confirmación, sin esperar que termine la IA. El historial de Notion puede actualizarse después; la actividad ya está registrada en PostgreSQL.
+5. Comprueba que no hay barra verde permanente. Con una interrupción simulada debe aparecer únicamente el aviso de envíos pendientes, que desaparece al confirmarse.
+
+El catálogo se revisó en navegador y en un marco de 390 px de ancho con datos ficticios. No se midieron los tiempos de tu servidor real. Continúa aplicando las pruebas de despliegue y conexiones de esta guía.
