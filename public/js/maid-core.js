@@ -221,6 +221,7 @@ window.OS = {
   },
 
   async fetchJson(url, options = {}) {
+    if(window.OSResilience) return OSResilience.fetchJson(url,options);
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
@@ -281,6 +282,7 @@ window.OS = {
 
   initSocket() {
     if (this.socket) return this.socket;
+    if(window.OSResilience){this.socket=OSResilience.getSocket();if(this.socket)return this.socket;}
 
     try {
       if (typeof io !== "undefined") {

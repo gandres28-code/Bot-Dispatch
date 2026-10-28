@@ -101,6 +101,12 @@ function roundMoney(value) {
   return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 }
 
+function allocateUnitPay(amount, count, fullEach = false) {
+  const cents = Math.round(Number(amount) * 100);
+  if (!Number.isInteger(count) || count < 1 || !Number.isFinite(cents) || cents < 0) throw new Error("Pago o reparto inválido");
+  return Array.from({length:count}, (_,i) => (fullEach ? cents : Math.floor(cents/count) + (i < cents%count ? 1 : 0))/100);
+}
+
 function stableHash(value) {
   return crypto
     .createHash("sha256")
@@ -197,6 +203,7 @@ async function updateRoomForEvent(
       sql = `
         UPDATE rooms
         SET
+          operational_state_at = $2::timestamptz,
           cleaning_status = 'In Progress',
           core_status = 'CLEANING',
           started_at = COALESCE(started_at, $2::timestamptz),
@@ -214,6 +221,7 @@ async function updateRoomForEvent(
       sql = `
         UPDATE rooms
         SET
+          operational_state_at = $2::timestamptz,
           cleaning_status = 'Cleaned - Awaiting Inspection',
           core_status = 'WAITING_INSPECTION',
           started_at = COALESCE(started_at, $2::timestamptz),
@@ -231,6 +239,7 @@ async function updateRoomForEvent(
       sql = `
         UPDATE rooms
         SET
+          operational_state_at = $2::timestamptz,
           cleaning_status = 'Inspection Started',
           core_status = 'INSPECTING',
           inspection_started_at = COALESCE(
@@ -249,6 +258,7 @@ async function updateRoomForEvent(
       sql = `
         UPDATE rooms
         SET
+          operational_state_at = $2::timestamptz,
           cleaning_status = 'Ready for Guest',
           core_status = 'READY',
           inspection_started_at = COALESCE(
@@ -280,6 +290,7 @@ async function updateRoomForEvent(
       sql = `
         UPDATE rooms
         SET
+          operational_preinspection_at = $2::timestamptz,
           pre_inspection = FALSE,
           pre_inspection_started = TRUE,
           pre_inspection_started_at = COALESCE(
@@ -300,6 +311,7 @@ async function updateRoomForEvent(
       sql = `
         UPDATE rooms
         SET
+          operational_preinspection_at = $2::timestamptz,
           pre_inspection = TRUE,
           pre_inspection_started = FALSE,
           pre_inspection_started_at = COALESCE(
@@ -410,7 +422,14 @@ async function createPayrollFromDone(
   let created = 0;
   let skipped = 0;
 
-  for (const cleaner of cleaners) {
+  const shares = allocateUnitPay(rate.amount, cleaners.length, splitMode === "full_each");
+  for (const [cleanerIndex, cleaner] of cleaners.entries()) {
+    const existing = await client.query(`SELECT id FROM payroll_records
+      WHERE work_date=$1::date AND normalized_employee=$2
+      AND regexp_replace(upper(unit),'[^A-Z0-9]','','g')=regexp_replace(upper($3),'[^A-Z0-9]','','g')
+      AND pay_type='unit' AND lower(COALESCE(status,'')) <> 'cancelled'
+      LIMIT 1 FOR UPDATE`, [workDate,normalizeEmployee(cleaner),room.room_number]);
+    if (existing.rows[0]) { skipped++; continue; }
     const payrollEventId = `${eventId}:${normalizeEmployee(cleaner)}`;
 
     const result = await client.query(
@@ -476,7 +495,7 @@ async function createPayrollFromDone(
         rate.amount,
         cleaners.length,
         splitMode === "full_each" ? 1 : 1 / cleaners.length,
-        amountPerCleaner,
+        shares[cleanerIndex],
         week.weekStart,
         week.weekEnd,
         JSON.stringify({
@@ -697,6 +716,8 @@ function createEventEngine({
       await client.query("SET LOCAL lock_timeout = '1500ms'");
       await client.query("SET LOCAL statement_timeout = '5000ms'");
 
+      // Serialize retries of the same event before any room/payroll side effects.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [eventId]);
       const existingResult = await client.query(
         `
           SELECT
@@ -741,6 +762,11 @@ function createEventEngine({
         );
       }
 
+      const protectedAt = action.startsWith("PRE_INSPECTION") ? room.operational_preinspection_at : status ? room.operational_state_at : null;
+      if (protectedAt && Date.parse(protectedAt) > Date.parse(occurredAt)) {
+        const error = new Error("La unidad tiene una acción más reciente. Revisa el pendiente antes de continuar.");
+        error.status = 409; throw error;
+      }
       const updatedRoom = await updateRoomForEvent(
         client,
         room,
@@ -853,6 +879,8 @@ function createEventEngine({
           name: employee,
           role: role.toLowerCase(),
           photoUrl,
+          workDate,
+          occurredAt,
           queuedAt: new Date().toISOString(),
         },
         action === "READY_GUEST" ? 10 : 50
@@ -1101,6 +1129,7 @@ function createEventEngine({
 
 module.exports = {
   EVENT_ENGINE_VERSION,
+  allocateUnitPay,
   createEventEngine,
   normalizeRoom,
   splitEmployeeNames,

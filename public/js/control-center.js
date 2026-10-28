@@ -100,5 +100,7 @@ $('taskForm').addEventListener('submit',async e=>{
   if(await mutate('/tasks','POST',{...body,date:state.date,requestId:taskRequestId},e.submitter)){$('taskDialog').close();await load();}else $('taskError').textContent=$('message').textContent;
 });
 // Do not rerender editable forms on push. Tell the user when another device has changed the shared records.
-if(typeof io==='function'){const socket=io();['care-control:updated','service-order:updated','service-order:created'].forEach(event=>socket.on(event,()=>{if(state)notice('Hay cambios en la operación. Pulsa Actualizar para verlos.');}));}
+if(typeof io==='function'){const socket=OSResilience.getSocket();['care-control:updated','service-order:updated','service-order:created'].forEach(event=>socket.on(event,()=>{if(state)notice('Hay cambios en la operación. Pulsa Actualizar para verlos.');}));}
 load();
+
+OSResilience.watch(()=>{if(['overview','rooms','inspections','history'].includes(view)&&!document.querySelector('dialog[open]'))return load();else if(state)notice('Revisa si hay cambios: pulsa Actualizar al terminar de editar.');});

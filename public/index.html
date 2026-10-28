@@ -1571,7 +1571,7 @@
       cursor:default;
     }
 
-  </style>
+  #bigStatus.pending{background:#80551d}</style>
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#111827">
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
@@ -1752,14 +1752,15 @@
     <button onclick="closeSettingsMenu()">Cerrar</button>
   </div>
 
-  <button class="settings-option" onclick="window.OS?.clearSession ? OS.clearSession() : localStorage.clear(); window.location.replace('/launch');">
+  <button class="settings-option" onclick="window.OS?.clearSession ? OS.clearSession() : ['employeeCode','employeeName','employeeRole','cleanerName','employeeSessionUpdatedAt'].forEach(k=>localStorage.removeItem(k)); window.location.replace('/launch');">
     Cambiar usuario
   </button>
 </section>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/js/resilience.js?v=reliability-v2"></script>
 <script src="/js/maid-core.js"></script>
-<script src="/js/resilience.js?v=stable-20260719-1"></script>
+
 
 <script>
 let currentCleanerName = "";
@@ -1793,20 +1794,9 @@ function todayChicagoISO(){
 }
 
 async function fetchCleanerAssignmentsNotion(name){
-  const url = `/cleaner-assignments?name=${encodeURIComponent(name)}&t=${Date.now()}`;
-
-  const data = window.OS?.api
-    ? await OS.api.get(url)
-    : await fetch(url, { cache:"no-store" }).then(response => response.json());
-
-  if(!data.ok){
-    throw new Error(data.message || "No se pudieron cargar tus unidades");
-  }
-
-  return {
-    ...data,
-    source:"notion"
-  };
+  const params=new URLSearchParams({date:todayChicagoISO(),employee:name,role:"cleaner"});
+  const data=await OSResilience.fetchJson(`/api/v2/rooms?${params}`,{cache:"no-store"},{timeoutMs:7000,retries:1});
+  return {ok:true,source:"postgres",cleaner:name,units:(data.rooms||[]).map(room=>({...room,priority:room.urgent?"Urgent":"Normal"}))};
 }
 
 function normalizeRole(role){
@@ -2632,14 +2622,10 @@ async function confirmVoiceRequest(){
   try{
     const transcript = interpretedVoiceRequest?.transcript || "";
     const notes = document.getElementById("voiceNotes").value.trim();
-    const response = await fetch("/api/service-orders",{
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({room:voiceRequestUnit,category:document.getElementById("voiceCategory").value,priority:document.getElementById("voicePriority").value,items,assignedTo:"Runner",requestedBy:document.getElementById("name").value.trim(),notes:[notes,transcript ? `Voice: ${transcript}` : ""].filter(Boolean).join(" · ")})
-    });
-    const data = await response.json();
-    if(!response.ok || !data.ok) throw new Error(data.error || "No se pudo enviar la solicitud.");
+    const data = await OSResilience.postAction("/api/service-orders",{room:voiceRequestUnit,category:document.getElementById("voiceCategory").value,priority:document.getElementById("voicePriority").value,items,assignedTo:"Runner",requestedBy:document.getElementById("name").value.trim(),notes:[notes,transcript ? `Voice: ${transcript}` : ""].filter(Boolean).join(" · ")});
     closeVoiceRequest();
-    showBigStatus(`Solicitud #${data.order.id} enviada al runner`,"success");
+    if(data.queuedOffline){showBigStatus("Solicitud pendiente de confirmación. Revisa el indicador de conexión.","pending");return;}
+    showBigStatus(`Solicitud #${data.order.id} guardada para el runner`,"success");
     playBeep("success");
     vibratePhone("success");
   }catch(error){
@@ -2780,8 +2766,8 @@ async function sendAction(action){
   previousStatus = cachedCleanerUnits.find(item => String(item?.unit || "").toUpperCase() === unit)?.status || "Not Started";
   if(action === "START" || action === "DONE"){
     updateCachedCleanerUnit(unit, { status: action === "START" ? "Started" : "Waiting for inspection" });
-    setStatus(action === "START" ? "Limpieza iniciada" : "Limpieza terminada");
-    showBigStatus(action === "START" ? "Limpieza iniciada" : "Limpieza terminada", "success");
+    setStatus("Enviando cambio…");
+    showBigStatus("Enviando cambio…", "loading");
   }
   lastSendKey = sendKey;
   lastSendTime = now;
@@ -2804,10 +2790,10 @@ async function sendAction(action){
     if(data.queuedOffline){
       if(action === "START" || action === "DONE") updateCachedCleanerUnit(unit, { status:previousStatus });
       setStatus("Pendiente de conexión");
-      showBigStatus("Sin conexión. La acción está pendiente; todavía no aparece en Notion.", "error");
+      showBigStatus("La acción está guardada en este dispositivo y pendiente de confirmación.", "pending");
       return;
     }
-    if(data.success && data.notionSync === "saved"){
+    if(data.success && data.postgresUpdated === true){
       actionSucceeded=true;
       setStatus(data.message || "Enviado");
       showBigStatus(data.message || "Enviado correctamente", "success");
@@ -2835,7 +2821,7 @@ async function sendAction(action){
     lastSendKey = "";
     if(action === "START" || action === "DONE") updateCachedCleanerUnit(unit, { status:previousStatus });
     setStatus("No se guardó la acción");
-    showBigStatus(error.message || "No se guardó en Notion. Intenta de nuevo.", "error");
+    showBigStatus(error.message || "No se confirmó el guardado. Revisa el indicador de pendientes.", "error");
   }finally{
     if(actionSucceeded){
       const cardId="card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,"");
@@ -3096,12 +3082,12 @@ async function refreshCleanerRealtime(){
 }
 
 function scheduleCleanerRealtimeRefresh(){
-  if(document.hidden || isSending || Date.now() - lastRealtimeRefreshAt < 60000) return;
+  if(document.hidden || isSending || Date.now() - lastRealtimeRefreshAt < 700) return;
   clearTimeout(realtimeRefreshTimer);
 
   realtimeRefreshTimer = setTimeout(() => {
     refreshCleanerRealtime();
-  }, 3000);
+  }, 200);
 }
 
 function connectCleanerRealtime(){
@@ -3142,6 +3128,13 @@ function handleRoomUpdated(update){
 }
 
 connectCleanerRealtime();
+window.addEventListener("care:action-confirmed",event=>{
+  const item=event.detail;if(item?.url!=="/action")return;
+  const {action,unit}=item.payload;
+  if(action==="START"||action==="DONE")updateCachedCleanerUnit(unit,{status:action==="START"?"In Progress":"Cleaned - Awaiting Inspection"});
+  setStatus(`Confirmado en Care OS · ${unit}`);showBigStatus(`Confirmado en Care OS · ${unit}`,"success");
+});
+OSResilience.watch(()=>{if(!isSending&&currentCleanerName)return loadCleanerAssignments(true);});
 </script>
 
 <script src="/js/push-notifications.js"></script>

@@ -76,7 +76,7 @@
         <button onclick="openDirectModule('Employee Center','/employee-center')">
   👥 Empleados
 </button>
-        <button onclick="localStorage.clear(); OS.open('launch')">🚪 Cambiar usuario</button>
+        <button onclick="['employeeCode','employeeName','employeeRole','cleanerName','employeeSessionUpdatedAt'].forEach(k=>localStorage.removeItem(k)); OS.open('launch')">🚪 Cambiar usuario</button>
       </div>
     </section>
 
@@ -110,7 +110,8 @@
   </nav>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/maid-core.js"></script>
+  <script src="/js/resilience.js?v=reliability-v2"></script>
+<script src="/js/maid-core.js"></script>
   <script src="/js/app.js"></script>
 
 <script src="/js/push-notifications.js"></script>

@@ -820,3 +820,11 @@ CREATE TABLE IF NOT EXISTS care_control_audit (
 CREATE INDEX IF NOT EXISTS care_control_audit_date_idx ON care_control_audit(work_date,id DESC);
 INSERT INTO schema_migrations(migration_name) VALUES ('012_care_control_center') ON CONFLICT(migration_name) DO NOTHING;
 COMMIT;
+
+BEGIN;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS operational_state_at TIMESTAMPTZ;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS operational_preinspection_at TIMESTAMPTZ;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS request_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS service_orders_request_uidx ON service_orders(request_id) WHERE request_id IS NOT NULL;
+INSERT INTO schema_migrations(migration_name) VALUES ('013_reliability_outbox') ON CONFLICT(migration_name) DO NOTHING;
+COMMIT;

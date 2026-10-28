@@ -187,7 +187,7 @@
       cursor:default;
     }
 
-  </style>
+  #bigStatus.pending{background:#80551d}</style>
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#111827">
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
@@ -227,8 +227,9 @@
 </div>
 <nav class="bottom-nav"><a class="nav-item active" href="/inspector"><span style="font-size:18px">🔎</span>Inspecciones</a><button class="nav-item" type="button" onclick="openSettingsMenu()"><span style="font-size:18px">⚙️</span>Settings</button></nav>
 <section id="settingsSheet" class="settings-sheet hidden"><div class="sheet-head"><div><span>Settings</span><strong>Cuenta</strong></div><button class="sheet-close" onclick="closeSettingsMenu()">Cerrar</button></div><button class="settings-option" onclick="window.OS?.clearSession?.();window.location.replace('/launch');">Cambiar usuario</button></section>
-<script src="/socket.io/socket.io.js"></script><script src="/js/maid-core.js"></script>
-<script src="/js/resilience.js?v=stable-20260719-1"></script>
+<script src="/socket.io/socket.io.js"></script><script src="/js/resilience.js?v=reliability-v2"></script>
+<script src="/js/maid-core.js"></script>
+
 <script>
 let isSending=false,lastSendKey="",lastSendTime=0,selectedReportFiles=[],selectedUnit="",currentInspectorCode="",currentInspectorName="",lastUnits=[],activeTab="pre",collapsedBuildings={};
 let inspectorDataSource="postgres";
@@ -926,6 +927,11 @@ async function sendInspectionAction(action){
             return body;
           });
 
+    if(data.queuedOffline){
+      document.getElementById("status").innerText="Pendiente de confirmación";
+      showBigStatus("Guardado en este dispositivo. Todavía no está confirmado por el servidor.","pending");
+      return;
+    }
     if(!data.success){
       throw new Error(data.message||"No se pudo guardar la acción");
     }
@@ -938,7 +944,7 @@ async function sendInspectionAction(action){
 
     // Evita que los eventos duplicados del servidor vuelvan a dibujar
     // la pantalla mientras aplicamos el cambio local.
-    suppressInspectorRealtimeUntil=Date.now()+5000;
+    suppressInspectorRealtimeUntil=Date.now()+500;
     rememberInspectorAction(action,unit);
     applyLocalInspectorAction(action,unit);
     lastAssignmentsLoadedAt=Date.now();
@@ -948,10 +954,11 @@ async function sendInspectionAction(action){
 
     // Una sola reconciliación silenciosa después de que PostgreSQL tenga tiempo
     // de recibir el cambio, sin vaciar ni parpadear la lista.
-    setTimeout(()=>scheduleInspectorRealtimeRefresh(0),5200);
+    setTimeout(()=>scheduleInspectorRealtimeRefresh(0),250);
   }catch(error){
-    document.getElementById("status").innerText="Reconectando…";
-    showBigStatus("No se perdió tu acción. Reintentando automáticamente…","loading");
+    lastSendKey="";
+    document.getElementById("status").innerText="Revisar guardado";
+    showBigStatus(error.message||"No se confirmó la acción. Revisa los pendientes.","error");
   }finally{
     setInspectionCardLoading(unit,false);
     isSending=false;
@@ -1173,6 +1180,7 @@ function attachInspectorSocket(){
   socket.off?.("room-updated",handleInspectorRoomUpdate);
   socket.off?.("rooms-postgres-synced",refresh);
 
+  socket.on("connect",()=>scheduleInspectorRealtimeRefresh(0));
   socket.on("assignments-updated",refresh);
   socket.on("rooms-updated",refresh);
   socket.on("room-updated",handleInspectorRoomUpdate);
@@ -1183,6 +1191,15 @@ function attachInspectorSocket(){
   });
 }
 
+window.addEventListener("care:action-confirmed", event=>{
+  const item=event.detail;
+  if(item?.url!=="/inspector-action")return;
+  const {action,unit}=item.payload;
+  rememberInspectorAction(action,unit);applyLocalInspectorAction(action,unit);
+  document.getElementById("status").innerText=`Confirmado en Care OS · ${unit}`;
+  showBigStatus(`Confirmado en Care OS · ${unit}`,"success");
+});
+OSResilience.watch(()=>{if(!isSending)return refreshInspectorRealtime();});
 window.addEventListener("os-ready",attachInspectorSocket,{once:true});
 if(document.readyState==="loading"){
   document.addEventListener("DOMContentLoaded",attachInspectorSocket,{once:true});

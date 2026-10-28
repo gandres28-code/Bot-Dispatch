@@ -214,6 +214,7 @@ app.get("/notifications-data", (req, res) => {
     notifications: systemNotifications,
   });
 });
+app.get("/api/ping", (req,res) => res.set("Cache-Control","no-store").json({ok:true,time:new Date().toISOString()}));
 app.get("/api/timeline", (req, res) => {
   res.json({
     ok: true,
@@ -500,7 +501,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static("public", { maxAge: process.env.NODE_ENV === "production" ? "1h" : 0, etag: true }));
+app.use(express.static("public", { maxAge: process.env.NODE_ENV === "production" ? "1h" : 0, etag: true, setHeaders(res, filePath) { if (/\.(html|js|css)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache"); } }));
 
 // Diagnóstico seguro de PostgreSQL. No expone DATABASENEW_URL.
 app.get("/api/database-status", async (req, res) => {
@@ -593,7 +594,7 @@ console.log("NOTION_EMPLOYEES_DATABASE_ID existe:", !!NOTION_EMPLOYEES_DATABASE_
 console.log("NOTION_REPORTS_DATABASE_ID existe:", !!NOTION_REPORTS_DATABASE_ID);
 console.log("NOTION_REPORT_PHOTOS_DATABASE_ID existe:", !!NOTION_REPORT_PHOTOS_DATABASE_ID);
 console.log("OPENAI_API_KEY existe:", !!OPENAI_API_KEY);
-const notion = new Client({ auth: NOTION_API_KEY });
+const notion = new Client({ auth: NOTION_API_KEY, timeoutMs: 12000 });
 
 // =========================================================
 // PROTECCIÓN URGENTE CONTRA NOTION RATE_LIMITED (429)
@@ -3344,7 +3345,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
   };
 }
 // ■ Actualizar habitación principal
-async function updateNotionRoom(unit, action, employee, note, mode = "cleaner", photoUrl = "") {
+async function updateNotionRoom(unit, action, employee, note, mode = "cleaner", photoUrl = "", syncOptions = {}) {
 if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
 throw new Error("Faltan variables de Notion. Revisa NOTION_API_KEY y NOTION_DATABASE_ID");
 }
@@ -3399,7 +3400,7 @@ if (matches.length === 0) {
   throw new Error(`No encontré la unidad ${unit} en Notion para hoy`);
 }
 
-const now = new Date().toISOString();
+const now = syncOptions.occurredAt || new Date().toISOString();
 const label = actionLabel(action);
 const status = notionStatusFromAction(action);
 
@@ -3444,7 +3445,7 @@ for (const page of matches) {
   const currentStatus = readRoomTextProperty(schema, ["Cleaning Status", "Status"]).toLowerCase();
   const alreadyStarted = action === "START" && (currentStatus === "started" || currentStatus === "in progress" || currentStatus === "waiting for inspection" || currentStatus === "ready for guest");
   const alreadyFinished = action === "DONE" && (currentStatus === "waiting for inspection" || currentStatus === "ready for guest");
-  if (alreadyStarted || alreadyFinished) continue;
+  if ((alreadyStarted || alreadyFinished) && !syncOptions.backgroundSync) continue;
   addNotionProp(props, schema, ["Last Whatsapp Update ", "Last Whatsapp Update", "Last Update At"], now);
   addNotionProp(props, schema, ["Last Message", "Last Update", "Activity Log"], newLastMessage.slice(-1900));
   addNotionProp(props, schema, ["Last Update By", "Updated By"], employee);
@@ -3588,6 +3589,11 @@ for (const page of matches) {
     throw new Error(`No se pudo escribir Cleaning Status. Propiedades recibidas: ${Object.keys(schema).join(", ")}`);
   }
 
+  if (syncOptions.room) {
+    for (const [field,value] of [["Started At",syncOptions.room.started_at],["Finished At",syncOptions.room.finished_at],["Inspection Started At",syncOptions.room.inspection_started_at],["Ready At",syncOptions.room.ready_at]]) {
+      if (value) addNotionProp(props,schema,[field],new Date(value).toISOString());
+    }
+  }
   if (Object.keys(props).length) {
     await notion.pages.update({
       page_id: page.id,
@@ -3642,6 +3648,7 @@ for (const page of matches) {
     updatedAt: now,
   };
 
+  if (!syncOptions.backgroundSync) {
   // Evento ligero para actualizar solo una tarjeta en todos los teléfonos.
   io.emit("room-updated", roomUpdatePayload);
 
@@ -3652,6 +3659,8 @@ for (const page of matches) {
     action,
     lightweight: true,
   });
+
+  }
 
   runDetached(`cleaning-log:${action}:${fullUnitTitle}`, async () => {
   let logSaved = true;
@@ -5119,6 +5128,8 @@ function createOperationalRoomEngine({ eventEngine }) {
     photoUrl = "",
     eventId = "",
     requestId = "",
+    workDate,
+    occurredAt,
   }) {
     const normalizedAction = String(action || "").trim().toUpperCase();
     const normalizedUnit = String(unit || "").trim();
@@ -5140,6 +5151,8 @@ function createOperationalRoomEngine({ eventEngine }) {
     return eventEngine.publish({
       eventId,
       requestId,
+      workDate,
+      occurredAt,
       action: normalizedAction,
       unit: normalizedUnit,
       employee: normalizedCleaner,
@@ -5157,6 +5170,8 @@ function createOperationalRoomEngine({ eventEngine }) {
     photoUrl = "",
     eventId = "",
     requestId = "",
+    workDate,
+    occurredAt,
   }) {
     const normalizedAction = String(action || "").trim().toUpperCase();
     const normalizedUnit = String(unit || "").trim();
@@ -5181,6 +5196,8 @@ function createOperationalRoomEngine({ eventEngine }) {
     return eventEngine.publish({
       eventId,
       requestId,
+      workDate,
+      occurredAt,
       action: normalizedAction,
       unit: normalizedUnit,
       employee: normalizedInspector,
@@ -5642,41 +5659,10 @@ function syncOperationalActionToNotionInBackground({
     });
 }
 
-app.post("/action", async (req, res) => {
-  try {
-    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
-
-    if (!action || !unit || !name) {
-      return res.status(400).json({
-        success: false,
-        message: "Faltan datos: nombre, unidad o acción",
-      });
-    }
-
-    if (["ISSUE", "SUPPLIES", "LOST_FOUND"].includes(action) && !String(note || "").trim()) {
-      return res.status(400).json({ success: false, message: "Debes escribir una nota" });
-    }
-
-    // La respuesta sólo confirma éxito después de actualizar la habitación en Notion.
-    const result = await updateNotionRoom(unit, action, name, note, "cleaner", photoUrl || "");
-    if (action === "DONE") {
-      runDetached(`notify-inspectors:${unit}`, () => notifyInspectors(unit));
-    }
-    return res.json({
-      success: true,
-      source: "notion",
-      eventId: eventId || requestId || "",
-      notionSync: "saved",
-      logSaved: result.logSaved,
-      status: result.status || notionStatusFromAction(action) || "",
-      message: `Guardado en Notion: ${result.label} - ${unit}`,
-    });
-  } catch (error) {
-    console.error("Error en /action:", error.message);
-    return res.status(error.status || 503).json({ success: false, retryable:false, message: error.message });
-  }
-});
-
+app.post("/action", require("./services/operationalActions").createActionHandler({
+  engine: RoomEngine, kind: "cleaner", today: todayISO,
+  afterCommit: ({action,unit}) => action === "DONE" ? notifyInspectors(unit) : undefined,
+}));
 
 // =========================================================
 // OPERATIONS INTELLIGENCE · QUALITY CORE v1
@@ -5852,71 +5838,9 @@ app.get("/api/quality/leaderboard", async (req, res) => {
   }
 });
 
-app.post("/inspector-action", async (req, res) => {
-  try {
-    const { action, unit, note, name, photoUrl, eventId, requestId } = req.body;
-
-    if (!action || !unit || !name) {
-      return res.status(400).json({
-        success: false,
-        message: "Faltan datos: inspector, unidad o acción",
-      });
-    }
-
-    if (["INSPECTION_REPORT", "INSPECTION_SUPPLIES", "LOST_FOUND"].includes(action) && !String(note || "").trim()) {
-      return res.status(400).json({ success: false, message: "Debes escribir una nota" });
-    }
-
-    try {
-      const eventResult = await RoomEngine.handleInspectorAction({
-        eventId,
-        requestId,
-        action,
-        unit,
-        inspector: name,
-        note,
-        photoUrl,
-      });
-
-      return res.json({
-        success: true,
-        source: "postgres",
-        eventId: eventResult?.eventId || "",
-        duplicate: Boolean(eventResult?.duplicate),
-        postgresUpdated: true,
-        notionSync: "queued",
-        status: eventResult?.status || notionStatusFromAction(action) || "",
-        message: `Inspector: ${actionLabel(action)} - ${unit}`,
-      });
-    } catch (postgresError) {
-      console.error("⚠️ Event Engine inspector falló; fallback en background:", postgresError.message);
-
-      if (isDuplicateAction(action, unit, name)) {
-        return res.status(400).json({
-          success: false,
-          message: "Acción ya registrada recientemente",
-        });
-      }
-
-      queueLegacyActionFallback({ action, unit, name, note, photoUrl, role: "Inspector" });
-
-      return res.status(202).json({
-        success: true,
-        accepted: true,
-        source: "background-fallback",
-        eventId: eventId || requestId || "",
-        duplicate: false,
-        postgresUpdated: false,
-        notionSync: "processing",
-        status: notionStatusFromAction(action) || "",
-        message: `Inspector: acción recibida y procesándose - ${unit}`,
-      });
-    }
-  } catch (error) {
-    console.error("Error inspector:", error.message);
-    return res.status(503).json({ success: false, retryable:true, message: "Estamos sincronizando. Intenta nuevamente en unos segundos." });
-  }
-});
+app.post("/inspector-action", require("./services/operationalActions").createActionHandler({
+  engine: RoomEngine, kind: "inspector", today: todayISO,
+}));
 
 app.get("/operations-events", async (req, res) => {
   try {
@@ -10324,14 +10248,35 @@ async function processNotionQueueOnce() {
     const result = await processNextSyncJob({
       destination: "notion",
       processors: {
+        "notion-service-report": async payload => {
+          const schema=await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID), props={};
+          addNotionProp(props,schema,["HotSOS Sent","HOTSOS Sent","Service Order Sent"],true,"checkbox");
+          addNotionProp(props,schema,["Status","status"],"Sent to Service Orders","select");
+          await notion.pages.update({page_id:payload.sourceReportId,properties:props});
+          return {ok:true};
+        },
         "notion-room-action": async (payload) => {
+          const workDate = payload.workDate || (payload.queuedAt ? new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(payload.queuedAt)) : todayISO());
+          if (workDate !== todayISO()) {
+            addNotification("Revisar sincronización de turno anterior", `${payload.action} · ${payload.unit}. El registro sigue en PostgreSQL; no se aplicó al turno nuevo.`);
+            return {skipped:true,reason:"previous-shift"};
+          }
+          const family = ["START","DONE","INSPECTION_START","READY_GUEST"].includes(payload.action)
+            ? ["START","DONE","INSPECTION_START","READY_GUEST"]
+            : String(payload.action||"").startsWith("PRE_INSPECTION") ? ["PRE_INSPECTION_START","PRE_INSPECTION_COMPLETE"] : [];
+          if (family.length && payload.eventId) {
+            const latest = await postgresQuery("SELECT event_id FROM system_events WHERE work_date=$1::date AND aggregate_id=$2 AND event_type=ANY($3::text[]) ORDER BY occurred_at DESC,id DESC LIMIT 1", [workDate,normalizeRoom(payload.unit),family]);
+            if (latest.rows[0] && latest.rows[0].event_id !== payload.eventId) return {skipped:true,reason:"superseded"};
+          }
+          const snapshot=await postgresQuery("SELECT started_at,finished_at,inspection_started_at,ready_at FROM rooms WHERE work_date=$1::date AND normalized_room=$2 LIMIT 1",[workDate,normalizeRoom(payload.unit)]);
           const result = await updateNotionRoom(
             payload.unit,
             payload.action,
             payload.name,
             payload.note || "",
             payload.role || "",
-            payload.photoUrl || ""
+            payload.photoUrl || "",
+            {backgroundSync:true,occurredAt:payload.occurredAt,room:snapshot.rows[0]}
           );
 
           io.emit("notion-action-synced", {
@@ -10582,31 +10527,10 @@ app.get("/api/service-orders/:id", async (req, res) => {
   }
 });
 
-app.post("/api/service-orders", async (req, res) => {
-  let client;
-  try {
-    client = await getPool().connect();
-    const room = String(req.body.room || "").trim().toUpperCase();
-    const category = String(req.body.category || "Other").trim();
-    const priority = ["normal","high","urgent"].includes(req.body.priority) ? req.body.priority : "normal";
-    const assignedTo = String(req.body.assignedTo || "").trim();
-    const requestedBy = String(req.body.requestedBy || "").trim();
-    const notes = String(req.body.notes || "").trim();
-    const scheduledFor = req.body.scheduledFor || null;
-    const items = Array.isArray(req.body.items) ? req.body.items
-      .map(item => ({ name:String(item.name || "").trim(), quantity:Math.max(1, Number(item.quantity) || 1) }))
-      .filter(item => item.name) : [];
-    if (!room) return res.status(400).json({ ok:false, error:"Selecciona una habitación." });
-    if (!items.length) return res.status(400).json({ ok:false, error:"Agrega al menos un artículo o servicio." });
-    await client.query("BEGIN");
-    const result = await client.query(`
-      INSERT INTO service_orders (room, category, items, priority, assigned_to, requested_by, notes, scheduled_for)
-      VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8) RETURNING *
-    `, [room, category, JSON.stringify(items), priority, assignedTo, requestedBy, notes, scheduledFor]);
-    await client.query(`INSERT INTO service_order_events (order_id,event_type,actor,note) VALUES ($1,'created',$2,$3)`, [result.rows[0].id, requestedBy, notes]);
-    await client.query("COMMIT");
-    const order = normalizeServiceOrder(result.rows[0]);
-    io.emit("service-order:created", order);
+const reliableRequests = require("./services/requestReliability").createRequestHandlers({
+  pool: getPool, emit: (event,payload) => io.emit(event,payload),
+  onCreated: async order => {
+    const {room,category,priority,items,notes,assigned_to:assignedTo,requested_by:requestedBy}=order;
     // El mensaje de la orden también queda visible en Reportes de Operaciones.
     const orderMessage = [
       `Orden #${order.id}: ${items.map((item) => `${item.quantity} × ${item.name}`).join(" · ")}`,
@@ -10664,13 +10588,9 @@ app.post("/api/service-orders", async (req, res) => {
       console.log("ADMIN SERVICE ORDER PUSH:", { orderId:order.id, ...result });
     }).catch(error => console.error("ADMIN SERVICE ORDER PUSH ERROR:", error.message));
 
-    res.status(201).json({ ok:true, order });
-  } catch (error) {
-    if (client) await client.query("ROLLBACK").catch(()=>{});
-    console.error("SERVICE ORDER CREATE ERROR:", error.message);
-    res.status(500).json({ ok:false, error:error.message });
-  } finally { client?.release(); }
+  },
 });
+app.post("/api/service-orders", reliableRequests.create);
 
 
 app.post("/api/operations-report-to-service-order", async (req, res) => {
@@ -10697,8 +10617,9 @@ app.post("/api/operations-report-to-service-order", async (req, res) => {
     if (!items.length) return res.status(400).json({ ok:false, error:"Agrega al menos un artículo o servicio." });
 
     await client.query("BEGIN");
-    await client.query("ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS source_report_id TEXT");
-    await client.query("CREATE UNIQUE INDEX IF NOT EXISTS service_orders_source_report_uidx ON service_orders (source_report_id) WHERE source_report_id IS NOT NULL AND source_report_id <> ''");
+    await client.query("SET LOCAL lock_timeout = '1500ms'");
+    await client.query("SET LOCAL statement_timeout = '5000ms'");
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`report:${sourceReportId}`]);
 
     const existing = await client.query("SELECT * FROM service_orders WHERE source_report_id=$1 LIMIT 1", [sourceReportId]);
     if (existing.rows[0]) {
@@ -10718,25 +10639,15 @@ app.post("/api/operations-report-to-service-order", async (req, res) => {
        VALUES ($1,'created_from_operations',$2,$3)`,
       [result.rows[0].id, requestedBy, `Operations report: ${sourceReportId}${notes ? ` · ${notes}` : ""}`]
     );
+    await client.query(`INSERT INTO sync_queue(job_type,destination,dedupe_key,payload,status,priority)
+      VALUES ('notion-service-report','notion',$1,$2::jsonb,'pending',80)
+      ON CONFLICT(dedupe_key) WHERE dedupe_key IS NOT NULL AND dedupe_key<>'' DO NOTHING`, [`service-report:${sourceReportId}`,JSON.stringify({sourceReportId})]);
     await client.query("COMMIT");
+    client.release();client=null;
 
     const order = normalizeServiceOrder(result.rows[0]);
 
-    // Mark the source report only after PostgreSQL successfully created the order.
-    let sourceMarked = false;
-    let sourceMarkError = "";
-    try {
-      if (!NOTION_REPORTS_DATABASE_ID) throw new Error("Falta NOTION_REPORTS_DB_ID en Render");
-      const schema = await getDatabaseSchema(NOTION_REPORTS_DATABASE_ID);
-      const props = {};
-      addNotionProp(props, schema, ["HotSOS Sent", "HOTSOS Sent", "Service Order Sent"], true, "checkbox");
-      addNotionProp(props, schema, ["Status", "status"], "Sent to Service Orders", "select");
-      await notion.pages.update({ page_id: sourceReportId, properties: props });
-      sourceMarked = true;
-    } catch (markError) {
-      sourceMarkError = markError.message;
-      console.error("OPERATIONS REPORT SOURCE MARK ERROR:", markError.message);
-    }
+    const sourceMarked = false, sourceMarkError = "", sourceMarkPending = true;
 
     io.emit("service-order:created", order);
     broadcastOpsUpdate({ type:"service-order-created", reportPageId:sourceReportId, orderId:order.id });
@@ -10758,7 +10669,7 @@ app.post("/api/operations-report-to-service-order", async (req, res) => {
         : sendPushToEmployees(postgresQuery, [assignedTo], pushMessage)
     ).catch(error => console.error("OPERATIONS TO SERVICE ORDER PUSH ERROR:", error.message));
 
-    res.status(201).json({ ok:true, order, sourceMarked, sourceMarkError });
+    res.status(201).json({ ok:true, order, sourceMarked, sourceMarkError, sourceMarkPending });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(()=>{});
     console.error("OPERATIONS REPORT TO SERVICE ORDER ERROR:", error.message);
@@ -10768,32 +10679,7 @@ app.post("/api/operations-report-to-service-order", async (req, res) => {
   }
 });
 
-app.patch("/api/service-orders/:id/status", async (req, res) => {
-  let client;
-  try {
-    client = await getPool().connect();
-    const id = Number(req.params.id);
-    const status = String(req.body.status || "");
-    const actor = String(req.body.actor || "").trim();
-    const note = String(req.body.note || "").trim();
-    const allowed = ["new","accepted","in_progress","delivered","completed","cancelled"];
-    if (!allowed.includes(status)) return res.status(400).json({ ok:false, error:"Estado inválido." });
-    const timestampColumn = {accepted:"accepted_at",in_progress:"started_at",delivered:"delivered_at",completed:"completed_at"}[status];
-    await client.query("BEGIN");
-    const sql = `UPDATE service_orders SET status=$1, updated_at=NOW()${timestampColumn ? `, ${timestampColumn}=COALESCE(${timestampColumn},NOW())` : ""}${actor && status==='accepted' ? ', assigned_to=CASE WHEN assigned_to=\'\' THEN $3 ELSE assigned_to END' : ''} WHERE id=$2 RETURNING *`;
-    const params = actor && status==='accepted' ? [status,id,actor] : [status,id];
-    const result = await client.query(sql, params);
-    if (!result.rows[0]) { await client.query("ROLLBACK"); return res.status(404).json({ ok:false, error:"Orden no encontrada." }); }
-    await client.query(`INSERT INTO service_order_events (order_id,event_type,actor,note) VALUES ($1,$2,$3,$4)`, [id,status,actor,note]);
-    await client.query("COMMIT");
-    const order = normalizeServiceOrder(result.rows[0]);
-    io.emit("service-order:updated", order);
-    res.json({ ok:true, order });
-  } catch (error) {
-    if (client) await client.query("ROLLBACK").catch(()=>{});
-    res.status(500).json({ ok:false, error:error.message });
-  } finally { client?.release(); }
-});
+app.patch("/api/service-orders/:id/status", reliableRequests.status);
 
 app.patch("/api/service-orders/:id", async (req, res) => {
   try {
@@ -11269,6 +11155,8 @@ app.use("/api/control-center", require("./services/controlCenter").createControl
 }));
 
 async function startServer() {
+  // Bind HTTP before external imports. A slow Notion import must not prevent the UI/health endpoint from opening.
+  if (!server.listening) server.listen(PORT, () => console.log(`Panel web activo en puerto ${PORT}`));
   initializeFirebaseAdmin();
   const databaseStatus = await startPostgres();
 
@@ -11321,6 +11209,7 @@ async function startServer() {
     console.warn(
       "⚠️ Employee sync no se inició porque PostgreSQL no está conectado."
     );
+    if (databaseStatus.configured) setTimeout(() => startServer().catch(error => console.error("DATABASE RECOVERY:",error.message)),15000).unref();
   }
 
   if (databaseStatus.connected) {
@@ -11340,16 +11229,12 @@ async function startServer() {
     }, 2500);
   }
 
-  server.listen(PORT, () => {
-    console.log(`Panel web activo en puerto ${PORT}`);
-  });
+  // HTTP is already accepting connections; imports and optional AI do not gate listening.
 }
 
 startServer().catch((error) => {
   console.error("SERVER START ERROR:", error);
 
   // Último salvavidas: incluso si falla el bootstrap, intenta abrir el panel.
-  server.listen(PORT, () => {
-    console.log(`Panel web activo en puerto ${PORT} (modo de respaldo)`);
-  });
+  if (!server.listening) server.listen(PORT, () => console.log(`Panel web activo en puerto ${PORT} (modo de respaldo)`));
 });

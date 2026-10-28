@@ -9,7 +9,9 @@
     "test:core": "node test/roomEngine.test.js",
     "check:core": "node --check core/rooms/RoomEngine.js && node --check test/roomEngine.test.js",
     "test:payroll": "node test/payroll.test.js && node test/payrollExcel.test.js",
-    "test:control": "node test/controlCenter.test.js"
+    "test:control": "node test/controlCenter.test.js",
+    "test:reliability": "node test/reliability.test.js && node test/eventReliability.test.js && node test/payrollReliability.test.js",
+    "verify": "node scripts/verify.js"
   },
   "author": "Andres Garcia",
   "license": "ISC",

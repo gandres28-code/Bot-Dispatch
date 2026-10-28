@@ -157,6 +157,18 @@ async function upsertPayrollRecord(record) {
     return { saved: false, reason: 'missing-date-or-employee', record };
   }
 
+  // Link the Notion mirror to its already committed unit payment instead of inserting it twice.
+  if (record.notionId && String(record.payType).toLowerCase() === 'unit') {
+    await query(`UPDATE payroll_records SET notion_id=$1,updated_at=NOW()
+      WHERE id=(SELECT id FROM payroll_records WHERE notion_id IS NULL
+        AND source_event_id IS NOT NULL AND source_event_id<>''
+        AND work_date=$2::date AND normalized_employee=$3
+        AND regexp_replace(upper(unit),'[^A-Z0-9]','','g')=regexp_replace(upper($4),'[^A-Z0-9]','','g')
+        AND pay_type='unit' AND lower(COALESCE(status,''))<>'cancelled'
+        ORDER BY id LIMIT 1)
+      AND NOT EXISTS (SELECT 1 FROM payroll_records WHERE notion_id=$1)`,
+      [record.notionId,record.workDate,record.normalizedEmployee,record.unit]);
+  }
   const result = await query(
     `
       INSERT INTO payroll_records (

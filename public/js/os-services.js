@@ -1,10 +1,12 @@
 window.OSServices = {
   async get(url) {
+    if(window.OSResilience)return OSResilience.fetchJson(url);
     const response = await fetch(url);
     return response.json();
   },
 
   async post(url, body = {}) {
+    if(window.OSResilience)return OSResilience.fetchJson(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
