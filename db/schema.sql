@@ -795,3 +795,28 @@ CREATE TABLE IF NOT EXISTS care_unit_photos (
  review TEXT, reviewer TEXT, reviewed_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS care_unit_photos_unit_idx ON care_unit_photos(unit,created_at DESC);
+
+-- Care OS: additive control-center migration. Existing room/payroll records are untouched.
+BEGIN;
+ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS hotsos_ticket TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS care_control_tasks (
+ id BIGSERIAL PRIMARY KEY, work_date DATE NOT NULL, title TEXT NOT NULL, owner TEXT NOT NULL,
+ room TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','high','urgent')),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','done')),
+ due_at TIMESTAMPTZ, note TEXT NOT NULL DEFAULT '', request_id TEXT NOT NULL UNIQUE,
+ version INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS care_control_tasks_date_idx ON care_control_tasks(work_date,status);
+CREATE TABLE IF NOT EXISTS care_control_shifts (
+ work_date DATE PRIMARY KEY, settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','reviewed')), version INTEGER NOT NULL DEFAULT 1,
+ updated_by TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS care_control_audit (
+ id BIGSERIAL PRIMARY KEY, work_date DATE NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL,
+ detail JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS care_control_audit_date_idx ON care_control_audit(work_date,id DESC);
+INSERT INTO schema_migrations(migration_name) VALUES ('012_care_control_center') ON CONFLICT(migration_name) DO NOTHING;
+COMMIT;

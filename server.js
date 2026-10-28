@@ -10444,9 +10444,10 @@ app.post("/api/sync-queue/retry", async (req, res) => {
 // =========================================================
 // SERVICE ORDERS · HOTSOS-STYLE ROOM REQUESTS
 // =========================================================
-app.get("/service-orders", (req, res) => {
+app.get("/requests", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "service-orders.html"));
 });
+app.get("/service-orders", (req, res) => res.redirect(302, "/requests"));
 
 app.get("/runner-orders", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "runner-orders.html"));
@@ -10582,8 +10583,9 @@ app.get("/api/service-orders/:id", async (req, res) => {
 });
 
 app.post("/api/service-orders", async (req, res) => {
-  const client = await getPool().connect();
+  let client;
   try {
+    client = await getPool().connect();
     const room = String(req.body.room || "").trim().toUpperCase();
     const category = String(req.body.category || "Other").trim();
     const priority = ["normal","high","urgent"].includes(req.body.priority) ? req.body.priority : "normal";
@@ -10664,16 +10666,17 @@ app.post("/api/service-orders", async (req, res) => {
 
     res.status(201).json({ ok:true, order });
   } catch (error) {
-    await client.query("ROLLBACK").catch(()=>{});
+    if (client) await client.query("ROLLBACK").catch(()=>{});
     console.error("SERVICE ORDER CREATE ERROR:", error.message);
     res.status(500).json({ ok:false, error:error.message });
-  } finally { client.release(); }
+  } finally { client?.release(); }
 });
 
 
 app.post("/api/operations-report-to-service-order", async (req, res) => {
-  const client = await getPool().connect();
+  let client;
   try {
+    client = await getPool().connect();
     if (!postgresStatus.connected) {
       return res.status(503).json({ ok:false, error:"PostgreSQL no está conectado." });
     }
@@ -10757,17 +10760,18 @@ app.post("/api/operations-report-to-service-order", async (req, res) => {
 
     res.status(201).json({ ok:true, order, sourceMarked, sourceMarkError });
   } catch (error) {
-    await client.query("ROLLBACK").catch(()=>{});
+    if (client) await client.query("ROLLBACK").catch(()=>{});
     console.error("OPERATIONS REPORT TO SERVICE ORDER ERROR:", error.message);
     res.status(500).json({ ok:false, error:error.message });
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
 app.patch("/api/service-orders/:id/status", async (req, res) => {
-  const client = await getPool().connect();
+  let client;
   try {
+    client = await getPool().connect();
     const id = Number(req.params.id);
     const status = String(req.body.status || "");
     const actor = String(req.body.actor || "").trim();
@@ -10786,9 +10790,9 @@ app.patch("/api/service-orders/:id/status", async (req, res) => {
     io.emit("service-order:updated", order);
     res.json({ ok:true, order });
   } catch (error) {
-    await client.query("ROLLBACK").catch(()=>{});
+    if (client) await client.query("ROLLBACK").catch(()=>{});
     res.status(500).json({ ok:false, error:error.message });
-  } finally { client.release(); }
+  } finally { client?.release(); }
 });
 
 app.patch("/api/service-orders/:id", async (req, res) => {
@@ -11254,6 +11258,15 @@ app.patch("/api/admin/rooms/:id", async (req, res) => {
   }
 });
 
+
+// Care Control Center: server-verified access, shared PostgreSQL records, audit trail.
+app.get("/control-center", (req, res) => res.sendFile(path.join(__dirname,"public","control-center.html")));
+app.use("/api/control-center", require("./services/controlCenter").createControlRouter({
+  query: postgresQuery, pool: getPool,
+  resolveUser: async code => { const page = await findEmployeeByCode(code); return page ? pageToUser(page) : null; },
+  listRooms: listDataApiRooms, listEmployees: listDataApiEmployees, today: todayISO,
+  emit: (event, payload) => io.emit(event, payload)
+}));
 
 async function startServer() {
   initializeFirebaseAdmin();

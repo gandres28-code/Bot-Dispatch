@@ -12,7 +12,7 @@ window.OS = {
     dashboard: { title: "Dashboard", url: "/app", permission: "operations" },
     cleaning: { title: "Limpieza", url: "/", permission: "cleaning" },
     inspection: { title: "Inspecciones", url: "/inspector", permission: "inspection" },
-    operations: { title: "Operaciones", url: "/operations.html", permission: "operations" },
+    operations: { title: "Solicitudes", url: "/requests", permission: "operations" },
     master: { title: "Master", url: "/master", permission: "rooms" },
     clock: { title: "Clock In/Out", url: "/time-clock", permission: "clock" },
     payroll: { title: "Nómina", url: "/payroll", permission: "reports" },

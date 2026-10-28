@@ -27,18 +27,14 @@
     <section id="operationsPage" class="os-page">
       <section class="mini-hero">
         <h1>Operaciones</h1>
-        <p>Cleaning, inspections, master list, activity feed y clock.</p>
+        <p>Habitaciones, inspecciones, solicitudes y control del turno.</p>
       </section>
 
       <div class="list-menu">
+        <button onclick="openDirectModule('Centro de Control','/control-center')">Centro de Control · Encargado y pendientes</button>
         <button onclick="openOSModule('cleaning')">🧹 Limpieza</button>
         <button onclick="openOSModule('inspection')">🔍 Inspecciones</button>
-        <button onclick="openDirectModule('Still Waters Quality','/still-waters-quality')">🎮 Still Waters Quality</button>
-        <button onclick="openDirectModule('Operations Intelligence','/operations-intelligence')">🧠 Operations Intelligence</button>
-        <button onclick="openDirectModule('Quality & Performance','/quality-performance')">📊 Quality & Performance</button>
-        <button onclick="openOSModule('operations')">📡 Operations Feed</button>
-        <button onclick="openDirectModule('Service Orders','/service-orders')">📦 Service Orders</button>
-        <button onclick="openOSModule('master')">🏨 Master List</button>
+        <button onclick="openDirectModule('Solicitudes','/requests')">Solicitudes · artículos, problemas y entregas</button>
         <button onclick="openOSModule('clock')">⏱ Clock In/Out</button>
       </div>
     </section>
@@ -46,13 +42,11 @@
     <section id="communicationsPage" class="os-page">
       <section class="mini-hero">
         <h1>Comunicación</h1>
-        <p>Notificaciones, chat interno y anuncios del equipo.</p>
+        <p>Notificaciones del equipo.</p>
       </section>
 
       <div class="list-menu">
         <button onclick="openDirectModule('Notificaciones','/notifications')">🔔 Notificaciones</button>
-        <button onclick="showComingSoon('Chat interno')">💬 Chat interno</button>
-        <button onclick="showComingSoon('Anuncios')">📣 Anuncios</button>
       </div>
     </section>
 
@@ -64,9 +58,9 @@
 
       <div class="list-menu">
         <button onclick="openDirectModule('Estadísticas','/statistics')">📈 Estadísticas</button>
-        <button onclick="openOSModule('operations')">📄 Daily Report</button>
+        <button onclick="openDirectModule('Calidad y rendimiento','/quality-performance')">Calidad y rendimiento</button>
+        <button onclick="openDirectModule('Reporte diario','/requests?view=reports')">📄 Reporte diario</button>
         <button onclick="openDirectModule('Payroll','/payroll.html')">💵 Payroll</button>
-        <button onclick="openOSModule('operations')">🤖 Reportes IA</button>
       </div>
     </section>
 
@@ -82,8 +76,6 @@
         <button onclick="openDirectModule('Employee Center','/employee-center')">
   👥 Empleados
 </button>
-        <button onclick="openDirectModule('Service Orders','/service-orders')">📦 Service Orders</button>
-        <button onclick="showComingSoon('Configuración')">⚙️ Configuración</button>
         <button onclick="localStorage.clear(); OS.open('launch')">🚪 Cambiar usuario</button>
       </div>
     </section>
