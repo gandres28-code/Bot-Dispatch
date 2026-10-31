@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS employees (
   source_report_id TEXT
 );
 
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS app_language TEXT NOT NULL DEFAULT 'es' CHECK (app_language IN ('es','en'));
+
 CREATE UNIQUE INDEX IF NOT EXISTS employees_code_unique
 ON employees (code)
 WHERE code IS NOT NULL AND code <> '';

@@ -838,6 +838,7 @@ function createEventEngine({
             eventId,
             roomId: updatedRoom?.id || null,
             source: "event-engine",
+            exitChecklist: action === "DONE" ? input.exitChecklist : undefined,
           }),
         ]
       );
@@ -887,6 +888,7 @@ function createEventEngine({
       );
 
       const eventPayload = {
+        exitChecklist: action === "DONE" ? input.exitChecklist : undefined,
         eventId,
         action,
         unit: updatedRoom?.room_number || unit,

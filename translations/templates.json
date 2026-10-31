@@ -1,0 +1,210 @@
+[
+  [
+    "{n} de {total} revisados",
+    "{n} of {total} reviewed"
+  ],
+  [
+    "{n} de {total}",
+    "{n} of {total}"
+  ],
+  [
+    "{n} piezas",
+    "{n} pieces"
+  ],
+  [
+    "{n} artículos diferentes",
+    "{n} different items"
+  ],
+  [
+    "{n} personas",
+    "{n} people"
+  ],
+  [
+    "{n} envío(s) pendiente(s)",
+    "{n} pending submission(s)"
+  ],
+  [
+    "{n} unidades",
+    "{n} units"
+  ],
+  [
+    "{n} inspecciones",
+    "{n} inspections"
+  ],
+  [
+    "{n} inspectores activos",
+    "{n} active inspectors"
+  ],
+  [
+    "{n} problemas",
+    "{n} issues"
+  ],
+  [
+    "{n}% cobertura",
+    "{n}% coverage"
+  ],
+  [
+    "de {n} unidades",
+    "of {n} units"
+  ],
+  [
+    "Antes de salir · {unit}",
+    "Before you leave · {unit}"
+  ],
+  [
+    "Pedir artículos para {unit}",
+    "Request supplies for {unit}"
+  ],
+  [
+    "Unidad {unit}",
+    "Unit {unit}"
+  ],
+  [
+    "Código {code}",
+    "Code {code}"
+  ],
+  [
+    "Limpiador: {name}",
+    "Cleaner: {name}"
+  ],
+  [
+    "Agregar {item}",
+    "Add {item}"
+  ],
+  [
+    "Quitar {item}",
+    "Remove {item}"
+  ],
+  [
+    "Motivo No aplica: {item}",
+    "Not applicable reason: {item}"
+  ],
+  [
+    "Enviando solicitud · {unit}",
+    "Sending request · {unit}"
+  ],
+  [
+    "Solicitud #{id} enviada · {unit}",
+    "Request #{id} sent · {unit}"
+  ],
+  [
+    "Solicitud #{id} guardada para el runner",
+    "Request #{id} saved for the runner"
+  ],
+  [
+    "Guardado en Care OS · {unit}",
+    "Saved in Care OS · {unit}"
+  ],
+  [
+    "Confirmado en Care OS · {unit}",
+    "Confirmed in Care OS · {unit}"
+  ],
+  [
+    "Nueva orden · {unit}",
+    "New order · {unit}"
+  ],
+  [
+    "Orden urgente · {unit}",
+    "Urgent order · {unit}"
+  ],
+  [
+    "Distancia aproximada: {n} ft",
+    "Approximate distance: {n} ft"
+  ],
+  [
+    "Error del servidor ({n})",
+    "Server error ({n})"
+  ],
+  [
+    "{n} foto(s) seleccionada(s)",
+    "{n} photo(s) selected"
+  ],
+  [
+    "{n} fotos seleccionadas",
+    "{n} photos selected"
+  ],
+  [
+    "{n} unidades pendientes",
+    "{n} pending units"
+  ],
+  [
+    "{n} minutos",
+    "{n} minutes"
+  ],
+  [
+    "{n} envío pendiente",
+    "{n} pending submission"
+  ],
+  [
+    "{n} envíos pendientes",
+    "{n} pending submissions"
+  ],
+  [
+    "{n} envío pendiente por revisar",
+    "{n} pending submission to review"
+  ],
+  [
+    "{n} envíos pendientes por revisar",
+    "{n} pending submissions to review"
+  ],
+  [
+    "{name}, selecciona tu área de trabajo.",
+    "{name}, select your workspace."
+  ],
+  [
+    "Nueva solicitud · {unit}",
+    "New request · {unit}"
+  ],
+  [
+    "Nueva solicitud urgente · {unit}",
+    "New urgent request · {unit}"
+  ],
+  [
+    "Reporte en Operations · {unit}",
+    "Report in Operations · {unit}"
+  ],
+  [
+    "Solicitud en Operations · {unit}",
+    "Request in Operations · {unit}"
+  ],
+  [
+    "{n} unidades sin cleaner asignado",
+    "{n} units without an assigned cleaner"
+  ],
+  [
+    "{n} llegadas todavía sin READY",
+    "{n} arrivals not yet READY"
+  ],
+  [
+    "{n} solicitudes sin una persona asignada",
+    "{n} requests without an assigned person"
+  ],
+  [
+    "{n} pendientes vencidos",
+    "{n} overdue tasks"
+  ],
+  [
+    "{n} solicitudes urgentes abiertas",
+    "{n} open urgent requests"
+  ],
+  [
+    "{n} de {total} completadas",
+    "{n} of {total} completed"
+  ],
+  [
+    "Edificio {building}",
+    "Building {building}"
+  ],
+  [
+    "{n} minutos restantes",
+    "{n} minutes remaining"
+  ],
+  [
+    "Responsable de orden {id}",
+    "Order {id} owner"
+  ],
+  [
+    "Ticket HotSOS de orden {id}",
+    "Order {id} HotSOS ticket"
+  ]
+]

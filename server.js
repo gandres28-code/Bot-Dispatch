@@ -866,6 +866,7 @@ app.get("/login-role", async (req, res) => {
         active: user.active,
         permissions: user.permissions,
         home: user.home,
+        language: await employeeLanguageService.languageFor(user).catch(()=>undefined),
       });
     }
 
@@ -1036,6 +1037,7 @@ app.get("/api/me", async (req, res) => {
     }
 
     const user = pageToUser(employeePage);
+    user.language = await employeeLanguageService.languageFor(user).catch(()=>undefined);
 
     if (!user.active) {
       return res.status(403).json({
@@ -5058,6 +5060,7 @@ function createOperationalRoomEngine({ eventEngine }) {
     requestId = "",
     workDate,
     occurredAt,
+    exitChecklist,
   }) {
     const normalizedAction = String(action || "").trim().toUpperCase();
     const normalizedUnit = String(unit || "").trim();
@@ -5081,6 +5084,7 @@ function createOperationalRoomEngine({ eventEngine }) {
       requestId,
       workDate,
       occurredAt,
+      exitChecklist,
       action: normalizedAction,
       unit: normalizedUnit,
       employee: normalizedCleaner,
@@ -9911,6 +9915,13 @@ app.get("/api/v2/health", async (req, res) => {
     });
   }
 });
+
+const employeeLanguageService = require('./services/employeeLanguage').createLanguageService({
+ query: postgresQuery,
+ resolveUser: async code => {const page=await findEmployeeByCode(code);return page?pageToUser(page):null;},
+ emit: (event,payload)=>io.emit(event,payload),
+});
+app.use('/api',employeeLanguageService.router);
 
 app.get("/api/v2/employees", async (req, res) => {
   try {

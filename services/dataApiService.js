@@ -133,6 +133,7 @@ async function listDataApiEmployees({ activeOnly = true } = {}) {
         code,
         role,
         hourly_rate::float8 AS "hourlyRate",
+        app_language AS language,
         active,
         permissions,
         source,

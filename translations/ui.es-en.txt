@@ -1,0 +1,1055 @@
+Acceso|Access
+Acceso del equipo|Team access
+Acceso del limpiador|Cleaner access
+Acciones|Actions
+Acciones recomendadas|Recommended actions
+Acciones rápidas|Quick actions
+Acción|Action
+Activar|Enable
+Activar notificaciones|Enable notifications
+Activas|Active
+Actividad|Activity
+Actividad de la unidad|Unit activity
+Actividad del rango seleccionado.|Activity for the selected date range.
+Actividad importante del sistema|Important system activity
+Actividad por inspector|Activity by inspector
+Actividad por unidad|Activity by unit
+Actividad reciente|Recent activity
+Actividad visible|Visible activity
+Activo|Active
+Activos|Active
+Actualizar|Refresh
+Actualizar IA|Refresh AI
+Actualizar ahora|Refresh now
+Actualizar métricas|Refresh metrics
+Actualizar unidades|Refresh units
+Actívalas para recibir órdenes aunque no estés mirando esta pantalla.|Enable notifications to receive orders even when you are not viewing this screen.
+Administración|Administration
+Administración, empleados, integraciones y herramientas del sistema.|Administration, employees, integrations and system tools.
+Advertencias|Warnings
+Agregar movimiento de nómina|Add payroll adjustment
+Ajustes|Settings
+Alertas|Alerts
+Alertas altas|High alerts
+Alta|High
+Alto|High
+Analizando la operación.|Analyzing operations.
+Aplicar|Apply
+Aplicar también a la semana seleccionada (excepto ajustes manuales)|Also apply to the selected week (except manual adjustments)
+Aprobadas|Approved
+Aprobar para huésped|Approve for guest
+Aquí vivirán contratos, I-9, W-4, identificaciones y firmas.|Contracts, I-9, W-4, identification and signatures will appear here.
+Artículos y cantidades|Items and quantities
+Artículos, problemas y entregas · una sola bandeja|Items, issues and deliveries · one inbox
+Asignadas|Assigned
+Asignar a|Assign to
+ASIGNAR A|ASSIGN TO
+Asistencia|Attendance
+Avance|Progress
+Avance y tiempo promedio de limpieza.|Progress and average cleaning time.
+Azul · Stayover|Blue · Stayover
+Aún no iniciadas|Not started yet
+Bajo|Low
+Bandeja de solicitudes|Request inbox
+Basados únicamente en datos confiables.|Based only on reliable data.
+Buscar|Search
+Buscar habitación...|Search room...
+Buscar limpiador|Search cleaner
+Buscar linen, towel, plate, knife...|Search linen, towel, plate, knife...
+Buscar unidad|Search unit
+Buscar unidad o edificio|Search unit or building
+Buscar unidad o empleado|Search unit or employee
+Buscar unidad, persona, mensaje o categoría|Search unit, person, message or category
+Buscar unidad...|Search unit...
+CARE OS / OPERACIÓN DIARIA|CARE OS / DAILY OPERATIONS
+CATEGORÍA|CATEGORY
+Calidad|Quality
+Calidad promedio|Average quality
+Calidad y rendimiento|Quality and performance
+Calidad, velocidad y confiabilidad de datos · Care OS|Quality, speed and data reliability · Care OS
+Cambiar usuario|Change user
+Cancelar|Cancel
+Capturar evidencia|Capture evidence
+Capturar y guardar|Capture and save
+Care OS | Inspecciones|Care OS | Inspections
+Care OS | Limpieza|Care OS | Cleaning
+Care OS · Estadísticas|Care OS · Statistics
+Care OS · Mapa y catálogo|Care OS · Map and catalog
+Care OS · Perfil de limpiador|Care OS · Cleaner profile
+Cargando datos del turno…|Loading shift data…
+Cargando días…|Loading days…
+Cargando empleados…|Loading employees…
+Cargando fuente…|Loading source…
+Cargando habitaciones...|Loading rooms...
+Cargando historial…|Loading history…
+Cargando horas…|Loading hours…
+Cargando información…|Loading information…
+Cargando inspecciones...|Loading inspections...
+Cargando quién avanzó más, dónde se perdió tiempo y cómo se comportó la calidad.|Loading progress, delays and quality results.
+Cargando rendimiento...|Loading performance...
+Cargando solicitudes…|Loading requests…
+Cargando tus unidades...|Loading your units...
+Cargando unidades...|Loading units...
+Cargando órdenes…|Loading orders…
+Cargando...|Loading...
+Cargando…|Loading…
+Casas de Chateau|Chateau houses
+Categoría|Category
+Centro de Control|Control Center
+Centro de Control · Care OS|Control Center · Care OS
+Centro de Control · Encargado y pendientes|Control Center · Shift lead and tasks
+Cerrar|Close
+Cerrar semana|Close week
+Cleaner asignado|Assigned cleaner
+Clock In / Clock Out para cualquier lugar de trabajo|Clock in / clock out at any work location
+Cobertura|Coverage
+Compara habitaciones, payroll, tiempo y calidad durante un rango.|Compare rooms, payroll, time and quality over a date range.
+Comparación por edificio|Comparison by building
+Completa las áreas|Complete the areas
+Completadas|Completed
+Completadas hoy|Completed today
+Completado|Completed
+Comunicación|Communication
+Con actividad esta semana|Active this week
+Concepto|Description
+Conectando|Connecting
+Conectando...|Connecting...
+Conectando…|Connecting…
+Confianza —|Confidence —
+Configuración|Settings
+Confirmar|Confirm
+Controla habitaciones, asignaciones, estados, prioridad y preinspección directamente desde PostgreSQL. Los cambios se reflejan en tiempo real dentro de Care OS.|Manage rooms, assignments, statuses, priority and pre-inspections. Changes appear in real time in Care OS.
+Controles del día|Daily controls
+Correo|Email
+Crear, editar, activar y administrar empleados.|Create, edit, activate and manage employees.
+Crítico|Critical
+Cuenta|Account
+Cuenta acciones registradas, no sólo habitaciones asignadas.|Counts recorded actions, not just assigned rooms.
+Cuenta del runner|Runner account
+Código|Code
+Código de empleado|Employee code
+Código de inspector|Inspector code
+Código del inspector|Inspector code
+Cómo debe quedar|Expected result
+Dashboard Ejecutivo|Executive dashboard
+Datos incompletos|Incomplete data
+Describe correcciones o detalles importantes|Describe corrections or important details
+Desde Time Clock|From Time Clock
+Detalle por empleado|Employee details
+Detalles importantes de la solicitud|Important request details
+Detalles opcionales|Optional details
+Di claramente el artículo y la cantidad. Puedes hablar en español, inglés o mezclar ambos.|Clearly say the item and quantity. You can speak Spanish, English or both.
+Dirección revisa excepciones.|Management reviews exceptions.
+Dispatch / nombre|Dispatch / name
+Documentos|Documents
+ENVIAR SOLICITUD|SEND REQUEST
+Edificio|Building
+Editar habitación|Edit room
+Eficiencia|Efficiency
+Ej. 214A|E.g. 214A
+Ej. 439 B (1) - I|E.g. 439 B (1) - I
+Ej. Guest requested before check-in|E.g. Guest requested before check-in
+Ej. Preparar blancos para edificio C|E.g. Prepare linens for building C
+Ejemplo: 1234|Example: 1234
+Ejemplo: 334 B o Bono de calidad|Example: 334 B or quality bonus
+Ejemplo: Maria|Example: Maria
+Ejemplo: Oficina de Branson West|Example: Branson West office
+Ejemplo: limpieza profunda autorizada|Example: authorized deep cleaning
+Ejemplo: nueva tarifa aprobada para Chateau|Example: new approved rate for Chateau
+Ejemplo: olvidó hacer Clock In, capacitación, trabajo adicional...|Example: missed clock-in, training, additional work...
+El encargado resuelve.|The shift lead resolves issues.
+El historial de nómina se conectará en el siguiente bloque.|Payroll history will be connected in the next phase.
+El hotel principal valida que estés dentro de la propiedad. En los demás lugares se guarda tu GPS como comprobante, sin bloquear el registro.|The main hotel checks that you are on the property. Other locations save your GPS as evidence without blocking clock-in or clock-out.
+El huésped ya salió|Guest has checked out
+Empleado|Employee
+Empleados|Employees
+En curso|In progress
+En inspección|In inspection
+En progreso|In progress
+Entrada|Entry
+Entrada de huésped hoy|Guest arrival today
+Entradas por hora|Hourly entries
+Entradas y salidas de Time Clock, más ajustes manuales guardados en Notion|Time Clock entries and manual adjustments saved in Notion
+Entrar|Sign in
+Entrar al juego|Enter game
+Entregadas|Delivered
+Enviar a Solicitudes|Send to Requests
+Enviar a corrección|Send for correction
+Enviar reporte|Send report
+Enviar solicitud|Send request
+Errores|Errors
+Escribe el reporte aquí. Ejemplo: faltan towels, hay cabello en baño, sink tapado, item encontrado...|Write your report here. Example: missing towels, hair in bathroom, clogged sink, found item...
+Escribe el reporte aquí. Ejemplo: faltan towels, toilet tapado, puerta dañada, basura extra, etc.|Write your report here. Example: missing towels, clogged toilet, damaged door, extra trash, etc.
+Esperado|Expected
+Esperando inspección|Awaiting inspection
+Esperando revisión|Awaiting review
+Estado|Status
+Estado de ubicación|Location status
+Estado del sistema|System status
+Estadísticas|Statistics
+Este registro se guardará en Time Clock de Notion y se sumará automáticamente a la nómina semanal.|This entry will be saved in Notion Time Clock and automatically included in weekly payroll.
+Eventos agrupados para entender la historia completa.|Grouped events showing the full history.
+Evidencias e historial|Evidence and history
+Fecha|Date
+Fecha del turno|Shift date
+Fecha final|End date
+Fecha inicial|Start date
+Filtrar por inspector...|Filter by inspector...
+Filtrar por limpiador...|Filter by cleaner...
+Fin|End
+Finalización|Completion
+Finalización estimada|Estimated completion
+Fotos|Photos
+Fuente activa|Active source
+Fuente oficial y lectura directa|Official source and direct access
+Función|Role
+Genera el reporte o filtra la operación sin perderte en botones.|Generate the report or filter operations easily.
+General|General
+Grabar otra vez|Record again
+Gris · Sin entrar|Gray · Not started
+Guardar|Save
+Guardar ajuste|Save adjustment
+Guardar cambios|Save changes
+Guardar horas|Save hours
+Guardar movimiento|Save adjustment
+Guardar pendiente|Save task
+Guardar progreso|Save progress
+Guardar tarifa|Save rate
+HABITACIÓN|ROOM
+Habitaciones|Rooms
+Habitaciones completadas por día|Rooms completed per day
+Habitaciones con datos incompletos o sospechosos|Rooms with incomplete or suspicious data
+Habitaciones por día|Rooms per day
+Habitaciones procesadas|Processed rooms
+Habitaciones · Care OS|Rooms · Care OS
+Habitaciones, inspecciones, solicitudes y control del turno.|Rooms, inspections, requests and shift management.
+Habitación|Room
+Haz clic en una persona para ver sus unidades|Click a person to view their units
+Historial|History
+Historial administrativo|Administrative history
+Historial de hoy|Today's history
+Historial de unidades|Unit history
+Historial y tendencias|History and trends
+Hora de entrada|Clock-in time
+Hora de salida|Clock-out time
+Hora estimada|Estimated time
+Hora límite (hora de este dispositivo)|Deadline (this device's time)
+Horas|Hours
+Horas pagadas|Paid hours
+Horas:|Hours:
+Hotel principal|Main hotel
+Hotel, Chateau, Oficina|Hotel, Chateau, Office
+Hoy|Today
+Imprimir|Print
+Información del empleado|Employee information
+Ingresa tu código|Enter your code
+Ingresa tu código de inspector para comenzar.|Enter your inspector code to begin.
+Ingresa tu código para entrar a tu área de trabajo.|Enter your code to access your workspace.
+Iniciadas|Started
+Inicio|Home
+Inspecciones|Inspections
+Inspecciones y problemas registrados.|Recorded inspections and issues.
+Inspección|Inspection
+Inspector asignado|Assigned inspector
+Inspectores|Inspectors
+Instrucciones|Instructions
+La cámara integrada envía la captura directamente. Revisa las fotos por área; la IA solo evalúa lo visible y el inspector confirma el resultado.|The integrated camera sends photos directly. Review photos by area; AI evaluates only what is visible and the inspector confirms the result.
+La edición de rol, código, tarifa y estado se activará en el siguiente paso.|Role, code, rate and status editing will be enabled in the next phase.
+La línea de tiempo se conectará a operations_logs y Time Clock.|The timeline will connect to operations logs and Time Clock.
+Lavandería|Laundry
+Leyenda de estados|Status legend
+Limpiador|Cleaner
+Limpiadores|Cleaners
+Limpiando|Cleaning
+Limpiar selección|Clear selection
+Limpieza|Cleaning
+Limpieza + pagos por hora|Cleaning + hourly pay
+Limpieza · Inspecciones · Solicitudes · Clock|Cleaning · Inspections · Requests · Clock
+Lista de trabajo|Work list
+Listas|Ready
+Listas para huésped|Ready for guest
+Listo para registrar|Ready to clock in/out
+Lo importante primero: urgentes, Guest Out, problemas y progreso del día.|Priorities first: urgent units, guest departures, issues and daily progress.
+Los datos detrás del tablero|Dashboard data
+Los promedios excluyen tiempos inferiores a 5 minutos o datos incompletos.|Averages exclude durations under 5 minutes and incomplete data.
+Lugar de trabajo|Work location
+Mapa de inspecciones|Inspection map
+Mapa y catálogo|Map and catalog
+Mapa y catálogo de unidades|Unit map and catalog
+Medio|Medium
+Mejor día y señales clave.|Best day and key insights.
+Mejor día: —|Best day: —
+Mi evidencia de limpieza|My cleaning evidence
+Mis unidades|My units
+Modo de nómina|Payroll mode
+Momentos destacados|Highlights
+Monto (+ o -)|Amount (+ or -)
+Motivo|Reason
+Motivo / nota de autorización|Reason / authorization note
+Motivo o detalle del cambio...|Reason or change details...
+Motivo obligatorio|Reason required
+Más|More
+NOTAS|NOTES
+Naranja · Inspección|Orange · Inspection
+Necesitan revisión|Needs review
+Nombre|Name
+Nombre de unidad|Unit name
+Nombre del cleaner|Cleaner name
+Nombre del inspector|Inspector name
+Nombre del limpiador|Cleaner name
+Nombre del lugar|Location name
+Nombre exacto|Exact name
+Nombre exacto del empleado|Exact employee name
+Normales|Normal
+Nota administrativa|Administrative note
+Notas|Notes
+Notas generales|General notes
+Notas para el runner|Notes for runner
+Notificaciones|Notifications
+Notificaciones del equipo.|Team notifications.
+Nueva solicitud|New request
+Nueva tarifa|New rate
+Nuevas|New
+Nuevo empleado|New employee
+Nuevo pago|New payment
+Nuevo pendiente|New task
+Ocultar|Hide
+Ocultar menú lateral|Hide sidebar
+Mostrar menú lateral|Show sidebar
+Oficina|Office
+Operaciones|Operations
+Operación|Operations
+Origen de los datos|Data source
+Otro lugar|Other location
+PRIORIDAD|PRIORITY
+PROGRAMAR PARA|SCHEDULE FOR
+Pago registrado durante el rango.|Payments recorded during the date range.
+Pago y volumen por día|Pay and volume per day
+Pago:|Pay:
+Pagos por unidad|Per-unit payments
+Para inspeccionar|Ready for inspection
+Payroll diario|Daily payroll
+Payroll por día|Payroll per day
+Pendiente|Pending
+Pendientes|Pending
+Pendientes de enviar|Pending sends
+Permisos|Permissions
+Por evaluar|Not evaluated
+Por hora|Hourly
+Por unidad|Per unit
+Pre inspección|Pre-inspection
+Predicción por unidad|Unit forecast
+Preinspección|Pre-inspection
+Preinspección completada|Pre-inspection completed
+Preinspección iniciada|Pre-inspection started
+Preparando semana…|Preparing week…
+Prioridad|Priority
+Prioridad operativa alta|High operational priority
+Problemas|Issues
+Problemas detectados antes de generar el pago|Issues detected before generating payment
+Problemas y solicitudes recibidos desde limpieza e inspección. Convierte cada reporte en una solicitud una sola vez.|Issues and requests from cleaning and inspection. Convert each report into a request once.
+Progreso|Progress
+Progreso de hoy|Today's progress
+Progreso general del hotel|Overall hotel progress
+Promedio|Average
+Promedio inspección|Average inspection time
+Promedio limpieza|Average cleaning time
+Pronóstico|Forecast
+Pronóstico operativo en vivo · Still Waters Resort ·|Live operational forecast · Still Waters Resort ·
+Propiedad|Property
+Puedes agregar fotos como evidencia si es necesario.|You can add photos as evidence if needed.
+Puedes agregar fotos si es necesario.|You can add photos if needed.
+Puedes sincronizar, editar tarifas y ajustar pagos.|You can sync, edit rates and adjust payments.
+Puntaje|Score
+Puntaje actual|Current score
+Ranking confiable de cleaners|Reliable cleaner ranking
+Rankings del día|Daily rankings
+Referencia de unidad terminada|Completed unit reference
+Registros de Notion|Notion records
+Registros pagados por unidad|Per-unit paid records
+Rendimiento de la operación|Operational performance
+Rendimiento por limpiador|Performance by cleaner
+Rendimiento, calidad y costos|Performance, quality and costs
+Rendimiento, calidad, tendencias, daily report y nómina.|Performance, quality, trends, daily report and payroll.
+Reporte de inspección|Inspection report
+Reporte de unidad|Unit report
+Reportes|Reports
+Reportes y actividad|Reports and activity
+Reportes y actividad de solicitudes|Request reports and activity
+Reportes y actividad | Care|Reports and activity | Care
+Reportes y errores|Reports and errors
+Reportes y estadísticas|Reports and statistics
+Reportes, problemas y solicitudes que pueden convertirse en órdenes.|Reports, issues and requests that can become orders.
+Requiere atención|Needs attention
+Requieren revisión|Needs review
+Responsable|Owner
+Responsables y relevo|Shift leads and handover
+Resumen de fuente|Source summary
+Resumen diario|Daily summary
+Resumen ejecutivo|Executive summary
+Revisa la semana, compara PostgreSQL con Notion y descarga la nómina sin editar enlaces manualmente.|Review the week, compare sources and download payroll without editing links manually.
+Revisa y corrige todo antes de enviarlo al runner.|Review and correct everything before sending to the runner.
+Revisando|Reviewing
+Riesgo|Risk
+Riesgo general|Overall risk
+Rojo · Limpiando|Red · Cleaning
+Rol|Role
+SOLICITADA POR|REQUESTED BY
+Salida|Exit
+Salir|Sign out
+Se guardará directamente en Payroll Records de Notion y aparecerá en el total y en el Excel.|It will be saved directly in Notion Payroll Records and included in totals and Excel.
+Secciones del empleado|Employee sections
+Selecciona tu área de trabajo.|Select your workspace.
+Selecciona una unidad de la tabla|Select a unit from the table
+Selecciona una unidad para ver su historial.|Select a unit to view its history.
+Semana abierta|Open week
+Semana actual|Current week
+Semana anterior|Previous week
+Semana seleccionada|Selected week
+Semana siguiente|Next week
+Servicio de estancia|Stayover service
+Señal|Signal
+Sin advertencias.|No warnings.
+Sin asignar|Unassigned
+Sin comenzar|Not started
+Sin comparaciones ni copias locales|Without comparisons or local copies
+Sin cálculo|Not calculated
+Sin datos|No data
+Sin datos cargados|No data loaded
+Sin entrar|Not started
+Sin limpiador cargado|No cleaner loaded
+Solicitud por voz|Voice request
+Solicitudes|Requests
+Solicitudes y entregas|Requests and deliveries
+Solicitudes · Care OS|Requests · Care OS
+Solicitudes · artículos, problemas y entregas|Requests · items, issues and deliveries
+Subir foto existente|Upload existing photo
+Tarea|Task
+Tarifa|Rate
+Tarifa por hora|Hourly rate
+Tarifa por unidad|Per-unit rate
+Teléfono|Phone
+Terminadas|Finished
+Tiempo|Time
+Tiempo actual|Current time
+Tiempo promedio|Average time
+Tiempo promedio válido|Valid average time
+Tiempo válido|Valid time
+Tiempos dudosos|Questionable durations
+Tiempos sospechosos|Suspicious durations
+Tiempos, estado, pago y calidad.|Times, status, pay and quality.
+Tipo|Type
+Tipo de foto|Photo type
+Tipo de pago|Pay type
+Tipo de unidad|Unit type
+Toca para comenzar a grabar|Tap to start recording
+Todas|All
+Todo el equipo|Entire team
+Todos|All
+Todos los estados|All statuses
+Todos los riesgos|All risks
+Tomar fotografía|Take photo
+Total de Notion|Notion total
+Trabajo de preinspección activo|Active pre-inspection work
+Tu historial aparecerá aquí después de cargar tus unidades.|Your history will appear here after loading your units.
+Tu lista de trabajo en vivo para el día de hoy.|Your live work list for today.
+Tus unidades separadas por edificio y organizadas por etapa de inspección.|Your units grouped by building and inspection stage.
+Ubicaciones|Locations
+Una línea por artículo. Puedes escribir “4 Bath Towels”, “Bath Towels x4” o solo el nombre.|One line per item. You can write “4 Bath Towels”, “Bath Towels x4” or just the name.
+Unidad|Unit
+Unidad / área|Unit / area
+Unidad actual|Current unit
+Unidad o descripción|Unit or description
+Unidad, cleaner, inspector, edificio...|Unit, cleaner, inspector, building...
+Unidades|Units
+Urgente|Urgent
+Urgentes|Urgent
+Urgentes activas|Active urgent requests
+Usa tu código de empleado activo.|Use your active employee code.
+Usar otro código|Use another code
+Ver mis inspecciones|View my inspections
+Ver mis unidades|View my units
+Verde · Ready|Green · Ready
+Verificando acceso…|Verifying access…
+Vigente desde|Effective from
+Vista general|Overview
+Vista operativa por zonas y edificios|Operational view by zone and building
+Vista por edificio, sin escala geográfica. Las unidades vienen de tu base actual.|View by building, not to geographic scale. Units come from your current database.
+Vistas de control|Control views
+Volver a edificios|Back to buildings
+intervenciones sugeridas|suggested interventions
+menos de 10 o más de 240 min|under 10 or over 240 min
+requieren atención|need attention
+sin tiempo registrado|no recorded time
+solo inspecciones reales|actual inspections only
+¿Qué vas a hacer hoy?|What will you do today?
+Área|Area
+Órdenes activas|Active orders
+Órdenes de habitaciones en tiempo real|Room orders in real time
+Nueva|New
+Aceptada|Accepted
+Entregada|Delivered
+Completada|Completed
+Cancelada|Cancelled
+En limpieza|Cleaning
+Lista para huésped|Ready for guest
+Terminado|Finished
+Sin estado|No status
+Sin límite|No deadline
+Sin historial|No history
+Nómina|Payroll
+Centro de empleados|Employee Center
+Perfil del empleado|Employee Profile
+Tablero|Dashboard
+Huésped fuera|Guest Out
+Toca para comenzar|Tap to Start
+Toca para terminar|Tap to Finish
+Limpieza terminada|Cleaning complete
+Limpieza iniciada|Started cleaning
+Sin iniciar|Not Started
+Inspección iniciada|Inspection Started
+Listo para huésped|Ready for Guest
+Sin asignación|Unassigned
+Estancia|Stayover
+Claro|Light
+En vivo|LIVE
+Documentos|Documents
+Resumen|Overall
+Inspecciones aprobadas|First pass
+Hora de entrada/salida|Clock In/Out
+Calidad y rendimiento|Quality & Performance
+Estadísticas|Stats
+Estadísticas|Statistics
+Órdenes del runner|Runner Orders
+Mapa del hotel|Hotel Map
+Vista del mapa del hotel|Hotel Map View
+Operaciones ejecutivas|Executive Operations Wall
+Dirección operativa con IA|AI Operations Director
+Operaciones maestras|Master Operations
+Inteligencia operativa|Operations Intelligence
+Bonificación|Bonus
+Descuento|Deduction
+Unidad extra|Extra Unit
+Reembolso|Reimbursement
+Otro ajuste|Other Adjustment
+Idioma de la app|App language
+Guardar idioma|Save language
+Guardando idioma…|Saving language…
+Idioma guardado. Se aplicará al entrar o al actualizar la sesión.|Language saved. It will apply on sign-in or when the session refreshes.
+No se pudo guardar el idioma. Intenta nuevamente.|Could not save the language. Please try again.
+No se pudo cargar el idioma. Intenta nuevamente.|Could not load the language. Please try again.
+Solo un encargado puede cambiar el idioma del empleado.|Only a manager can change an employee's language.
+Selecciona español o inglés.|Select Spanish or English.
+Inactivo|Inactive
+Editar|Edit
+Desactivar|Deactivate
+No hay empleados.|No employees.
+Antes de salir|Before you leave
+Tipo de limpieza|Cleaning type
+Regular · 15 puntos|Regular · 15 checks
+Deep Clean · 84 puntos|Deep Clean · 84 checks
+Revisa cada punto. Corrige los pendientes antes de confirmar. En Deep Clean, usa No aplica solo si el elemento no existe y escribe el motivo. Coordina mantenimiento y sigue las etiquetas y manuales.|Review each item and correct any issues before confirming. For Deep Clean, use Not applicable only when the item does not exist and enter a reason. Coordinate with maintenance and follow product labels and manuals.
+Volver a la unidad|Back to unit
+Confirmar y terminar|Confirm and finish
+No aplica|Not applicable
+Motivo de No aplica|Reason for Not applicable
+Motivo No aplica:|Not applicable reason:
+CARE · SOLICITUD DE ARTÍCULOS|CARE · SUPPLY REQUEST
+Revisa tu solicitud|Review your request
+¿Qué necesitas?|What do you need?
+Selecciona la unidad para comenzar|Select a unit to begin
+Cerrar catálogo|Close catalog
+Ej. 101 A|E.g. 101 A
+2 · Revisa cantidades y envía|2 · Review quantities and send
+1 · Elige artículos y toca + para agregar|1 · Choose items and tap + to add
+Buscar en español o inglés…|Search in Spanish or English…
+Buscar artículo|Search item
+Categorías|Categories
+Frecuentes|Frequent
+Toallas|Towels
+Ropa de cama|Bed linen
+Consumibles|Essentials
+Vajilla|Dishware
+Cubiertos|Silverware
+Cocina|Kitchen
+Sofá cama|Sofa bed
+Paquetes|Kits
+Herramientas y servicios|Tools and services
+Artículo solicitado|Requested item
+Nota opcional|Optional note
+Ej. Dejarlas en la puerta|E.g. Leave them at the door
+Se enviará al equipo de runners. No necesitas volver a escribir la habitación.|It will be sent to the runner team. You do not need to enter the room again.
+Revisar pedido →|Review request →
+← Editar|← Edit
+Enviando…|Sending…
+Agrega un paquete de cama y toallas. Revisa y ajusta las piezas antes de enviar.|Add a bed linen and towel kit. Review and adjust quantities before sending.
+No encontramos ese artículo.|We could not find that item.
+No encuentro el artículo · escribir solicitud|Cannot find the item · write a request
+Escribe el artículo o servicio|Enter the item or service
+Agregar a mi solicitud|Add to my request
+Selecciona una unidad.|Select a unit.
+Selecciona una unidad|Select a unit
+Agrega al menos un artículo.|Add at least one item.
+Solicitud guardada en este dispositivo. Se enviará al recuperar conexión.|Request saved on this device. It will send when the connection is restored.
+Revisa los envíos pendientes.|Review pending sends.
+Papel higiénico|Toilet paper
+Toallas de papel|Paper towels
+Bolsa de basura|Trash bag
+Jabón|Soap
+Acondicionador|Conditioner
+Café|Coffee
+Cantidad|Quantity
+Artículo|Item
+Eliminar|Remove
+No se encontró tu sesión. Vuelve a entrar desde Launch.|Your session was not found. Please sign in again.
+Ya fue enviado. Espera unos segundos.|Already sent. Please wait a few seconds.
+Enviando cambio…|Sending update…
+Enviando...|Sending...
+Enviando acción...|Sending action...
+Pendiente de conexión|Waiting for connection
+La acción está guardada en este dispositivo y pendiente de confirmación.|The action is saved on this device and awaiting confirmation.
+Enviado|Sent
+Enviado correctamente|Sent successfully
+No se guardó la acción|The action was not saved
+No se confirmó el guardado. Revisa el indicador de pendientes.|Saving was not confirmed. Check pending sends.
+Escribe un mensaje o agrega fotos|Write a message or add photos
+Enviando mensaje…|Sending message…
+Mensaje enviado|Message sent
+Reporte enviado|Report sent
+No se pudo enviar|Could not send
+No se pudo actualizar. Conservamos la última lista.|Could not refresh. The last loaded list is still available.
+Sin unidades asignadas|No assigned units
+No tienes unidades asignadas para hoy.|You have no assigned units today.
+Todavía no hay reportes o acciones en tu historial de hoy.|There are no reports or actions in your history today.
+Datos guardados en este dispositivo.|Data saved on this device.
+Sin conexión|Offline
+Reintentar|Retry
+Revisar pendientes|Review pending sends
+Cerrar panel|Close panel
+Descartar|Discard
+Este dispositivo no permite GPS.|This device does not support GPS.
+Activa Location Services para registrar tu horario.|Enable Location Services to record your time.
+Ingresa tu código de empleado.|Enter your employee code.
+Escribe el nombre del lugar de trabajo.|Enter the work location name.
+Obteniendo ubicación…|Getting location…
+Localizando…|Locating…
+GPS localizado|GPS located
+Guardando horario…|Saving time entry…
+No se pudo registrar el horario.|Could not record your time.
+Horario registrado.|Time recorded.
+No se pudo registrar|Could not record
+Ocurrió un problema. Intenta nuevamente.|Something went wrong. Please try again.
+Código requerido|Code required
+Empleado no encontrado|Employee not found
+Empleado inactivo|Inactive employee
+Nombre o código requerido|Name or code required
+Demasiados intentos. Espera un minuto.|Too many attempts. Please wait one minute.
+Inicia sesión con tu código activo.|Sign in with your active code.
+No fue posible verificar tu acceso. Intenta nuevamente.|Could not verify your access. Please try again.
+Completa los 15 puntos del checklist antes de terminar la unidad. Actualiza la página si no aparece.|Complete all 15 checklist items before finishing the unit. Refresh the page if the checklist does not appear.
+No se confirmó el guardado. La acción puede reintentarse con el mismo identificador.|Saving was not confirmed. The action can be retried with the same identifier.
+Esta acción pertenece a un turno anterior. Revisa el pendiente con tu encargado.|This action belongs to an earlier shift. Review it with your manager.
+Revisa la fecha y hora del dispositivo antes de reenviar.|Check your device's date and time before retrying.
+Debes escribir una nota.|You must enter a note.
+Revisa la acción, la unidad y el nombre.|Check the action, unit and name.
+La solicitud tardó demasiado|The request took too long
+Respuesta inválida del servidor|Invalid server response
+No se pudo guardar o cargar. Revisa la conexión y vuelve a intentar.|Could not save or load. Check your connection and try again.
+No se pudo guardar|Could not save
+Notificaciones activadas|Notifications enabled
+Permiso de notificaciones no concedido.|Notification permission was not granted.
+Este dispositivo no admite notificaciones web.|This device does not support web notifications.
+Grabando… toca para terminar|Recording… tap to stop
+Interpretando solicitud…|Interpreting request…
+Revisa los artículos y cantidades antes de enviar.|Review items and quantities before sending.
+Este dispositivo no permite grabar audio desde el navegador.|This device cannot record audio in the browser.
+Necesitas permitir acceso al micrófono para enviar una solicitud por voz.|Allow microphone access to send a voice request.
+Actívalas para recibir órdenes aunque no estés mirando esta pantalla.|Enable them to receive orders even when you are not watching this screen.
+Este teléfono recibirá nuevas órdenes.|This phone will receive new orders.
+Activadas|Enabled
+No hay órdenes en esta vista.|No orders in this view.
+Programada|Scheduled
+ACEPTAR ORDEN|ACCEPT ORDER
+COMENZAR ORDEN|START ORDER
+MARCAR ENTREGADA|MARK DELIVERED
+COMPLETAR ORDEN|COMPLETE ORDER
+NUEVA|NEW
+ACEPTADA|ACCEPTED
+EN PROGRESO|IN PROGRESS
+ENTREGADA|DELIVERED
+COMPLETADA|COMPLETED
+Orden actualizada|Order updated
+Comenzar|Start
+Terminar|Finish
+Ver|View
+Asignada|Assigned
+Pre inspección iniciada|Pre-inspection started
+No hay unidades en esta sección.|No units in this section.
+Sesión no válida|Invalid session
+Sesión no válida.|Invalid session.
+Pendiente de confirmación|Awaiting confirmation
+Guardado en este dispositivo. Todavía no está confirmado por el servidor.|Saved on this device. Not yet confirmed by the server.
+No se pudo guardar la acción|Could not save the action
+No se confirmó la acción. Revisa los pendientes.|The action was not confirmed. Review pending sends.
+Escribe el mensaje del reporte o agrega fotos|Write a report message or add photos
+Subiendo reporte y fotos...|Uploading report and photos...
+Mensaje pendiente de enviar.|Message waiting to send.
+Reporte enviado correctamente|Report sent successfully
+Todavía no hay reportes enviados hoy.|No reports have been sent today.
+Mostrando la última información guardada.|Showing the last saved information.
+No pudimos actualizar en este momento. Intentaremos de nuevo.|We could not refresh right now. We will try again.
+Reconectando… Tus inspecciones aparecerán automáticamente.|Reconnecting… Your inspections will appear automatically.
+Solicitud pendiente de confirmación. Revisa el indicador de conexión.|Request awaiting confirmation. Check pending sends.
+Ese reporte ya fue enviado.|That report was already sent.
+Enviando reporte...|Sending report...
+Subiendo fotos...|Uploading photos...
+Mensaje pendiente de enviar|Message waiting to send
+Mensaje guardado en este dispositivo; pendiente de enviar.|Message saved on this device; waiting to send.
+Pedir|Request supplies
+Pedir artículos|Request supplies
+Reporte|Report
+No hay reportes.|No reports.
+Sin fotos|No photos
+Preinspeccionada|Pre-Inspected
+Limpia · Esperando inspección|Cleaned - Awaiting Inspection
+En progreso|In Progress
+Huésped fuera|Guest out
+Huésped fuera • Preinspección completa|Guest out • Pre-inspection complete
+Unidad con llegada|Arrival room
+Unidad asignada|Assigned room
+Inspector|Inspector
+Encargado|Manager
+Trabajador de lavandería / actividades / runner|Laundry / Activities / Runner
+Despacho / inspector|Dispatch / Inspector
+Limpiador / inspector|Cleaner / Inspector
+Nuevas|New
+Nuevo|New
+En curso|In progress
+Nueva|New
+Pendiente de un turno anterior. Revisa con tu encargado.|Pending from an earlier shift. Review with your manager.
+Pendiente de la versión anterior. Revisa unidad y turno antes de reenviarlo.|Pending from the previous version. Check unit and shift before retrying.
+Estado de conexión y acciones pendientes|Connection status and pending actions
+Acciones pendientes|Pending actions
+No se pudo guardar el envío en este dispositivo. No cierres esta pantalla.|Could not save the submission on this device. Keep this screen open.
+Sin pendientes|No pending actions
+Reintentar envíos|Retry sends
+Reintentar pendientes|Retry pending actions
+Conexión inestable. Reintentando…|Unstable connection. Retrying…
+Desconectado|Disconnected
+Por revisar|Needs review
+Confirmado|Confirmed
+Pendientes en este dispositivo|Pending on this device
+No hay acciones pendientes.|No pending actions.
+Primero entra con tu código de empleado.|First sign in with your employee code.
+Las notificaciones no están disponibles para este rol.|Notifications are not available for this role.
+Las notificaciones requieren HTTPS.|Notifications require HTTPS.
+Este navegador no tiene Web Push disponible.|This browser does not support Web Push.
+En iPhone abre Care desde el icono de la pantalla de inicio.|On iPhone, open Care from the home screen icon.
+Tienes una actualización.|You have an update.
+Permiso no concedido.|Permission not granted.
+Notificaciones activas|Notifications enabled
+Datos|Data
+Editar empleado|Edit employee
+Nota|Note
+Instrucciones de relevo|Handover instructions
+Responsable del turno|Shift lead
+Suplente|Backup
+Relevo|Handover
+Guardar relevo|Save handover
+Sin responsable|No owner
+Tareas|Tasks
+Pendientes del turno|Shift tasks
+Agregar pendiente|Add task
+Pendientes vencidos|Overdue tasks
+Solicitudes abiertas|Open requests
+Llegadas pendientes|Pending arrivals
+Unidades sin asignar|Unassigned units
+Sin novedades|No updates
+Sin actividad registrada.|No recorded activity.
+Sin pendientes para este turno.|No tasks for this shift.
+No hay solicitudes abiertas.|No open requests.
+Esta vista requiere un encargado de operaciones o administrador.|This view requires an operations lead or administrator.
+Marca la unidad como terminada después de completar el checklist.|Mark the unit as finished after completing the checklist.
+No hay solicitudes.|No requests.
+Buscar empleados|Search employees
+14 días|14 days
+30 días|30 days
+7 días|7 days
+50.00 o -25.00|50.00 or -25.00
+ALL o nombre del hotel|ALL or hotel name
+Total payroll|Total payroll
+Calidad estimada|Estimated quality score
+Pass rate estimado|Estimated pass rate
+Quality Score estimado|Estimated quality score
+Laundry, Runner, Inspector...|Laundry, Runner, Inspector...
+Datos actualizados|Data updated
+Pre-inspeccionada|Pre-Inspected
+Limpieza|Cleaning
+Terminado|Finished
+Explica por qué se agrega o descuenta|Explain why this amount is added or deducted
+Payroll Records de Notion|Notion Payroll Records
+Still Waters Resort · Fotos de referencia y revisión visual|Still Waters Resort · Reference photos and visual review
+Centro de tarifas|Rate center
+Administrador de habitaciones|Room manager
+Historial de cambios|Change history
+Idioma asignado por el encargado|Language assigned by your manager
+Estado de conexión y guardados|Connection and save status
+“Pendiente” no significa guardado en el servidor. Las fotos y los pagos requieren conexión.|“Pending” does not mean saved on the server. Photos and payments require a connection.
+Pendiente de confirmar|Awaiting confirmation
+Descartar este pendiente|Discard this pending action
+¿Descartar este pendiente local? Esta acción no borra registros del servidor.|Discard this local pending action? This does not delete server records.
+Este usuario no tiene acciones pendientes en este navegador.|This user has no pending actions in this browser.
+Reintentar pendientes del turno|Retry this shift's pending actions
+Reintentando conexión|Retrying connection
+Reconectando|Reconnecting
+Solicitud|Request
+Guardado|Saved
+Recibido|Received
+HotSOS enviado|Sent to HotSOS
+Pendiente HotSOS|Pending HotSOS
+Reporte:|Report:
+Resumen de IA:|AI summary:
+Sugerencia de IA:|AI suggestion:
+Aceptar|Accept
+Completar|Complete
+Ver órdenes|View orders
+Vista previa|Preview
+Sin habitación|No room
+No hay elementos que requieran atención con este filtro.|No items need attention with this filter.
+No hay actividad con este filtro.|No activity with this filter.
+No se pudo actualizar|Could not refresh
+Sin unidad|No unit
+Sin solicitudes abiertas.|No open requests.
+No hay pendientes registrados.|No tasks recorded.
+Pendientes con responsable|Tasks with an owner
+Seguimiento del turno. Las entregas de artículos se gestionan en Solicitudes.|Shift follow-up. Item deliveries are managed in Requests.
+Reabrir|Reopen
+Turno anterior|Previous shift
+Revisado|Reviewed
+Abierto|Open
+Encargado de operaciones|Operations lead
+Suplente del encargado|Backup lead
+Inspector líder|Lead inspector
+Coordinador de suministros|Supply coordinator
+Administrativo|Administrator
+Pendientes e instrucciones para el siguiente turno|Open tasks and instructions for the next shift
+Este registro identifica responsables; los permisos se administran en el expediente del empleado.|This record identifies shift leads; permissions are managed in the employee record.
+Guardar turno|Save shift
+Guardar relevo revisado|Save reviewed handover
+Antes de revisar el relevo|Before reviewing handover
+Unidades sin READY:|Units not READY:
+Solicitudes abiertas:|Open requests:
+Pendientes abiertos:|Open tasks:
+Se pueden dejar pendientes, siempre documentados para el siguiente responsable. Esto no equivale a finalizar el día ni autorizar pagos.|Open tasks may remain if documented for the next lead. This does not close the day or authorize payments.
+Accesos a las funciones existentes. Nómina y pagos conservan sus controles actuales; esta entrega no ejecuta pagos bancarios.|Access existing features. Payroll and payments retain their current controls; this release does not execute bank payments.
+Personal|Staff
+Expedientes y funciones del equipo.|Team records and roles.
+Entradas, salidas y horas registradas.|Clock-ins, clock-outs and recorded hours.
+Producción, tarifas, revisión y exportación.|Production, rates, review and export.
+Catálogo de unidades|Unit catalog
+Referencias y fotografías por unidad.|References and photos by unit.
+Asignaciones|Assignments
+Habitaciones y responsables.|Rooms and assigned staff.
+Artículos, problemas y seguimiento.|Items, issues and follow-up.
+Abrir →|Open →
+Siguiente etapa|Next phase
+Contratación, disponibilidad, inventario y conciliación de cheques requieren módulos adicionales. No se muestran como funciones activas.|Hiring, availability, inventory and check reconciliation require additional modules. They are not shown as active features.
+Últimos 100 cambios del turno|Last 100 shift changes
+Pendiente creado|Task created
+Estado de pendiente|Task status
+Turno guardado|Shift saved
+Relevo revisado|Handover reviewed
+Solicitud delegada|Request delegated
+Todavía no hay cambios registrados en este módulo.|No changes have been recorded in this module yet.
+URGENT|URGENT
+normal|normal
+alta|high
+urgente|urgent
+Solicitud urgente|Urgent request
+Nueva unidad asignada|New unit assigned
+Unidad retirada|Unit removed
+Limpieza urgente|Urgent cleaning
+Unidad urgente|Urgent unit
+Actualización de unidad|Unit update
+Reporte en Operations|Report in Operations
+Solicitud en Operations|Request in Operations
+Antes de salir ·|Before you leave ·
+Agrega al menos un artículo|Add at least one item
+Cola de inspección|Inspection queue
+El servidor no confirmó una respuesta válida.|The server did not confirm a valid response.
+En línea|Online
+Este tipo de guardado requiere conexión.|This type of save requires a connection.
+Fotografía guardada.|Photo saved.
+Fotografía guardada. Revisando con IA...|Photo saved. Reviewing with AI...
+Fotografía y revisión guardadas.|Photo and review saved.
+Guardando fotografía...|Saving photo...
+Habitaciones del turno|Shift rooms
+Hay cambios en la operación. Pulsa Actualizar para verlos.|Operations have changed. Tap Refresh to see the updates.
+Hay demasiados pendientes sin confirmar. Revisa la conexión con tu encargado.|There are too many unconfirmed submissions. Check the connection with your manager.
+Inicia sesión antes de guardar.|Sign in before saving.
+Inicia sesión en Care OS para ver este centro.|Sign in to Care OS to view this center.
+La conexión está tardando. No se confirmó el guardado.|The connection is taking longer than expected. Saving has not been confirmed.
+La conexión tardó demasiado. Actualiza para intentar nuevamente.|The connection took too long. Refresh to try again.
+No hay una sesión activa.|There is no active session.
+No hay unidades en este filtro.|No units match this filter.
+No pude interpretar el audio.|Could not interpret the audio.
+No se confirmó el guardado. Actualiza antes de repetir la acción.|Saving was not confirmed. Refresh before repeating the action.
+No se grabó audio.|No audio was recorded.
+No se pudieron cargar las inspecciones|Could not load inspections
+No se pudieron cargar tus unidades|Could not load your units
+No se pudo cargar la imagen|Could not load the image
+No se pudo completar la operación.|Could not complete the operation.
+No se pudo guardar la acción en este dispositivo. Mantén la pantalla abierta y vuelve a intentar cuando haya conexión.|Could not save the action on this device. Keep this screen open and try again when connected.
+No se pudo registrar el teléfono|Could not register this phone
+Operación no disponible.|Operation unavailable.
+PostgreSQL no respondió. Usando Notion temporalmente.|The primary source did not respond. Using the backup source temporarily.
+Registra lo que el siguiente encargado necesita saber.|Record what the next shift lead needs to know.
+Relevo pendiente de revisión|Handover awaiting review
+Revisa si hay cambios: pulsa Actualizar al terminar de editar.|Check for updates: tap Refresh when you finish editing.
+Revisando fotografía...|Reviewing photo...
+Revisión visual guardada.|Visual review saved.
+Selecciona los artículos y cantidades que necesitas.|Select the items and quantities you need.
+Sin datos disponibles. No se muestran cifras de ejemplo.|No data available. Sample figures are not shown.
+Solicitud pendiente de confirmación|Request awaiting confirmation
+Toca para abrir la cámara. Toma una foto, luego vuelve a tocar para tomar otra.|Tap to open the camera. Take a photo, then tap again to take another.
+Ver revisión guardada|View saved review
+1. Selecciona el tipo de setup|1. Select the setup type
+2. Selecciona el tamaño de cama|2. Select the bed size
+Aquí puedes asignar una persona concreta y registrar el ticket externo. Registrar un número no envía nada a HotSOS.|Assign a specific person and record an external ticket. Entering a number does not send anything to HotSOS.
+Aún no hay cleaners asignados.|No cleaners assigned yet.
+Carga linen, towels, dishware y silverware. Después puedes ajustar cantidades.|Add linens, towels, dishes and silverware. You can then adjust quantities.
+DONE pasa a inspección. Solo READY indica autorización para el huésped.|DONE moves the unit to inspection. Only READY means it is approved for the guest.
+Delegación del encargado|Manager delegation
+Iniciar sesión|Sign in
+Las llegadas pendientes indican trabajo restante; no son una predicción de retraso. Las solicitudes incluyen órdenes abiertas de días anteriores.|Pending arrivals indicate remaining work, not a prediction of delays. Requests include open orders from previous days.
+No hay datos para este día.|No data for this day.
+No hay edificios para mostrar.|No buildings to display.
+No hay habitaciones cargadas para hoy.|No rooms loaded for today.
+No hay habitaciones que coincidan con los filtros.|No rooms match the filters.
+No hay limpiadores asignados para esta fecha.|No cleaners assigned for this date.
+No hay registros todavía.|No records yet.
+No hay unidades en este rango.|No units in this date range.
+No hay unidades para este filtro.|No units match this filter.
+No hay unidades. Sincroniza las habitaciones desde Notion.|No units. Sync rooms from Notion.
+No se encontraron artículos.|No items found.
+No se pudo cargar el historial.|Could not load history.
+Organizar el turno →|Organize shift →
+Presiona para especificar las piezas|Tap to specify items
+Próximos pendientes|Upcoming tasks
+Reconectando… Tus unidades aparecerán automáticamente.|Reconnecting… Your units will appear automatically.
+Relevo del turno|Shift handover
+Selecciona artículos, atiende problemas y sigue las entregas en un solo apartado.|Select items, handle issues and track deliveries in one place.
+Sin alertas según los registros cargados.|No alerts in the loaded records.
+Sin banderas|No flags
+Solicitar corrección|Request correction
+Solicitudes de habitaciones|Room requests
+Todavía no hay acciones de inspección registradas para esta fecha.|No inspection actions recorded for this date yet.
+Todavía no hay cambios administrativos.|No administrative changes yet.
+Todavía no hay fotografías.|No photos yet.
+Todos los registros tienen datos completos.|All records have complete data.
+Vacío|Empty
+Ver habitaciones|View rooms
+¿QUÉ NECESITAN PARA EL HIDE-A-BED?|WHAT DO YOU NEED FOR THE HIDE-A-BED?
+Órdenes rápidas de Setup|Quick setup orders
+Entrada registrada correctamente|Clock-in recorded successfully
+Salida registrada correctamente|Clock-out recorded successfully
+, selecciona tu área de trabajo.|, select your workspace.
+Acción completada|Action completed
+Acción realizada desde App Maestra|Action performed from the main app
+Activa las notificaciones en Configuración → Notificaciones → Care.|Enable notifications in Settings → Notifications → Care.
+Califica todas las áreas antes de finalizar.|Rate all areas before finishing.
+Con error|With error
+Corrección enviada|Correction sent
+Debajo de cama|Under the bed
+Debajo de muebles|Under furniture
+Describe el problema:|Describe the issue:
+El servidor devolvió una respuesta inválida|The server returned an invalid response
+El servidor tardó demasiado. Intenta otra vez.|The server took too long. Please try again.
+El teléfono se registró, pero la prueba no pudo enviarse.|The phone was registered, but the test could not be sent.
+En el siguiente paso activaremos la edición real del empleado.|Employee record editing will be enabled in the next phase.
+Error verificando código.|Error verifying code.
+Escribe la habitación.|Enter the room.
+Escribe tu código.|Enter your code.
+Esta semana aún no tiene registro de sincronización|This week has no sync record yet
+Esta solicitud ya había sido enviada.|This request was already sent.
+Fecha de contratación|Hire date
+Fuera de turno|Off shift
+Habitación actualizada|Room updated
+Habitación actualizada correctamente.|Room updated successfully.
+Hay problemas marcados. Elimínalos o envía la unidad a corrección.|There are flagged issues. Resolve them or send the unit for correction.
+Inspección en progreso|Inspection in progress
+Inspector más activo|Most active inspector
+La fecha final no puede ser anterior a la inicial.|The end date cannot be before the start date.
+La semana volverá a aceptar sincronizaciones, cambios de tarifa y ajustes manuales.|The week will accept syncs, rate changes and manual adjustments again.
+La sincronización no terminó correctamente.|The sync did not finish successfully.
+Lista para revisar, ajustar o cerrar.|Ready to review, adjust or close.
+Motivo para restaurar el pago calculado:|Reason for restoring the calculated pay:
+Movimiento agregado a la nómina.|Adjustment added to payroll.
+Más habitaciones|Most rooms
+Más rápido|Fastest
+Necesita inspección|Needs inspection
+No encontré el reporte.|Report not found.
+No encontré este empleado en PostgreSQL.|Employee not found in the employee database.
+No hay código de empleado|No employee code
+No hay persona asignada para esta acción.|No person is assigned to this action.
+No se pudieron activar las notificaciones.|Could not enable notifications.
+No se pudieron cargar las estadísticas|Could not load statistics
+No se pudieron cargar las métricas|Could not load metrics
+No se pudieron cargar los reportes|Could not load reports
+No se pudo actualizar en Notion. Se regresó al estado anterior.|Could not update Notion. The previous state was restored.
+No se pudo cargar|Could not load
+No se pudo cargar Payroll.|Could not load payroll.
+No se pudo cargar el historial|Could not load history
+No se pudo cargar el perfil|Could not load profile
+No se pudo cargar la actividad de Notion|Could not load Notion activity
+No se pudo crear la orden.|Could not create the order.
+No se puede regresar automáticamente a Sin Iniciar todavía.|Returning automatically to Not Started is not yet available.
+No tienes permiso para abrir este módulo.|You do not have permission to open this module.
+Notion en vivo|Live Notion
+Nueva actualización|New update
+Pago ajustado y registrado en auditoría.|Pay adjusted and recorded in the audit log.
+Pago restaurado al cálculo base.|Pay restored to the base calculation.
+PostgreSQL no está conectado|The operational database is not connected
+Presiona Comparar para validar ambas fuentes|Tap Compare to validate both sources
+Página central de Notion|Central Notion page
+Regresa al Employee Center y selecciona una tarjeta.|Return to Employee Center and select a card.
+Se congelarán los totales y los pagos no podrán cambiar hasta que la semana sea reabierta.|Totals will be frozen and pay cannot change until the week is reopened.
+Selecciona el inicio y final de la semana.|Select the week's start and end dates.
+Semana sin fecha válida|Week without a valid date
+Sesión expirada|Session expired
+Sesión expirada. Ingresa tu código otra vez.|Session expired. Enter your code again.
+Sin dato|No value
+Sin datos suficientes|Not enough data
+Sin descripción|No description
+Sin empleado|No employee
+Sin errores|No errors
+Sin fecha|No date
+Sin inspección|No inspection
+Sin nombre|No name
+Sin nota|No note
+Sin permisos configurados|No permissions configured
+Sin resumen disponible.|No summary available.
+Sin rol|No role
+Sin tiempo|No time
+Sincronización en proceso|Sync in progress
+Web Push todavía no está configurado en el servidor.|Web Push is not yet configured on the server.
+¿Eliminar estas horas manuales de Notion?|Delete these manual hours from Notion?
+¿Eliminar este movimiento manual de la nómina?|Delete this manual payroll adjustment?
+Más errores|Most errors
+Día más rápido|Fastest day
+Orden creada. El reporte no pudo marcarse en Notion, pero no se duplicará.|Order created. The report could not be marked in Notion, but it will not be duplicated.
+Orden creada. El reporte se sincroniza en segundo plano.|Order created. The report is syncing in the background.
+Habitación aprobada|Room approved
+Mejor día|Best day
+RESPONSABILIDAD DEL TURNO|SHIFT RESPONSIBILITY
+Falta asignar encargado|Assign a shift lead
+Unidades listas|Ready units
+En cola de inspección|In the inspection queue
+Abrir Solicitudes|Open Requests
+Suplente:|Backup:
+Inspección:|Inspection:
+Revisar el relevo no libera habitaciones ni cierra nómina.|Reviewing handover does not release rooms or close payroll.
+Fecha no disponible|Date unavailable
+Oscuro|Dark
+Por revisar|Needs review
+Llegadas|Arrivals

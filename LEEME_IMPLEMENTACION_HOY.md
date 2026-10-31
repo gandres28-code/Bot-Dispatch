@@ -1,3 +1,21 @@
+# Versión actual: Idiomas por empleado v6
+
+Consulta **LEEME_IDIOMAS_V6.md** para instalar esta versión y configurar inglés/español desde Empleados. Esta versión incluye también Deep Clean y todas las mejoras del checklist regular. Instalar frontend y servidor completos juntos.
+
+---
+
+# Checklist de salida v4
+
+Al tocar Terminar en una unidad, el limpiador debe revisar 15 puntos y marcar cada uno. Confirmar se habilita al completar los 15; Volver cancela sin terminar. No hay selección masiva. Las áreas opcionales se revisan cuando existan.
+
+El servidor rechaza DONE sin checklist completo. Guarda versión, texto de los puntos, empleado, unidad y hora del servidor dentro del registro de la acción. La unidad sigue pasando a espera de inspección; este checklist no reemplaza al inspector. No se añadió una pantalla de consulta del historial de checklists.
+
+Instalar el proyecto completo, frontend y servidor juntos. Actualizar las páginas abiertas de los teléfonos: clientes anteriores deberán recargar para poder terminar unidades. Los DONE pendientes de versiones antiguas sin checklist serán rechazados y requerirán revisar la unidad y completar el nuevo flujo. No se marcan automáticamente como completos. No requiere nueva migración SQL adicional a las incluidas en v3.
+
+Verificado: sintaxis, pruebas de regresión y validación del servidor, rechazo de selecciones incompletas/duplicadas y prueba en navegador del bloqueo, activación a 15/15 y cancelación. Falta prueba con PostgreSQL/Notion reales y teléfono físico después de instalar. Esta entrega no está desplegada en Render.
+
+---
+
 # Care OS · Catálogo por unidad y envíos ágiles v3
 
 Proyecto completo actualizado desde Bot-Dispatch-main-19 y la primera entrega de autonomía. Conserva tus conexiones; no crea un app aparte. Esta entrega aún no está desplegada en tu alojamiento activo.
