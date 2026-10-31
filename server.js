@@ -866,7 +866,7 @@ app.get("/login-role", async (req, res) => {
         active: user.active,
         permissions: user.permissions,
         home: user.home,
-        language: await employeeLanguageService.languageFor(user).catch(()=>undefined),
+        language: await employeeLanguageService.languageFor(user).catch(()=>user.language),
       });
     }
 
@@ -1037,7 +1037,7 @@ app.get("/api/me", async (req, res) => {
     }
 
     const user = pageToUser(employeePage);
-    user.language = await employeeLanguageService.languageFor(user).catch(()=>undefined);
+    user.language = await employeeLanguageService.languageFor(user).catch(()=>user.language);
 
     if (!user.active) {
       return res.status(403).json({
@@ -2190,7 +2190,7 @@ app.get("/api/payroll/hourly", async (req, res) => {
 async function getEmployeesCached(forceRefresh = false) {
   const legacyCacheKey = "employees:active";
   const coreCacheKey = "core:employees:active";
-  const ttlMs = Number(process.env.EMPLOYEES_CACHE_MS || 300000);
+  const ttlMs = Number(process.env.EMPLOYEES_CACHE_MS || 60000);
 
   if (!NOTION_EMPLOYEES_DATABASE_ID) return [];
 
@@ -2980,6 +2980,7 @@ function pageToUser(page) {
     hotel: "Default Hotel",
     permissions: getPermissionsFromRole(role),
     home: mobileHomeFromRole(role),
+    language: require('./services/employeeLanguageValue').readEmployeeLanguage(page),
   };
 }
 
@@ -9917,16 +9918,22 @@ app.get("/api/v2/health", async (req, res) => {
 });
 
 const employeeLanguageService = require('./services/employeeLanguage').createLanguageService({
- query: postgresQuery,
+ readPage: pageId=>notion.pages.retrieve({page_id:pageId}),
  resolveUser: async code => {const page=await findEmployeeByCode(code);return page?pageToUser(page):null;},
- emit: (event,payload)=>io.emit(event,payload),
 });
 app.use('/api',employeeLanguageService.router);
 
 app.get("/api/v2/employees", async (req, res) => {
   try {
     const activeOnly = String(req.query.active || "1") !== "0";
-    const employees = await listDataApiEmployees({ activeOnly });
+    const employeeRows = await listDataApiEmployees({ activeOnly });
+    const notionEmployees = await getEmployeesCached();
+    const byNotionId = new Map(notionEmployees.map(page=>[String(page.id).replace(/-/g,''),page]));
+    const readLanguage = require('./services/employeeLanguageValue').readEmployeeLanguage;
+    const employees = employeeRows.map(employee=>{
+      const page=byNotionId.get(String(employee.notionId||'').replace(/-/g,''));
+      return {...employee,language:readLanguage(page),languageSource:'notion'};
+    });
 
     res.json({
       ok: true,

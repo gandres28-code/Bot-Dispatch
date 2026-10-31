@@ -81,6 +81,7 @@ function getEmployeeFromNotionPage(page) {
     role,
     hourlyRate,
     active,
+    language: require('./employeeLanguageValue').readEmployeeLanguage(page),
     rawData: page,
   };
 }
@@ -101,12 +102,13 @@ async function upsertEmployee(employee) {
       code,
       role,
       hourly_rate,
+      app_language,
       active,
       permissions,
       source,
       updated_at
     )
-    VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8::jsonb, 'notion', NOW())
+    VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $9, $7, $8::jsonb, 'notion', NOW())
     ON CONFLICT (notion_id)
     DO UPDATE SET
       name = EXCLUDED.name,
@@ -114,6 +116,7 @@ async function upsertEmployee(employee) {
       code = EXCLUDED.code,
       role = EXCLUDED.role,
       hourly_rate = EXCLUDED.hourly_rate,
+      app_language = EXCLUDED.app_language,
       active = EXCLUDED.active,
       permissions = EXCLUDED.permissions,
       source = 'notion',
@@ -132,6 +135,7 @@ async function upsertEmployee(employee) {
     employee.hourlyRate,
     employee.active,
     JSON.stringify(permissions),
+    employee.language==='en'?'en':'es',
   ]);
 
   return {

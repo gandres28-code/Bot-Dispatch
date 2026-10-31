@@ -1,52 +1,50 @@
-# Care OS · Idiomas por empleado · v6
+# Care OS · Idioma desde Notion Employees · v6.1
 
-## Uso
+## Configuración en Notion
 
-1. Entrar con el código de administrador o encargado.
-2. Abrir Empleados / Employee Center.
-3. En la tarjeta del empleado, elegir **Idioma de la app → Español o English** y tocar **Guardar idioma**.
-4. El empleado debe entrar con su código o actualizar su app. La preferencia se guarda en su expediente y se recupera en otro teléfono al entrar con el mismo código.
+En la base **Employees** utilizada por Care OS:
 
-La selección tiene un guardado independiente: no es necesario usar el botón de edición del expediente. El español es el valor inicial de los empleados existentes. El idioma no cambia roles, permisos, importes, estados operativos ni las claves de los artículos pedidos.
+1. Agregar una propiedad llamada **Idioma**.
+2. Elegir el tipo **Select** (selección única).
+3. Crear las opciones **Inglés** y **Español**.
+4. Elegir una opción en la fila de cada empleado.
 
-## Qué se traduce
+No crear otra base. Es la misma Employees que usa el acceso por código. El campo debe ser Select, no Text ni Multi-select. Si está vacío o no existe, se usa español. También se reconocen los valores Ingles, INGLES, English y en, para compatibilidad; la configuración recomendada es Inglés / Español.
 
-- Interfaz de las vistas del proyecto: navegación, botones, etiquetas, campos, categorías y mensajes conocidos de Care OS.
-- Limpieza, inspecciones, solicitudes, pedidos del runner, Time Clock y las vistas administrativas.
-- Los 15 puntos completos del checklist regular, incluidos cafetera/tostadora/cables y bolsa completa del hide-a-bed.
-- Los 84 puntos de Deep Clean, sus categorías, No aplica y motivos.
-- Nombres visibles del catálogo de artículos; sus claves originales se conservan para inventario y sincronización.
-- Avisos conocidos de conexión/confirmación y títulos conocidos de notificaciones. El service worker actualizado conserva el idioma del último usuario activo de ese teléfono.
-- Fechas de presentación según el idioma; los identificadores de fechas y la zona operativa America/Chicago se conservan.
+La propiedad todavía debe crearse en tu Notion: esta entrega modifica el proyecto, no tiene acceso a tu cuenta para agregarla directamente.
 
-Los nombres, números de unidad, notas, motivos escritos y textos externos/IA se conservan en su idioma original. Esta entrega no agrega un servicio de traducción automática para mensajes libres, fotografías, PDFs o archivos Excel ya generados. Los textos nuevos que se incorporen a la app deben añadirse al catálogo de traducciones.
+## Comportamiento
 
-## Aplicación y conexión
+- Notion Employees es la fuente del idioma.
+- Al entrar, Care OS lee la preferencia del perfil de Notion. Las sesiones abiertas la revisan al recuperar visibilidad/conexión y periódicamente.
+- Se usa una caché breve para evitar consultas excesivas. Un cambio puede tardar aproximadamente uno o dos minutos en aparecer en una sesión abierta. Recargar vuelve a consultar, sujeto a esa caché breve.
+- Empleados muestra el idioma leído desde Notion y el aviso de que se cambia allí. Ya no hay un botón para guardar una preferencia local que contradiga Notion.
+- Los clientes anteriores que intenten guardar el idioma desde la app recibirán un aviso: deben cambiarlo en Notion Employees, campo Idioma.
+- La columna interna `employees.app_language` se conserva solo como copia durante la sincronización; la preferencia activa se consulta desde Notion, no desde esa columna.
+- Sin conexión se conserva en ese teléfono el último idioma aplicado para el código del empleado. No se puede conocer un cambio nuevo de Notion hasta recuperar conexión.
 
-La preferencia se obtiene al entrar y al cargar una vista. En sesiones abiertas también se revisa al volver a la pantalla y cada minuto; si hay conexión Socket.IO, se solicita actualizar al guardar un cambio. No hace falta recargar un checklist abierto para traducir sus etiquetas y no se borran sus selecciones ni el motivo escrito. Sin red se usa la última preferencia guardada para ese código en ese teléfono; la primera entrada sin preferencia local usa español.
+Los campos llamados Language, App Language o Idioma de la app también son compatibles. Se recomienda mantener un solo campo Idioma para evitar ambigüedad; Idioma tiene prioridad si hay varios.
 
-El cambio no instala ni publica la app automáticamente.
+## Traducciones incluidas
 
-## Instalación completa
+Se conservan las traducciones de la v6: menús, botones, etiquetas, avisos conocidos, limpieza, inspecciones, catálogo, solicitudes, runner, registro de horas y vistas administrativas. Se incluyen los 15 puntos completos del checklist regular y los 84 de Deep Clean, categorías, No aplica y motivos. Se mantienen la revisión de cafetera/tostadora/cables y la bolsa completa del hide-a-bed.
 
-1. Desplegar este proyecto completo en Render, incluyendo servidor, `db/schema.sql`, servicios, vistas y `public/js/care-i18n.js`.
-2. Al iniciar, el esquema agrega `employees.app_language`, con valores `es` y `en` y español como predeterminado. No requiere crear una propiedad de idioma en Notion. La sincronización de empleados desde Notion conserva la preferencia local.
-3. Actualizar las páginas abiertas y reiniciar la app instalada si usa una copia empaquetada. Si Capacitor lleva recursos locales, también hay que reconstruir ese paquete.
-4. Actualizar el service worker mediante la carga normal de la app para que las notificaciones nuevas usen las traducciones. Confirmar en un teléfono físico.
-5. Probar con un empleado de cada idioma: entrar, abrir su catálogo, enviar un pedido, iniciar/terminar una unidad, revisar el checklist regular y Deep Clean, y abrir inspecciones/Time Clock según sus permisos.
+Los nombres, códigos, números de unidad, notas, motivos escritos y textos externos/IA se conservan en su idioma original. No se agrega traducción automática de mensajes libres ni de PDFs/Excel ya generados. El idioma cambia la presentación, no los valores operativos, tarifas o claves del catálogo.
 
-Solo un código activo con rol de encargado autorizado puede guardar la preferencia. El servidor verifica el rol; no confía en el rol enviado por el navegador. Si el guardado falla, se muestra un error y no se confirma como exitoso.
+## Instalación
 
-## Validación realizada
+1. Desplegar el proyecto completo en Render: servidor, servicios, esquema, vistas y archivos de traducción.
+2. Usar la integración y la base Employees de Notion ya configuradas. La integración debe poder leer los perfiles.
+3. Crear el Select Idioma en Notion y elegir el idioma por empleado.
+4. Actualizar las páginas abiertas. Si Capacitor contiene recursos locales, reconstruir e instalar también ese paquete.
+5. Probar con dos empleados: uno en Inglés y otro en Español; entrar con cada código, revisar menús, pedidos y ambos checklists. Cambiar el Select de Notion y confirmar la actualización después del intervalo de caché.
 
-Pasaron `npm run verify`, las regresiones previas y las pruebas nuevas de idioma: cobertura de todos los títulos/instrucciones de los dos checklists, nombres de catálogo, mensajes dinámicos, validación de valores, acceso por rol, guardado, invalidación de caché, cambio de vuelta a español, error de base de datos y traducción de notificaciones en segundo plano.
+La actualización no despliega Render ni crea propiedades de Notion por sí sola.
 
-Prueba en navegador con datos ficticios: guardar inglés desde Empleados, navegar a Limpieza, abrir catálogo y revisión de cantidades, abrir regular/Deep Clean e Inspecciones; cambiar a español con Deep Clean abierto conservó la casilla No aplica y el motivo escrito. Los nombres del personal permanecieron iguales.
+## Validación
 
-No se ejecutó una migración contra tu base real ni se probó la conexión real con Notion, Render, push en un teléfono físico o el paquete nativo de Capacitor. La instalación y la prueba operativa en tu entorno siguen pendientes.
+Pasaron `npm run verify` y las pruebas de esta versión: lectura de Select con/sin acento, opciones vacías, rechazo de propiedades Text, cambios desde Notion en ambos sentidos después de la caché, fallo de Notion sin inventar una preferencia nueva, rechazo de las antiguas escrituras locales y copia del idioma en la sincronización normal de empleados. Se conservan las pruebas de traducción completa de ambos checklists, catálogo y notificaciones.
 
-## Mantenimiento de traducciones
+Estas pruebas usan perfiles simulados de Notion. No se realizó una consulta o migración contra tu Notion/Render reales ni se probó la aplicación nativa o push en un teléfono físico.
 
-Fuentes: `translations/ui.es-en.txt`, `translations/checklists.en.json`, `translations/templates.json` y catálogo original de suministros. Ejecutar `node scripts/build-i18n.js` después de editar estas fuentes. El comando genera los diccionarios y el bundle `public/js/care-i18n.js` que cargan las vistas.
-
-La traducción cambia únicamente la presentación. Las respuestas del servidor y los valores internos no se reescriben por traducir un texto visible.
+Fuentes de traducción: `translations/`. Regenerar el bundle con `node scripts/build-i18n.js` si se modifican los textos.

@@ -1053,3 +1053,7 @@ Fecha no disponible|Date unavailable
 Oscuro|Dark
 Por revisar|Needs review
 Llegadas|Arrivals
+Idioma de la app · Notion:|App language · Notion:
+Se cambia en Notion Employees, campo Idioma.|Change it in Notion Employees, in the Idioma field.
+El idioma se administra en Notion Employees, campo Idioma.|Language is managed in Notion Employees, in the Idioma field.
+Inglés|English

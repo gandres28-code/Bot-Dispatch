@@ -92,6 +92,7 @@ function pageToEmployee(page) {
     code,
     role,
     active,
+    language: require('./employeeLanguageValue').readEmployeeLanguage(page),
     hotel: "Default Hotel",
     permissions: getPermissionsFromRole(role),
   };

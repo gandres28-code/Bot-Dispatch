@@ -1,6 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),express=require('express'),fs=require('node:fs'),vm=require('node:vm');
 const {createLanguageService}=require('../services/employeeLanguage');
+const {readEmployeeLanguage}=require('../services/employeeLanguageValue');
 const data=require('../public/js/i18n-data'),core=require('../public/js/i18n-core');
 async function main(){
  assert.equal(core.translate('Tap to Finish','es'),'Toca para terminar');
@@ -27,13 +28,21 @@ async function main(){
  listeners.push({data:{json:()=>({title:'🚨 Orden urgente · 101 A',body:'Tienes una actualización.'})},waitUntil:p=>pending.push(p)});await Promise.all(pending);
  assert.equal(notices[0][0],'🚨 Urgent order · 101 A');assert.equal(notices[0][1].body,'You have an update.');
  assert.equal(core.translate('1 piezas','en'),'1 piece');assert.equal(core.translate('1 units','es'),'1 unidad');
- const users={admin:{code:'admin',name:'Admin',role:'admin',active:true},worker:{code:'worker',name:'Worker',role:'cleaner',active:true},inactive:{code:'inactive',role:'admin',active:false}};
- let saved='es',fail=false,writes=0;const events=[];
- const service=createLanguageService({resolveUser:async code=>users[code],emit:(...args)=>events.push(args),query:async(sql,p)=>{
-  if(fail)throw Error('database unavailable');
-  if(sql.startsWith('SELECT'))return {rows:p[0]==='worker'?[{app_language:saved}]:[]};
-  if(sql.startsWith('UPDATE')){if(p[1]!=='2')return {rows:[]};saved=p[0];writes++;return {rows:[{id:2,code:'worker',app_language:saved}]};}
-  throw Error('Unexpected query');
+ const page=value=>({properties:{Idioma:{type:'select',select:value?{name:value}:null}}});
+ for(const value of ['Inglés','INGLES','English','en'])assert.equal(readEmployeeLanguage(page(value)),'en');
+ for(const value of ['Español','ESPAÑOL','Spanish','es','',null,'French'])assert.equal(readEmployeeLanguage(page(value)),'es');
+ assert.equal(readEmployeeLanguage({properties:{Idioma:{type:'rich_text',rich_text:[{plain_text:'Inglés'}]}}}),'es','only a Select is authoritative');
+ assert.equal(readEmployeeLanguage({properties:{Language:{type:'select',select:{name:'English'}}}}),'en');
+ // The normal employee sync mirrors the Notion Select, never restores the old local setting.
+ const mirrorWrites=[];const syncContext={module:{exports:{}},require:name=>name==='../db'?{query:async(sql,params)=>{if(sql.includes('INSERT INTO employees'))mirrorWrites.push({sql,params});return {rows:[{}]};}}:require('../services/employeeLanguageValue'),console,Date};
+ vm.runInNewContext(fs.readFileSync('services/employeeSyncService.js','utf8'),syncContext);
+ const person={id:'worker-page',properties:{...page('Inglés').properties,Employee:{title:[{plain_text:'Worker'}]},Code:{rich_text:[{plain_text:'worker'}]}}};
+ const sync=await syncContext.module.exports.syncEmployeesFromNotion({databaseId:'employees-test',queryDatabase:async()=>({results:[person],has_more:false})});
+ assert.equal(sync.saved,1);assert.equal(mirrorWrites[0].params[8],'en');assert(mirrorWrites[0].sql.includes('app_language = EXCLUDED.app_language'));
+ const users={admin:{id:'admin-page',code:'admin',name:'Admin',role:'admin',active:true},worker:{id:'worker-page',code:'worker',name:'Worker',role:'cleaner',active:true},inactive:{id:'inactive-page',code:'inactive',role:'admin',active:false}};
+ let notionSelection='Español',fail=false,reads=0,now=0;
+ const service=createLanguageService({clock:()=>now,resolveUser:async code=>users[code],readPage:async id=>{
+  reads++;assert.equal(id,'worker-page');if(fail)throw Error('Notion unavailable');return page(notionSelection);
  }});
  const app=express();app.use(express.json());app.use('/api',service.router);app.get('/api/unrelated',(q,r)=>r.json({ok:true}));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
@@ -44,15 +53,15 @@ async function main(){
   assert.equal((await call('/employee-preferences','inactive')).status,401);
   assert.equal((await call('/employee-preferences','worker')).body.language,'es');
   assert.equal((await call('/v2/employees/2/language','worker','PATCH',{language:'en',role:'admin'})).status,403,'browser cannot claim manager role');
-  assert.equal((await call('/v2/employees/2/language','admin','PATCH',{language:'fr'})).status,400);
-  assert.equal((await call('/v2/employees/bad/language','admin','PATCH',{language:'en'})).status,400);
-  assert.equal((await call('/v2/employees/999/language','admin','PATCH',{language:'en'})).status,404);
-  const save=await call('/v2/employees/2/language','admin','PATCH',{language:'en'});assert.equal(save.status,200);assert.equal(save.body.employee.language,'en');assert.equal(save.body.employee.code,undefined);assert.equal(writes,1);
-  assert.equal((await call('/employee-preferences','worker')).body.language,'en','saved setting invalidates cache');
-  await call('/v2/employees/2/language','admin','PATCH',{language:'es'});
-  assert.equal((await call('/employee-preferences','worker')).body.language,'es','switching back works');assert.equal(events.length,2);
-  fail=true;assert.equal((await call('/v2/employees/2/language','admin','PATCH',{language:'en'})).status,503,'failed saves never report success');
+  assert.equal((await call('/v2/employees/2/language','admin','PATCH',{language:'en'})).status,409,'old app clients cannot override Notion');
+  assert.equal(reads,1,'blocked local writes do not contact or change Notion');
+  notionSelection='Inglés';now=61000;
+  assert.equal((await call('/employee-preferences','worker')).body.language,'en','changing the Notion Select changes the app after refresh');
+  notionSelection='Español';now=122000;
+  assert.equal((await call('/employee-preferences','worker')).body.language,'es','Notion can switch the app back to Spanish');
+  fail=true;now=183000;assert.equal((await call('/employee-preferences','worker')).status,503,'Notion failures do not invent a new preference');
+
  }finally{await new Promise(r=>server.close(r));}
- console.log('Languages: full regular/deep checklist coverage, catalog labels, dynamic confirmations, role checks, persistent preference, cache invalidation, rollback to Spanish and no false success passed.');
+ console.log('Languages: regular/deep coverage, Select aliases, Notion as source, cached refresh in both directions, rejected local overrides, role checks, push translations and Notion failure behavior passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

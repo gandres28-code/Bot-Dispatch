@@ -1,6 +1,6 @@
-# Versión actual: Idiomas por empleado v6
+# Versión actual: Idioma desde Notion Employees v6.1
 
-Consulta **LEEME_IDIOMAS_V6.md** para instalar esta versión y configurar inglés/español desde Empleados. Esta versión incluye también Deep Clean y todas las mejoras del checklist regular. Instalar frontend y servidor completos juntos.
+Consulta **LEEME_IDIOMAS_V6.md**. Crear en Notion Employees el campo **Idioma**, tipo **Select**, con las opciones **Inglés** y **Español**. Notion es la fuente de esta preferencia. Instalar frontend y servidor completos juntos. Incluye Deep Clean y las mejoras del checklist regular.
 
 ---
 
