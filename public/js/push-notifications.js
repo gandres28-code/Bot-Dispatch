@@ -74,7 +74,8 @@
       }
 
       const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
-      await navigator.serviceWorker.ready;
+      const readyWorker=await navigator.serviceWorker.ready;
+      readyWorker.active?.postMessage({type:'care-language',language:window.CareI18n?.language||'es'});
 
       let subscription = await registration.pushManager.getSubscription();
       if (!subscription) {

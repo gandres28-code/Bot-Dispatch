@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script src="/js/care-i18n.js?v=languages-v6"></script>
   <title>Care OS | Limpieza</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -1600,7 +1601,7 @@
       <div class="hero-line">
         <div>
           <h1>Mis unidades</h1>
-          <div id="heroCleanerName" class="hero-name">Cargando...</div>
+          <div data-i18n-ignore id="heroCleanerName" class="hero-name">Cargando...</div>
           <div class="hero-subtitle">Tu lista de trabajo en vivo para el día de hoy.</div>
         </div>
 
@@ -1638,11 +1639,11 @@
     </div>
     <div class="stat-card">
       <strong id="statDone">0</strong>
-      <span>Finished</span>
+      <span>Terminadas</span>
     </div>
     <div class="stat-card">
       <strong id="statArrivals">0</strong>
-      <span>Arrival</span>
+      <span>Llegadas</span>
     </div>
   </section>
 
@@ -1758,6 +1759,7 @@
 </section>
 
 <script src="/socket.io/socket.io.js"></script>
+<link rel="stylesheet" href="/css/exit-checklist.css?v=4"><script src="/js/exit-checklist-data.js?v=4"></script><script src="/js/deep-clean-checklist-data.js?v=5"></script><script src="/js/exit-checklist.js?v=5"></script>
 <script src="/js/resilience.js?v=reliability-v2"></script><script src="/js/supply-catalog-data.js?v=catalog-v3"></script><script src="/js/supply-picker.js?v=catalog-v3"></script>
 <script src="/js/maid-core.js"></script>
 
@@ -1912,11 +1914,12 @@ async function bootCleanerPanel(){
   }
 }
 
+window.addEventListener('care:language-changed',()=>setupDate());
 function setupDate(){
   const now = new Date();
   const day = String(now.getDate()).padStart(2, "0");
 
-  const text = now.toLocaleDateString("es-US", {
+  const text = now.toLocaleDateString(window.CareI18n?.locale||"es-US", {
     month:"short",
     day:"numeric",
     year:"numeric"
@@ -2365,6 +2368,14 @@ function setCleanerCardLoading(unit,loading){
   if(!card)return;
 
   card.classList.toggle("card-loading",!!loading);
+  const panel=card.querySelector(".state-panel");
+  if(panel){
+    panel.removeAttribute("onclick");
+    panel.onclick=event=>{
+      if(state === "full"){event.stopPropagation();return;}
+      return state === "half" ? quickFinishUnit(event,unit) : quickStartUnit(event,unit);
+    };
+  }
   const circle=card.querySelector(".action-circle");
   if(!circle)return;
 
@@ -2748,6 +2759,12 @@ async function sendAction(action){
     return;
   }
 
+  let exitChecklist;
+  if(action === "DONE"){
+    exitChecklist = await CareExitChecklist.open(unit);
+    if(!exitChecklist || isSending)return;
+    if(document.getElementById("unit").value.trim().toUpperCase() !== unit)return;
+  }
   const sendKey = `${action}-${unit}-${name}-${note}`;
   const now = Date.now();
 
@@ -2774,7 +2791,7 @@ async function sendAction(action){
   }
 
   try{
-    const payload = { action, unit, note, name, photoUrl:"" };
+    const payload = { action, unit, note, name, photoUrl:"", exitChecklist };
     const data = window.OSResilience
       ? await OSResilience.postAction("/action", payload)
       : await fetch("/action",{

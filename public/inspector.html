@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script src="/js/care-i18n.js?v=languages-v6"></script>
   <title>Care OS | Inspecciones</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -195,7 +196,7 @@
 <body>
 <div id="bigStatus"></div>
 <div class="app-shell">
-  <section class="hero"><div class="hero-card"><div class="hero-line"><div><h1>Inspecciones</h1><div id="heroInspectorName" class="hero-name">Cargando...</div><div class="hero-subtitle">Tus unidades separadas por edificio y organizadas por etapa de inspección.</div></div><div class="hero-actions"><button class="refresh-button" onclick="loadInspectorAssignments(false)"><span class="refresh-symbol">↻</span>Actualizar</button><button id="enablePushNotificationsCare" class="push-bell-button" type="button" title="Activar notificaciones" aria-label="Activar notificaciones" onclick="window.enableCarePushNotifications?.()">🔔</button></div></div><div class="date-pill"><span class="date-box" id="dateDay">--</span><span id="dateText">Hoy</span></div><div class="today-progress"><div class="today-progress-top"><span>Progreso de hoy</span><strong id="todayProgressText">0 de 0</strong></div><div class="progress-track"><div id="todayProgressFill" class="progress-fill"></div></div></div></div></section>
+  <section class="hero"><div class="hero-card"><div class="hero-line"><div><h1>Inspecciones</h1><div data-i18n-ignore id="heroInspectorName" class="hero-name">Cargando...</div><div class="hero-subtitle">Tus unidades separadas por edificio y organizadas por etapa de inspección.</div></div><div class="hero-actions"><button class="refresh-button" onclick="loadInspectorAssignments(false)"><span class="refresh-symbol">↻</span>Actualizar</button><button id="enablePushNotificationsCare" class="push-bell-button" type="button" title="Activar notificaciones" aria-label="Activar notificaciones" onclick="window.enableCarePushNotifications?.()">🔔</button></div></div><div class="date-pill"><span class="date-box" id="dateDay">--</span><span id="dateText">Hoy</span></div><div class="today-progress"><div class="today-progress-top"><span>Progreso de hoy</span><strong id="todayProgressText">0 de 0</strong></div><div class="progress-track"><div id="todayProgressFill" class="progress-fill"></div></div></div></div></section>
   <section class="stats-grid">
     <div class="stat-card">
       <div class="stat-icon pre">◔</div>
@@ -391,7 +392,8 @@ function reconcilePendingInspectorAction(incoming){
 }
 
 function normalizeRole(role){return String(role||"").trim().toLowerCase()}function canInspect(role){return["inspector","cleaner / inspector","inspector / cleaner","dispatch / inspector","admin","manager","owner","company owner"].includes(normalizeRole(role))}
-function setupDate(){const now=new Date(),day=String(now.getDate()).padStart(2,"0"),text=now.toLocaleDateString("es-US",{month:"short",day:"numeric",year:"numeric"});document.getElementById("dateDay").innerText=day;document.getElementById("dateText").innerText=text}
+window.addEventListener('care:language-changed',()=>setupDate());
+function setupDate(){const now=new Date(),day=String(now.getDate()).padStart(2,"0"),text=now.toLocaleDateString(window.CareI18n?.locale||"es-US",{month:"short",day:"numeric",year:"numeric"});document.getElementById("dateDay").innerText=day;document.getElementById("dateText").innerText=text}
 async function waitForOSUser(){return new Promise(resolve=>{let tries=0;const timer=setInterval(()=>{tries++;if(window.OS&&OS.user){clearInterval(timer);resolve(OS.user);return}if(tries>30){clearInterval(timer);resolve(null)}},100)})}
 async function bootInspectorPanel(){
   setupDate();

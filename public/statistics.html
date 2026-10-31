@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script src="/js/care-i18n.js?v=languages-v6"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f5f7fb">
@@ -171,7 +172,7 @@
 <script>
   const $=id=>document.getElementById(id);
   const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
-  const money=value=>Number(value||0).toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
+  const money=value=>Number(value||0).toLocaleString(window.CareI18n?.locale||"en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
   const set=(id,value)=>{const el=$(id);if(el)el.textContent=value};
   let activeHistoryRangeDays=7;
   let customHistoryRange=false;
@@ -269,7 +270,7 @@
 
   function compactDay(dateValue){
     const date=new Date(`${dateValue}T12:00:00`);
-    return date.toLocaleDateString("es-US",{month:"short",day:"numeric"});
+    return date.toLocaleDateString(window.CareI18n?.locale||"es-US",{month:"short",day:"numeric"});
   }
 
   function renderBarChart(id,days,valueKey,formatter){

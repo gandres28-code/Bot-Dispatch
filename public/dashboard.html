@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<script src="/js/care-i18n.js?v=languages-v6"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07090c" />
@@ -226,8 +227,8 @@
       }
       function updateClock(){
         const now=new Date();
-        $("clock").textContent=now.toLocaleTimeString("en-US",{timeZone:"America/Chicago",hour:"numeric",minute:"2-digit"});
-        $("fullDate").textContent=now.toLocaleDateString("es-MX",{timeZone:"America/Chicago",weekday:"long",month:"long",day:"numeric"});
+        $("clock").textContent=now.toLocaleTimeString(window.CareI18n?.locale||"en-US",{timeZone:"America/Chicago",hour:"numeric",minute:"2-digit"});
+        $("fullDate").textContent=now.toLocaleDateString(window.CareI18n?.locale||"es-MX",{timeZone:"America/Chicago",weekday:"long",month:"long",day:"numeric"});
       }
       function groupUnits(units){return units.reduce((groups,unit)=>{const raw=String(unit.building||"").trim().toUpperCase();const label=String(unit.unit||"").trim().toUpperCase();const match=label.match(/(?:-|–)\s*([A-Z])\s*$/)||label.match(/\b\d{2,4}\s*([A-Z])\b/);const key=raw&&raw!=="OTHER"?raw:(match?.[1]||"OTHER");(groups[key]||=[]).push(unit);return groups;},{});}
       function sortBuildings(keys){return keys.sort((a,b)=>{if(a==="OTHER")return 1;if(b==="OTHER")return-1;return a.localeCompare(b,undefined,{numeric:true});});}

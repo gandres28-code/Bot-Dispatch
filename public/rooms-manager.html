@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script src="/js/care-i18n.js?v=languages-v6"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Habitaciones · Care OS</title>
@@ -1050,7 +1051,7 @@
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return String(value);
 
-      return date.toLocaleString("es-US", {
+      return date.toLocaleString(window.CareI18n?.locale||"es-US", {
         timeZone: "America/Chicago",
         dateStyle: "medium",
         timeStyle: "short",

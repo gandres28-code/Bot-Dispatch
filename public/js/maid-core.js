@@ -91,6 +91,7 @@ window.OS = {
       localStorage.setItem("employeeRole", this.user.role);
     }
 
+    if(user.language)window.CareI18n?.setLanguage(user.language);
     localStorage.setItem("employeeSessionUpdatedAt", String(Date.now()));
 
     if (window.OSStore) {

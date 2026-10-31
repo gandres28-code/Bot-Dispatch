@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script src="/js/care-i18n.js?v=languages-v6"></script>
   <meta charset="UTF-8">
   <title>Care Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -99,6 +100,7 @@ function saveUser(data, typedCode){
   localStorage.setItem("employeeRole", role);
   localStorage.setItem("employeeSessionVerifiedAt", String(Date.now()));
 
+  if(data.language)window.CareI18n?.setLanguage(data.language);
   currentUser = { name, code: realCode, role };
 }
 

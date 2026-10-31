@@ -134,6 +134,7 @@
   function attachSocket(candidate){
     if(socketBound||!candidate)return socket;socket=candidate;socketBound=true;connected=Boolean(socket.connected);
     socket.on('connect',()=>{connected=true;lastNetworkError=false;renderStatus();window.dispatchEvent(new CustomEvent('care:reconnected'));flushQueue();});
+    socket.on('employee-preferences-updated',()=>window.CareI18n?.refresh(true));
     socket.on('disconnect',()=>{connected=false;renderStatus();});socket.on('connect_error',()=>{connected=false;renderStatus();});return socket;
   }
   function getSocket(){if(socket)return socket;if(window.OS?.socket)return attachSocket(OS.socket);if(typeof window.io==='function')return attachSocket(io({transports:['polling','websocket'],reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:500,reconnectionDelayMax:8000,randomizationFactor:.5,timeout:10000}));return null;}

@@ -1,3 +1,10 @@
+importScripts('/js/i18n-data.js','/js/i18n-core.js');
+const languageCache='care-language-v1';
+self.addEventListener('message',event=>{
+ if(event.data?.type!=='care-language'||!['es','en'].includes(event.data.language))return;
+ event.waitUntil(caches.open(languageCache).then(cache=>cache.put('/__care_language',new Response(event.data.language))));
+});
+async function pushLanguage(){try{const cache=await caches.open(languageCache);const response=await cache.match('/__care_language');return (await response?.text())==='en'?'en':'es';}catch{return 'es';}}
 self.addEventListener("push", event => {
   let payload = {};
   try {
@@ -25,7 +32,10 @@ self.addEventListener("push", event => {
     data: { url: payload.url || "/launch", ...data },
   };
 
-  event.waitUntil(self.registration.showNotification(payload.title || "Care", options));
+  event.waitUntil(pushLanguage().then(language=>{
+    options.body=CareI18nCore.translate(options.body,language);
+    return self.registration.showNotification(CareI18nCore.translate(payload.title||"Care",language),options);
+  }));
 });
 
 self.addEventListener("notificationclick", event => {

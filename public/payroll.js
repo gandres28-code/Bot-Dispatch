@@ -32,7 +32,7 @@
     const date = safeDate(value);
     if (!date) return fallback;
     try {
-      return new Intl.DateTimeFormat("es-US", options).format(date);
+      return new Intl.DateTimeFormat(window.CareI18n?.locale||"es-US", options).format(date);
     } catch (_) {
       return fallback;
     }
@@ -68,7 +68,7 @@
   }
 
   function formatRange(start, end) {
-    const formatter = new Intl.DateTimeFormat("es-US", {
+    const formatter = new Intl.DateTimeFormat(window.CareI18n?.locale||"es-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -98,7 +98,7 @@
     const parsed = parseLocalDate(normalizeISODate(dateValue));
     if (!parsed) return "Fecha no disponible";
 
-    const value = new Intl.DateTimeFormat("es-US", {
+    const value = new Intl.DateTimeFormat(window.CareI18n?.locale||"es-US", {
       weekday: "long",
     }).format(parsed);
 
@@ -109,7 +109,7 @@
     const parsed = parseLocalDate(normalizeISODate(dateValue));
     if (!parsed) return "Fecha no disponible";
 
-    return new Intl.DateTimeFormat("es-US", {
+    return new Intl.DateTimeFormat(window.CareI18n?.locale||"es-US", {
       day: "numeric",
       month: "short",
     }).format(parsed);
@@ -399,7 +399,7 @@
   function formatClock(value) {
     const date = safeDate(value);
     if (!date) return "—";
-    return new Intl.DateTimeFormat("es-US", {
+    return new Intl.DateTimeFormat(window.CareI18n?.locale||"es-US", {
       timeZone: "America/Chicago",
       month: "short",
       day: "numeric",
@@ -681,7 +681,7 @@
       $("auditList").innerHTML = audit.length ? audit.map((item) => `
         <div class="audit-row"><strong>${escapeHtml(item.action)}</strong><br>
         ${escapeHtml([item.employee, item.unit].filter(Boolean).join(" · "))}
-        <small>${escapeHtml(item.reason || "Sin nota")} · ${new Date(item.created_at).toLocaleString("es-US")}</small></div>`).join("")
+        <small>${escapeHtml(item.reason || "Sin nota")} · ${new Date(item.created_at).toLocaleString(window.CareI18n?.locale||"es-US")}</small></div>`).join("")
         : '<div class="empty">Todavía no hay cambios registrados.</div>';
     } catch (error) { $("auditList").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; }
   }
