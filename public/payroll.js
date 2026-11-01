@@ -235,7 +235,7 @@
     const fallback = Boolean(state.preview?.fallback || state.raw?.fallback);
     const sourceText = source === "central-notion" ? "Página central de Notion" : source === "notion" ? "Notion" : source;
 
-    $("sourceText").textContent = fallback ? `${sourceText} · fallback` : sourceText;
+    $("sourceText").textContent = fallback ? "Información parcial: revisar" : "Datos actualizados";
     $("activeSourceText").textContent = fallback
       ? `Modo fallback: ${state.preview?.fallbackReason || "PostgreSQL no disponible"}`
       : `${sourceText} está alimentando Payroll`;
@@ -443,6 +443,7 @@
   }
 
   function openManualHours() {
+    $("manualHoursModal").dataset.requestId=crypto.randomUUID();
     $("manualDate").value = state.start || isoLocal(new Date());
     $("manualEmployee").value = "";
     $("manualRole").value = "Hourly";
@@ -480,6 +481,7 @@
   async function saveManualHours() {
     try {
       const payload = {
+        requestId: $("manualHoursModal").dataset.requestId,
         employee: $("manualEmployee").value.trim(),
         role: $("manualRole").value.trim(),
         date: $("manualDate").value,

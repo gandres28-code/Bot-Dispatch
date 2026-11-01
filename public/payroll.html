@@ -4,7 +4,7 @@
 <script src="/js/care-i18n.js?v=languages-v6"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Payroll 2.0 | Care OS</title>
+  <title>Nómina | Care OS</title>
   <meta name="theme-color" content="#0f172a" />
   <style>
     :root {
@@ -475,15 +475,15 @@
 
   </style>
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
-<script src="/js/resilience.js?v=reliability-v2" defer></script></head>
+<script src="/js/resilience.js?v=reliability-v2" defer></script><link rel="stylesheet" href="/css/care-design.css?v=9"><script src="/js/care-design.js?v=9" defer></script></head>
 <body>
   <main class="shell">
     <section class="hero">
       <div class="hero-top">
         <div>
           <p class="eyebrow">Care OS</p>
-          <h1>Payroll 2.0</h1>
-          <p>Revisa la semana, compara PostgreSQL con Notion y descarga la nómina sin editar enlaces manualmente.</p>
+          <h1>Nómina</h1>
+          <p>Revisa las horas y unidades de la semana, comprueba los importes y descarga la nómina.</p>
         </div>
         <div class="source-pill" id="sourcePill">
           <span class="source-dot" id="sourceDot"></span>
@@ -513,7 +513,7 @@
 
     <section class="section stats-grid">
       <article class="stat-card">
-        <div class="stat-top"><span class="stat-label">Total payroll</span><span class="stat-icon">💵</span></div>
+        <div class="stat-top"><span class="stat-label">Total a pagar</span><span class="stat-icon">💵</span></div>
         <div><div class="stat-value" id="totalPayroll">$0.00</div><div class="stat-note">Limpieza + pagos por hora</div></div>
       </article>
       <article class="stat-card">
@@ -551,7 +551,7 @@
       </div>
     </section>
 
-    <section class="section system-grid">
+    <section class="section system-grid" hidden>
       <article class="panel">
         <div class="panel-header">
           <div>
@@ -595,7 +595,7 @@
       <div class="panel-header">
         <div>
           <h2 class="panel-title">Horas pagadas</h2>
-          <p class="panel-subtitle">Entradas y salidas de Time Clock, más ajustes manuales guardados en Notion</p>
+          <p class="panel-subtitle">Entradas, salidas y horas adicionales del período.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
           <span class="badge blue">Horas: <b id="hourlyHoursTotal">0.00</b></span>
@@ -655,7 +655,7 @@
     <div class="modal">
       <div class="modal-head"><h3>⏱️ Agregar horas manuales</h3><button class="mini-btn" data-close-modal="manualHoursModal">✕</button></div>
       <div class="modal-body">
-        <p class="panel-subtitle">Este registro se guardará en Time Clock de Notion y se sumará automáticamente a la nómina semanal.</p>
+        <p class="panel-subtitle">Las horas se guardarán y se sumarán a la nómina de la semana. La fecha y las horas corresponden a Branson (Chicago).</p>
         <div class="modal-grid">
           <div class="field full"><label>Empleado</label><input id="manualEmployee" placeholder="Nombre exacto del empleado"></div>
           <div class="field"><label>Función</label><input id="manualRole" value="Hourly" placeholder="Laundry, Runner, Inspector..."></div>
@@ -674,7 +674,7 @@
     <div class="modal">
       <div class="modal-head"><h3>Agregar movimiento de nómina</h3><button class="mini-btn" data-close-modal="manualEntryModal">✕</button></div>
       <div class="modal-body">
-        <p class="panel-subtitle">Se guardará directamente en Payroll Records de Notion y aparecerá en el total y en el Excel.</p>
+        <p class="panel-subtitle">El movimiento aparecerá en el total de la semana y en el Excel.</p>
         <div class="modal-grid">
           <div class="field full"><label>Empleado</label><input id="entryEmployee" placeholder="Nombre exacto"></div>
           <div class="field"><label>Fecha</label><input id="entryDate" type="date"></div>

@@ -192,9 +192,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#111827">
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
-<link rel="stylesheet" href="/css/supply-picker.css?v=catalog-v3"></head>
+<link rel="stylesheet" href="/css/supply-picker.css?v=catalog-v3"><link rel="stylesheet" href="/css/care-design.css?v=9"><script src="/js/care-design.js?v=9" defer></script></head>
 <body>
-<div style="padding:8px 16px;background:#10243d;color:white;text-align:right;font:13px Arial"><a href="/work" style="color:white">Mis localidades / My locations</a> · <a href="/time-clock" style="color:white">Time Clock</a></div>
+
 <div id="bigStatus"></div>
 <div class="app-shell">
   <section class="hero"><div class="hero-card"><div class="hero-line"><div><h1>Inspecciones</h1><div data-i18n-ignore id="heroInspectorName" class="hero-name">Cargando...</div><div class="hero-subtitle">Tus unidades separadas por edificio y organizadas por etapa de inspección.</div></div><div class="hero-actions"><button class="refresh-button" onclick="loadInspectorAssignments(false)"><span class="refresh-symbol">↻</span>Actualizar</button><button id="enablePushNotificationsCare" class="push-bell-button" type="button" title="Activar notificaciones" aria-label="Activar notificaciones" onclick="window.enableCarePushNotifications?.()">🔔</button></div></div><div class="date-pill"><span class="date-box" id="dateDay">--</span><span id="dateText">Hoy</span></div><div class="today-progress"><div class="today-progress-top"><span>Progreso de hoy</span><strong id="todayProgressText">0 de 0</strong></div><div class="progress-track"><div id="todayProgressFill" class="progress-fill"></div></div></div></div></section>
@@ -783,7 +783,7 @@ if(!visible.length){c.innerHTML="<div class='empty'>No hay unidades en esta secc
     <circle class="ring-track" cx="24" cy="24" r="18" pathLength="100"></circle>
     <circle class="ring-value" cx="24" cy="24" r="18" pathLength="100"></circle>
   </svg>
-</span><span class="tap-label">${escapeHtml(st.action)}</span></div></div><div class="inspection-footer"><span>${escapeHtml(st.footer)}</span><div class="footer-right"><strong class="status-tag">${escapeHtml(st.title)}</strong><button class="inline-report unit-supply-button" title="Pedir artículos" aria-label="Pedir artículos para ${escapeHtml(item.unit)}" onclick="event.stopPropagation();CareSupplyPicker.open({unit:'${safeJsString(item.unit)}'})">📦 Pedir</button><button class="inline-report" title="Reporte" onclick="openReportForUnit(event,'${safeJsString(item.unit)}')">✎</button></div></div></div>`});html+=`</div></div>`});c.innerHTML=html;if(selectedUnit)markSelectedCard(selectedUnit)}
+</span><span class="tap-label">${escapeHtml(st.action)}</span></div></div><div class="inspection-footer"><span>${escapeHtml(st.footer)}</span><div class="footer-right"><strong class="status-tag">${escapeHtml(st.title)}</strong><button class="inline-report unit-supply-button" title="Pedir artículos" aria-label="Pedir artículos para ${escapeHtml(item.unit)}" onclick="event.stopPropagation();CareSupplyPicker.open({unit:'${safeJsString(item.unit)}'})">Suministros</button><button class="inline-report" title="Reporte" onclick="openReportForUnit(event,'${safeJsString(item.unit)}')">✎</button></div></div></div>`});html+=`</div></div>`});c.innerHTML=html;if(selectedUnit)markSelectedCard(selectedUnit)}
 function toggleBuilding(b){collapsedBuildings[b]=!collapsedBuildings[b];renderAssignments()}function markSelectedCard(unit){document.querySelectorAll(".inspection-card").forEach(c=>c.classList.remove("selected"));const card=document.getElementById("card-"+String(unit||"").replace(/[^a-zA-Z0-9]/g,""));if(card)card.classList.add("selected")}function selectAssignment(unit){
   selectedUnit=unit;
   document.getElementById("unit").value=unit;

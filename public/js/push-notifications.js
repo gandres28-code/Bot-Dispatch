@@ -27,7 +27,7 @@
   function paintButton(enabled) {
     const button = document.getElementById(BUTTON_ID);
     if (!button) return;
-    button.textContent = enabled ? "🔔" : "🔔";
+    button.textContent = (document.documentElement.lang === "en" ? "Alerts" : "Avisos") + (enabled ? " ✓" : "");
     button.style.background = enabled ? "#16a34a" : "#111827";
     button.style.opacity = "1";
     button.disabled = false;
@@ -39,9 +39,9 @@
     const button = document.createElement("button");
     button.id = BUTTON_ID;
     button.type = "button";
-    button.textContent = "🔔";
+    button.textContent = document.documentElement.lang === "en" ? "Alerts" : "Avisos";
     button.title = "Activar notificaciones";
-    button.style.cssText = "position:fixed;right:16px;bottom:84px;z-index:99999;width:44px;height:44px;border:1px solid rgba(255,255,255,.16);background:#111827;color:#fff;border-radius:999px;font-size:20px;box-shadow:0 10px 30px rgba(0,0,0,.28);cursor:pointer";
+    button.style.cssText = "position:fixed;right:16px;bottom:84px;z-index:99999;width:auto;min-width:74px;height:44px;padding:0 12px;border:1px solid rgba(255,255,255,.16);background:#111827;color:#fff;border-radius:9px;font-size:12px;box-shadow:0 10px 30px rgba(0,0,0,.28);cursor:pointer";
     button.addEventListener("click", enable);
     document.body.appendChild(button);
   }

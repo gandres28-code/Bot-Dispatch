@@ -1576,10 +1576,10 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#111827">
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
-<link rel="stylesheet" href="/css/supply-picker.css?v=catalog-v3"></head>
+<link rel="stylesheet" href="/css/supply-picker.css?v=catalog-v3"><link rel="stylesheet" href="/css/care-design.css?v=9"><script src="/js/care-design.js?v=9" defer></script></head>
 
 <body>
-<div style="padding:8px 16px;background:#10243d;color:white;text-align:right;font:13px Arial"><a href="/work" style="color:white">Mis localidades / My locations</a> · <a href="/time-clock" style="color:white">Time Clock</a></div>
+
 <div id="bigStatus"></div>
 
 <div class="app-shell">
@@ -2343,7 +2343,7 @@ function renderCleanerAssignments(units){
               ${escapeHtml(footerRight)}
             </strong>
 
-            <button class="inline-voice unit-supply-button" title="Pedir artículos" aria-label="Pedir artículos para ${escapeHtml(item.unit)}" onclick="event.stopPropagation();CareSupplyPicker.open({unit:'${safeJsString(item.unit)}'})">📦 Pedir</button>
+            <button class="inline-voice unit-supply-button" title="Pedir artículos" aria-label="Pedir artículos para ${escapeHtml(item.unit)}" onclick="event.stopPropagation();CareSupplyPicker.open({unit:'${safeJsString(item.unit)}'})">Suministros</button>
 
             <button
               class="inline-report"
