@@ -127,7 +127,7 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
  }));
  router.get('/reports',S.route(async(req,res)=>{
   if(!fulfiller(req.workUser))S.fail('Solo operaciones o runner.',403);
-  const rows=(await query(`SELECT r.*,u.name AS unit_name,l.name AS location_name,l.address,c.name AS client_name FROM care_work_reports r JOIN care_work_jobs j ON j.id=r.job_id JOIN care_units u ON u.id=j.unit_id JOIN care_locations l ON l.id=u.location_id JOIN care_clients c ON c.id=l.client_id WHERE r.status='open' ${S.manager(req.workUser)?'':"AND r.kind='supplies'"} ORDER BY r.created_at`)).rows;
+  const rows=(await query(`SELECT r.*,l.id AS location_id,u.name AS unit_name,l.name AS location_name,l.address,c.name AS client_name FROM care_work_reports r JOIN care_work_jobs j ON j.id=r.job_id JOIN care_units u ON u.id=j.unit_id JOIN care_locations l ON l.id=u.location_id JOIN care_clients c ON c.id=l.client_id WHERE r.status='open' ${S.manager(req.workUser)?'':"AND r.kind='supplies'"} ORDER BY r.created_at`)).rows;
   res.json({ok:true,reports:rows});
  }));
  router.patch('/reports/:id',S.route(async(req,res)=>{
