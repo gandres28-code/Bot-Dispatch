@@ -1,0 +1,11 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Care OS · Clientes</title><link rel="stylesheet" href="/css/client-directory.css"></head><body>
+<header><a href="/app" class="brand">CARE <small>LUXURY CLEANING · OS</small></a><a href="/app" data-t="back">Volver a Care OS</a></header>
+<main><p class="eyebrow">CARE OS</p><h1 data-t="title">Clientes y localidades</h1><p data-t="intro">Organiza cada cliente, sus propiedades y sus unidades.</p>
+<div class="notice" data-t="scope">Directorio administrativo. Las localidades nuevas todavía no se agregan a las asignaciones diarias, nómina o invoices.</div>
+<div id="message" role="status" aria-live="polite"></div>
+<section id="login" hidden><form id="loginForm"><label><span data-t="code">Código de administrador</span><input id="code" type="password" autocomplete="off" required maxlength="120"></label><button data-t="enter">Entrar</button></form></section>
+<section id="workspace" hidden><div id="stats" class="stats"></div><nav aria-label="Directory"><button data-tab="clients" class="selected" data-t="clients">Clientes</button><button data-tab="locations" data-t="locations">Localidades</button><button data-tab="units" data-t="units">Unidades</button></nav>
+<div class="toolbar"><label><span data-t="search">Buscar</span><input id="search" type="search"></label><label><span data-t="client">Cliente</span><select id="clientFilter"></select></label><label><span data-t="location">Localidad</span><select id="locationFilter"></select></label><label class="check"><input id="pending" type="checkbox"><span data-t="pendingOnly">Solo pendientes de revisión</span></label><button id="refresh" data-t="refresh">Actualizar</button><button id="add" data-t="add">Agregar</button></div>
+<div class="table-wrap"><table><thead id="head"></thead><tbody id="rows"></tbody></table></div><p id="count"></p></section></main>
+<dialog id="editor"><form id="editForm"><div class="dialog-title"><h2 id="editTitle"></h2><button id="close" type="button" aria-label="Close">×</button></div><div id="fields"></div><p id="formError" role="alert"></p><button id="save" type="submit" data-t="save">Guardar</button></form></dialog>
+<script src="/js/client-directory.js"></script></body></html>
