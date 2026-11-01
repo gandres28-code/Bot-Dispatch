@@ -2128,9 +2128,14 @@ async function getPayrollRecordsWithSource(
       source: 'manual',
     })));
   }
+  let workWarnings = [];
+  if (postgresStatus.connected) {
+    const scoped = await require('./services/scopedWork').payroll(postgresQuery,weekStart,weekEnd);
+    records.push(...scoped); workWarnings = scoped.warnings || [];
+  }
   return {
-    records,
-    source: "central-notion",
+    records, warnings: workWarnings,
+    source: "central-notion+care-work",
     requestedSource: String(source || "central"),
     fallback: false,
     fallbackReason: "",
@@ -2144,6 +2149,19 @@ async function getPayrollRecords(weekStart, weekEnd, options = {}) {
 
 // ■ Generar / actualizar Excel semanal con hoja por limpiador
 async function getHourlyPayrollRecords(weekStart, weekEnd) {
+  if (typeof postgresStatus === "undefined") return getNotionHourlyPayrollRecords(weekStart, weekEnd);
+  if (!postgresStatus.connected) throw new Error("Time Clock no disponible: revisa la conexión antes de aprobar nómina.");
+  const local = await require('./services/workClock').localClockPayroll(postgresQuery,weekStart,weekEnd);
+  let legacy = [], incomplete = false;
+  try { legacy = await getNotionHourlyPayrollRecords(weekStart,weekEnd); }
+  catch { incomplete = true; local.warnings.push("No se pudo consultar el historial de Time Clock en Notion. Se incluyen las horas confirmadas en Care OS; revisa las horas antiguas antes de aprobar."); }
+  const mirrorIds = new Set(local.mirrorIds);
+  const records = [...local,...legacy.filter(r=>!mirrorIds.has(r.id)&&!r.careClockMirror)];
+  records.warnings = local.warnings; records.incomplete = incomplete;
+  return records;
+}
+
+async function getNotionHourlyPayrollRecords(weekStart, weekEnd) {
   if (!NOTION_TIME_CLOCK_DATABASE_ID) return [];
 
   const pages = [];
@@ -2166,6 +2184,7 @@ async function getHourlyPayrollRecords(weekStart, weekEnd) {
     const hours = readCentralNumber(p, ["Hours"]) ?? (clockIn && clockOut ? Math.max(0, (new Date(clockOut) - new Date(clockIn)) / 3600000) : 0);
     const hourlyRate = readCentralNumber(p, ["Hourly Rate", "Rate"]) || 0;
     return {
+      careClockMirror: Object.values(p).some(v=>readCentralPropertyText(v).includes("CARE-CLOCK:")),
       id: page.id, employee: readCentralPropertyText(p[findPropName(p, ["Employee", "Name", "Cleaner"])]),
       code: readCentralPropertyText(p.Code), role: readCentralPropertyText(p.Role),
       clockIn, clockOut, workDate, hours, hourlyRate,
@@ -2180,7 +2199,7 @@ app.get("/api/payroll/hourly", async (req, res) => {
   try {
     const { weekStart, weekEnd } = validatePayrollRange(String(req.query.start || ""), String(req.query.end || ""));
     const records = await getHourlyPayrollRecords(weekStart, weekEnd);
-    res.json({ ok: true, records,
+    res.json({ ok: true, records, warnings: records.warnings || [], incomplete: !!records.incomplete,
       totalHours: roundMoney(records.reduce((sum, r) => sum + r.hours, 0)),
       totalPay: roundMoney(records.reduce((sum, r) => sum + r.total, 0)),
     });
@@ -3147,6 +3166,10 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     return [];
   });
 
+  if (hourlyRecords.incomplete) hourlyUnavailable = true;
+  for (const warning of (hourlyRecords.warnings || [])) warnings.push({type:"Hourly",detail:warning});
+  for (const warning of (payrollRead.warnings || [])) warnings.push({type:"Unit",detail:warning});
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = process.env.COMPANY_NAME || "Care";
   workbook.created = new Date();
@@ -3190,7 +3213,7 @@ async function generateWeeklyPayrollExcel(weekStart, weekEnd) {
     const amount = roundMoney(r.amount);
     person.unitRecords.push(r);
     person.unitTotal += amount;
-    person.roles.add("Cleaner");
+    person.roles.add(r.roleWorked || "Cleaner");
 
     if (!r.date || !r.cleaner || !r.unit) {
       warnings.push({ type: "Cleaning", employee: r.cleaner, date: r.date, detail: `Registro incompleto: ${r.unit || "sin unidad"}` });
@@ -6256,10 +6279,15 @@ app.post("/api/payroll/week/close", async (req, res) => {
     const weekStart = String(req.body.start || "").trim();
     const weekEnd = String(req.body.end || "").trim();
     validatePayrollRange(weekStart, weekEnd);
+    const actor = await workResolveUser(String(req.get('X-Care-Code') || ''));
+    if (!actor?.active || !require('./services/workSupport').manager(actor)) return res.status(403).json({ok:false,message:'Solo administración puede cerrar nómina.'});
+    const [unitRead,hourlyRead] = await Promise.all([getPayrollRecordsWithSource(weekStart,weekEnd),getHourlyPayrollRecords(weekStart,weekEnd)]);
+    const sourceSnapshot = require('./services/workSupport').payrollSnapshot(unitRead,hourlyRead);
     const week = await closePayrollWeek({
+      sourceSnapshot,
       weekStart,
       weekEnd,
-      changedBy: req.body.changedBy || "Admin",
+      changedBy: actor.name,
       reason: req.body.reason || "Payroll reviewed and approved",
     });
     io.emit("payroll-week-closed", week);
@@ -6274,10 +6302,12 @@ app.post("/api/payroll/week/reopen", async (req, res) => {
     const weekStart = String(req.body.start || "").trim();
     const weekEnd = String(req.body.end || "").trim();
     validatePayrollRange(weekStart, weekEnd);
+    const actor = await workResolveUser(String(req.get('X-Care-Code') || ''));
+    if (!actor?.active || !require('./services/workSupport').manager(actor)) return res.status(403).json({ok:false,message:'Solo administración puede reabrir nómina.'});
     const week = await reopenPayrollWeek({
       weekStart,
       weekEnd,
-      changedBy: req.body.changedBy || "Admin",
+      changedBy: actor.name,
       reason: req.body.reason,
     });
     io.emit("payroll-week-reopened", week);
@@ -6355,6 +6385,7 @@ app.get("/payroll-preview", async (req, res) => {
         return [];
       }),
     ]);
+    warnings.push(...(hourlyRecords.warnings || []),...(payrollRead.warnings || []));
     const records = payrollRead.records;
 
     const employees = new Map();
@@ -6377,7 +6408,7 @@ app.get("/payroll-preview", async (req, res) => {
       const person = ensure(record.cleaner);
       if (String(record.payType || "unit").toLowerCase() === "unit") person.units += 1;
       person.cleaningPay += Number(record.amount || 0);
-      person.roles.add("Cleaner");
+      person.roles.add(record.roleWorked || "Cleaner");
       if (record.cleaner === "Sin asignar") warnings.push(`${record.unit}: falta asignar limpiador`);
       if (String(record.payType || "unit").toLowerCase() === "unit" &&
           (!record.roomType || Number(record.amount || 0) <= 0)) {
@@ -6855,6 +6886,7 @@ app.get("/cleaner-assignments", async (req, res) => {
   }
 });
 function toNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -7140,289 +7172,7 @@ app.post("/mobile-code-login", async (req, res) => {
     });
   }
 });
-app.post("/clock-in", async (req, res) => {
-  try {
-    const code = String(req.body.code || "").trim();
-    const location = validateClockLocation(req.body);
-
-    if (!code) {
-      return res.status(400).json({
-        error: "Employee code required",
-      });
-    }
-
-    if (!location.ok) {
-      return res.status(403).json({
-        ok: false,
-        error: location.message,
-        locationStatus: location.status,
-        distanceFeet: location.distanceFeet,
-        accuracy: location.accuracy,
-      });
-    }
-
-    const employee = await findEmployeeByCode(code);
-
-    if (!employee) {
-      return res.status(404).json({
-        error: "Employee not found",
-      });
-    }
-
-    const activeClockResponse = await notion.databases.query({
-      database_id: NOTION_TIME_CLOCK_DATABASE_ID,
-      page_size: 20,
-      filter: {
-        and: [
-          { property: "Code", rich_text: { equals: code } },
-          { property: "Status", select: { equals: "Working" } },
-        ],
-      },
-    });
-
-    if ((activeClockResponse.results || []).length > 0) {
-      return res.status(409).json({
-        ok: false,
-        error: "Ya tienes un Clock In activo. Haz Clock Out antes de volver a entrar.",
-      });
-    }
-
-    const props = employee.properties;
-
-    const employeeName =
-      props.Employee?.title?.map((t) => t.plain_text).join("") || "";
-
-    const role =
-      props.Role?.select?.name || "";
-
-    const hourlyRate =
-      props["Hourly Rate"]?.number || 0;
-
-    await notion.pages.create({
-      parent: {
-        database_id: NOTION_TIME_CLOCK_DATABASE_ID,
-      },
-      properties: {
-        Entry: {
-          title: [
-            {
-              text: {
-                content: `${employeeName} Clock In - ${location.workLocation}${location.locationNote ? ` - ${location.locationNote}` : ""}`,
-              },
-            },
-          ],
-        },
-
-        Employee: {
-          rich_text: [
-            {
-              text: {
-                content: employeeName,
-              },
-            },
-          ],
-        },
-
-        Code: {
-          rich_text: [
-            {
-              text: {
-                content: code,
-              },
-            },
-          ],
-        },
-
-        Role: {
-          select: {
-            name: role,
-          },
-        },
-
-        "Hourly Rate": {
-          number: hourlyRate,
-        },
-
-        "Clock In": {
-          date: {
-            start: new Date().toISOString(),
-          },
-        },
-
-        "Clock In Lat": {
-          number: location.lat,
-        },
-
-        "Clock In Lng": {
-          number: location.lng,
-        },
-
-        "Clock In Distance": {
-          number: location.distanceFeet,
-        },
-
-        "Clock In Accuracy": {
-          number: location.accuracy,
-        },
-
-        "Location Status": {
-          select: {
-            name: location.status,
-          },
-        },
-
-        Status: {
-          select: {
-            name: "Working",
-          },
-        },
-      },
-    });
-
-    res.json({
-      ok: true,
-      message: `${employeeName} hizo Clock In en ${location.workLocation}.`,
-      locationStatus: location.status,
-      distanceFeet: location.distanceFeet,
-      accuracy: location.accuracy,
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      error: error.message,
-    });
-  }
-});
-
-app.post("/clock-out", async (req, res) => {
-  try {
-    const code = String(req.body.code || "").trim();
-    const location = validateClockLocation(req.body);
-
-    if (!code) {
-      return res.status(400).json({
-        error: "Employee code required",
-      });
-    }
-
-    if (!location.ok) {
-      return res.status(403).json({
-        ok: false,
-        error: location.message,
-        locationStatus: location.status,
-        distanceFeet: location.distanceFeet,
-        accuracy: location.accuracy,
-      });
-    }
-
-    const response = await notion.databases.query({
-      database_id: NOTION_TIME_CLOCK_DATABASE_ID,
-      page_size: 100,
-    });
-
-    const activeEntry = response.results.find((page) => {
-      const pageCode =
-        page.properties.Code?.rich_text
-          ?.map((t) => t.plain_text)
-          .join("") || "";
-
-      const status =
-        page.properties.Status?.select?.name || "";
-
-      return pageCode === code && status === "Working";
-    });
-
-    if (!activeEntry) {
-      return res.status(404).json({
-        error: "No active clock-in found",
-      });
-    }
-
-    const clockIn =
-      activeEntry.properties["Clock In"]?.date?.start;
-
-    if (!clockIn) {
-      return res.status(400).json({
-        error: "Clock In not found",
-      });
-    }
-
-    const clockOut = new Date();
-
-    const hours =
-      (clockOut.getTime() - new Date(clockIn).getTime()) /
-      (1000 * 60 * 60);
-
-    const rate =
-      activeEntry.properties["Hourly Rate"]?.number || 0;
-
-    const total = Number((hours * rate).toFixed(2));
-
-    await notion.pages.update({
-      page_id: activeEntry.id,
-      properties: {
-        "Clock Out": {
-          date: {
-            start: clockOut.toISOString(),
-          },
-        },
-
-        "Clock Out Lat": {
-          number: location.lat,
-        },
-
-        "Clock Out Lng": {
-          number: location.lng,
-        },
-
-        "Clock Out Distance": {
-          number: location.distanceFeet,
-        },
-
-        "Clock Out Accuracy": {
-          number: location.accuracy,
-        },
-
-        "Location Status": {
-          select: {
-            name: location.status,
-          },
-        },
-
-        Hours: {
-          number: Number(hours.toFixed(2)),
-        },
-
-        Total: {
-          number: total,
-        },
-
-        Status: {
-          select: {
-            name: "Completed",
-          },
-        },
-      },
-    });
-
-    res.json({
-      ok: true,
-      message: `Clock Out completado en ${location.workLocation} (${hours.toFixed(2)} hrs).`,
-      locationStatus: location.status,
-      distanceFeet: location.distanceFeet,
-      accuracy: location.accuracy,
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      error: error.message,
-    });
-  }
-});
+// Clock routes are registered below with the authenticated, durable clock service.
 app.get("/health", (req, res) => {
   res.send("OK");
 });
@@ -11114,6 +10864,19 @@ app.use("/api/directory", require("./services/clientDirectory").createDirectoryR
   resolveUser: async code => { const page=await findEmployeeByCode(code); return page ? pageToUser(page) : null; }
 }));
 
+const workResolveUser = async code => {
+  const page=await findEmployeeByCode(code);
+  return page ? {...pageToUser(page),hourlyRate:Number(page.properties?.["Hourly Rate"]?.number||0),payMode:/^(unit|per unit|piece|por unidad|attendance|asistencia)$/i.test(readCentralPropertyText(page.properties?.["Pay Type"]||page.properties?.["Tipo de pago"]))?"attendance":"hourly"} : null;
+};
+const workClockMirror = require('./services/workClockMirror').createClockMirror({notion,databaseId:NOTION_TIME_CLOCK_DATABASE_ID,query:postgresQuery,pool:getPool});
+const workClockRouter = require('./services/workClock').createClockRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,legacyActive:workClockMirror.legacyActive});
+app.use('/api/clock',workClockRouter);
+// Old bookmarks/API clients must use the same durable writer; no second Notion-only path.
+app.post('/clock-in',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/in';workClockRouter(req,res,next);});
+app.post('/clock-out',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/out';workClockRouter(req,res,next);});
+app.get('/work',(req,res)=>res.sendFile(path.join(__dirname,'public','work.html')));
+app.use('/api/work',require('./services/scopedWork').createScopedRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,listEmployees:async()=> (await getEmployeesCached()).map(pageToUser),today:todayISO,cloudinary,emit:(event,payload)=>io.emit(event,payload)}));
+
 async function startServer() {
   // Bind HTTP before external imports. A slow Notion import must not prevent the UI/health endpoint from opening.
   if (!server.listening) server.listen(PORT, () => console.log(`Panel web activo en puerto ${PORT}`));
@@ -11121,6 +10884,7 @@ async function startServer() {
   const databaseStatus = await startPostgres();
 
   if (databaseStatus.connected) {
+    workClockMirror.start();
     startSyncQueueWorker();
 
     try {

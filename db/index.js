@@ -71,6 +71,8 @@ async function initializeDatabase() {
   const directorySchema = fs.readFileSync(path.join(__dirname, "migrations", "014_client_directory.sql"), "utf8");
   await query(directorySchema);
   await require("../services/clientDirectory").backfillLegacy(getPool());
+  await query(fs.readFileSync(path.join(__dirname,"migrations","015_scoped_work.sql"),"utf8"));
+  await query(`UPDATE care_locations SET latitude=$1,longitude=$2,radius_m=$3,geofence_required=TRUE WHERE id='00000000-0000-4000-8000-000000000002' AND latitude IS NULL AND longitude IS NULL`,[Number(process.env.HOTEL_LAT||36.638366),Number(process.env.HOTEL_LNG||-93.350305),Math.max(20,Math.min(2000,Math.round(Number(process.env.HOTEL_RADIUS_FEET||300)/3.28084)))]);
   return testDatabaseConnection();
 }
 

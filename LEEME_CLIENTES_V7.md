@@ -1,3 +1,5 @@
+> Documento histórico de v7. En esta versión consulta primero **LEEME_LOCALIDADES_TIMECLOCK_V8.md**.
+
 # Care OS v7 — Clientes, localidades y unidades (base administrativa)
 
 ## Instalación

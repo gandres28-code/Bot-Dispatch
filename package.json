@@ -1,7 +1,7 @@
 {
   "name": "cleaning-panel",
   "version": "1.2.0",
-  "description": "Care housekeeping operations, payroll, reporting and HotSOS integration",
+  "description": "Care operations by client and location, durable Time Clock, payroll and housekeeping",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,7 +13,9 @@
     "test:reliability": "node test/reliability.test.js && node test/eventReliability.test.js && node test/payrollReliability.test.js",
     "verify": "node scripts/verify.js",
     "test:directory": "node test/clientDirectory.test.js",
-    "test:directory:db": "node test/clientDirectoryDb.test.js"
+    "test:directory:db": "node test/clientDirectoryDb.test.js",
+    "test:work": "node test/workClockMirror.test.js",
+    "test:work:db": "node test/scopedWorkDb.test.js"
   },
   "author": "Andres Garcia",
   "license": "ISC",

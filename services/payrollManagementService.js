@@ -324,11 +324,11 @@ async function validatePayrollWeek(weekStart, weekEnd) {
   return { valid: errors.length === 0, errors, summary };
 }
 
-async function closePayrollWeek({ weekStart, weekEnd, changedBy = 'Admin', reason = 'Payroll reviewed and approved' }) {
+async function closePayrollWeek({ weekStart, weekEnd, changedBy = 'Admin', reason = 'Payroll reviewed and approved', sourceSnapshot = null }) {
   const current = await ensurePayrollWeek(weekStart, weekEnd);
   if (current.status === 'closed') return current;
 
-  const validation = await validatePayrollWeek(weekStart, weekEnd);
+  const validation = sourceSnapshot || await validatePayrollWeek(weekStart, weekEnd);
   if (!validation.valid) throw new Error(validation.errors.join(' '));
 
   const result = await query(

@@ -14,6 +14,10 @@ function input(kind,b){
   if(v.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email))fail('Correo inválido.');
  }else if(kind==='locations'){
   v.client_id=id(b.client_id);v.address=text(b.address,500);v.instructions=text(b.instructions,2000);
+  for(const field of ['latitude','longitude']) {const n=b[field]===''||b[field]==null?null:Number(b[field]);if(n!==null&&(!Number.isFinite(n)||Math.abs(n)>(field==='latitude'?90:180)))fail('Coordenadas inválidas.');v[field]=n;}
+  v.radius_m=b.radius_m==null||b.radius_m===''?100:Number(b.radius_m);if(!Number.isInteger(v.radius_m)||v.radius_m<20||v.radius_m>2000)fail('Radio: entre 20 y 2000 metros.');
+  if(b.geofence_required!==undefined&&typeof b.geofence_required!=='boolean')fail('Geocerca inválida.');v.geofence_required=b.geofence_required===true;
+  if(v.geofence_required&&(v.latitude==null||v.longitude==null))fail('Configura coordenadas para activar la geocerca.');
  }else{
   v.location_id=id(b.location_id);v.unit_key=key(name);v.room_type=text(b.room_type,80);v.building=text(b.building,80);v.notes=text(b.notes,2000);
   for(const f of ['bedrooms','bathrooms']){const n=b[f]===''||b[f]==null?null:Number(b[f]);if(n!==null&&(!Number.isFinite(n)||n<0||n>100||(f==='bedrooms'?!Number.isInteger(n):!Number.isInteger(n*2))))fail('Recámaras y baños: entre 0 y 100; baños admite medios.');v[f]=n;}
