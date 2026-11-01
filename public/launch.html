@@ -151,23 +151,8 @@ async function fetchJson(url, options = {}){
   }
 }
 
-async function openLocationWorkIfAssigned(){
-  try{const r=await fetch('/api/work/jobs',{headers:{'X-Care-Code':localStorage.getItem('employeeCode')||''},signal:AbortSignal.timeout(5000)});if(r.ok&&(await r.json()).jobs?.length){window.location.replace('/work');return true;}}catch{}
-  return false;
-}
-async function goCleaning(){
-  if(await openLocationWorkIfAssigned())return;
-  if(currentUser && currentUser.name){
-    localStorage.setItem("cleanerName", currentUser.name);
-  }
-
-  openOS("cleaning", "/");
-}
-
-async function goInspection(){
-  if(await openLocationWorkIfAssigned())return;
-  openOS("inspection", "/inspector");
-}
+async function goCleaning(){location.href='/work';}
+async function goInspection(){location.href='/work';}
 
 function showRoleChoice(){
   document.getElementById("loginBox").style.display = "none";
@@ -201,7 +186,7 @@ function routeUser(){
   if(role === "inspector") return goInspection();
 
   if(role === "cleaner / inspector" || role === "inspector / cleaner"){
-    showRoleChoice();
+    goCleaning();
     return;
   }
 
