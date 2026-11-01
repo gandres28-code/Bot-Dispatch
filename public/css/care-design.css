@@ -216,3 +216,72 @@ body.care-ui :where(.stat,.kpi,.metric):nth-child(4){border-top-color:#3aae87}
 @media(max-width:700px){body.care-ui .home-grid{gap:12px}.home-card p{margin-bottom:18px}.home-heading{padding:14px 0}.care-day-progress{padding:18px}.care-topbar nav a{min-height:40px;display:flex;align-items:center}.care-ui .toolbar{padding:12px}body.care-ui #todayFilters{display:flex!important;flex-wrap:wrap}body.care-ui #todayFilters button{flex:1 1 auto;min-width:100px}.care-ui dialog .actions>button{flex:1 1 140px}}
 @media(prefers-reduced-motion:reduce){body.care-ui *,body.care-ui *::before,body.care-ui *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media print{body.care-ui{background:white!important}.care-day-progress{color:#182c4e;background:white;border:1px solid #dce5f3}}
+/* v12: consistent layout, vector icons, task-first hierarchy */
+:root{--care-font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.care-ui svg{width:24px;height:24px;flex-shrink:0}
+.care-ui main{min-width:0}
+.care-ui .care-home{max-width:1240px;padding:32px 28px 100px}
+.care-ui .home-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.care-ui .home-card{display:flex;flex-direction:column;text-decoration:none;padding:28px;min-width:0;--tile-color:#245bd6;--tile-soft:#eaf2ff}
+.care-ui .tone-purple{--tile-color:#7752bf;--tile-soft:#f1ebff}
+.care-ui .tone-amber{--tile-color:#a25b08;--tile-soft:#fff2da}
+.care-ui .tone-green{--tile-color:#13734f;--tile-soft:#e4f6ed}
+.care-ui .home-card .home-icon{display:grid;width:54px;height:54px;background:var(--tile-soft);color:var(--tile-color);place-items:center;border-radius:16px;margin-bottom:18px}
+.care-ui .home-icon svg{width:28px;height:28px}
+.care-ui .home-card h2{margin:0 0 8px}
+.care-ui .home-card p{margin:0 0 24px;line-height:1.6}
+.care-ui .home-go{margin-top:auto}
+.care-ui #access{font-weight:650;color:#2a578f}
+.care-ui #homeMore{margin-top:28px;padding:20px}
+.care-ui .care-quick-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.care-ui .care-quick-links a{padding:12px 16px;border:1px solid #dce5f3;border-radius:12px;text-decoration:none;background:#f7faff;font-weight:600;font-size:13px}
+.care-ui .care-search{display:grid;gap:8px;font-weight:600;max-width:640px}
+.care-ui .care-search input{padding:14px 16px;min-height:48px}
+.care-ui #resultCount{font-size:13px;color:var(--care-muted)}
+.care-ui .care-secondary>summary{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.care-ui .care-secondary>summary::after{content:"＋";font-size:20px;color:#245bd6}
+.care-ui .care-secondary[open]>summary::after{content:"−"}
+.care-ui .care-secondary h2{font-size:18px;margin-top:24px}
+.care-ui .dialog-title{position:sticky;top:-26px;z-index:2;background:white;padding:12px 0;border-bottom:1px solid #e0e7f3;gap:12px}
+.care-ui .dialog-title>button{min-width:44px;font-size:22px}
+.care-ui .report{background:#f8faff;border:1px solid #e0e7f3;border-radius:14px;padding:18px;margin:12px 0;overflow-wrap:anywhere}
+.care-ui .report button{background:#e5f6ed;color:#156e4b;border-color:#a9d9c5}
+.care-ui #history>p{background:#f8faff;border:1px solid #e0e7f3;border-radius:14px;padding:16px;font-size:14px}
+.care-ui #shiftStatus{padding:16px;border-radius:14px;background:#edf2fa;color:#425b80;font-size:20px}
+.care-ui.care-on-shift #shiftStatus{background:#e4f6ed;color:#126747}
+.care-ui .care-clock-elapsed{font-size:20px;font-weight:700;color:#245bd6;margin:12px 0}
+.care-ui .clock-actions button{padding:18px;min-height:60px;border:0}
+.care-ui .clock-actions .in{background:#13734f;color:white}
+.care-ui .clock-actions .out{background:#b83b4c;color:white}
+.care-ui .clock-actions button:disabled{background:#e4e9f1;color:#65758e;opacity:1;cursor:not-allowed}
+.care-ui .care-mobile-nav{display:none}
+.care-ui button:focus-visible,.care-ui a:focus-visible,.care-ui summary:focus-visible{outline:3px solid #5591e6!important;outline-offset:4px}
+.care-ui #detailError:not(:empty),.care-ui #formError:not(:empty),.care-ui #scheduleError:not(:empty){padding:12px;background:#fff0ed;color:#923020;border-radius:12px}
+.care-ui .job .eyebrow{letter-spacing:1px;font-size:10px;line-height:1.7}
+.care-ui .job .status{line-height:1.4}
+.care-ui #sourceStatus{font-size:12px;color:var(--care-muted)}
+.care-ui .care-mobile-nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:54px;min-width:0;text-align:center;text-decoration:none;font-size:11px;font-weight:650;color:#556985;border-radius:13px;padding:7px}
+.care-ui .care-mobile-nav a[aria-current=page]{background:#eaf2ff;color:#245bd6}
+@media(min-width:1100px){.care-ui .home-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.care-ui .home-card{min-height:268px}}
+@media(max-width:700px){
+ .care-has-mobile-nav{padding-bottom:calc(92px + env(safe-area-inset-bottom))!important}
+ .care-ui .care-mobile-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));position:fixed;z-index:1000;bottom:0;left:0;right:0;gap:6px;padding:9px 12px calc(9px + env(safe-area-inset-bottom));background:#fffffff5;backdrop-filter:blur(16px);border-top:1px solid #dce5f3;box-shadow:0 -5px 24px #142b4610}
+ .care-ui .care-home{padding:20px 16px 24px}
+ .care-ui .home-heading h1{font-size:34px!important;max-width:320px}
+ .care-ui .home-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+ .care-ui .home-card{padding:22px;min-height:0}
+ .care-ui .home-card .home-icon{width:46px;height:46px;margin-bottom:14px}
+ .care-ui .home-card p{margin-bottom:18px}
+ .care-ui .job{padding:20px}
+ .care-ui .care-quick-links a{width:100%}
+ .care-ui .dialog-title{top:-18px}
+ .care-ui .clock-actions{gap:10px}
+ .care-ui .care-topbar .care-wordmark{font-size:20px}
+ .care-ui .care-topbar nav a{font-size:11px;padding:8px}
+}
+@media print{.care-ui .care-mobile-nav{display:none!important}}
+.care-ui .care-workflow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;gap:6px;padding:0;margin:20px 0}
+.care-ui .care-workflow li{border-top:4px solid #dce5f3;padding:10px 2px;color:#62748a;font-size:12px;font-weight:650;overflow-wrap:anywhere}
+.care-ui .care-workflow li.reached{border-top-color:#3282cf;color:#245b96}
+.care-ui .care-success-note{background:#e5f6ed;color:#156e4b;padding:14px;border-radius:12px}
+.care-ui .care-request-kind{display:block;font-size:11px;font-weight:750;color:#245bd6;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
