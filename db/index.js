@@ -68,6 +68,9 @@ async function initializeDatabase() {
 
   await query(schema);
 
+  const directorySchema = fs.readFileSync(path.join(__dirname, "migrations", "014_client_directory.sql"), "utf8");
+  await query(directorySchema);
+  await require("../services/clientDirectory").backfillLegacy(getPool());
   return testDatabaseConnection();
 }
 

@@ -11107,6 +11107,13 @@ app.use("/api/control-center", require("./services/controlCenter").createControl
   emit: (event, payload) => io.emit(event, payload)
 }));
 
+// Client/location/unit directory: administrative foundation; legacy daily routes retain their scope.
+app.get("/clients", (req,res) => res.sendFile(path.join(__dirname,"public","clients.html")));
+app.use("/api/directory", require("./services/clientDirectory").createDirectoryRouter({
+  query: postgresQuery, pool: getPool,
+  resolveUser: async code => { const page=await findEmployeeByCode(code); return page ? pageToUser(page) : null; }
+}));
+
 async function startServer() {
   // Bind HTTP before external imports. A slow Notion import must not prevent the UI/health endpoint from opening.
   if (!server.listening) server.listen(PORT, () => console.log(`Panel web activo en puerto ${PORT}`));

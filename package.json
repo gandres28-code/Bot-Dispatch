@@ -11,7 +11,9 @@
     "test:payroll": "node test/payroll.test.js && node test/payrollExcel.test.js",
     "test:control": "node test/controlCenter.test.js",
     "test:reliability": "node test/reliability.test.js && node test/eventReliability.test.js && node test/payrollReliability.test.js",
-    "verify": "node scripts/verify.js"
+    "verify": "node scripts/verify.js",
+    "test:directory": "node test/clientDirectory.test.js",
+    "test:directory:db": "node test/clientDirectoryDb.test.js"
   },
   "author": "Andres Garcia",
   "license": "ISC",

@@ -230,6 +230,13 @@ async function upsertRoom(room) {
     ]
   );
 
+  // Never merge two independently identified Notion services by room number alone.
+  if (matches.rows.some(row => notionId && row.notion_id && row.notion_id !== notionId)) {
+    throw new Error("Dos registros de Notion comparten fecha y unidad. Revisa la localidad antes de sincronizar; no se eliminó ningún registro.");
+  }
+  if (!matches.rows.length && require('./clientDirectory').legacyLocation([{room_number:room.roomNumber,raw_data:room.rawData}]) === null) {
+    throw new Error("Localidad externa pendiente de activar. Registra su unidad en Clientes y localidades; la operación diaria conserva el alcance actual.");
+  }
   let target = matches.rows[0] || null;
   const duplicateRows = target
     ? matches.rows.filter(
@@ -573,6 +580,8 @@ async function syncRoomsFromNotion({
         });
       }
     }
+
+    await require("./clientDirectory").backfillLegacy(require("../db").getPool());
 
     await query(
       `
