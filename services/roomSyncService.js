@@ -1,18 +1,6 @@
 const { query } = require("../db");
 
-function normalizeRoomValue(value) {
-  const text = String(value || "").toUpperCase().trim();
-  const match = text.match(/(\d{2,4})\s*([A-Z])?/);
-
-  if (!match) {
-    return text
-      .replace(/\s+/g, " ")
-      .replace(/[^A-Z0-9]/g, "")
-      .trim();
-  }
-
-  return `${match[1]}${match[2] || ""}`;
-}
+const {normalizeRoomValue}=require('./roomIdentity');
 
 function readTextProperty(property) {
   if (!property) return "";
@@ -480,6 +468,7 @@ async function syncRoomsFromNotion({
   databaseId,
   queryDatabase,
   date,
+  skipPage = () => false,
 }) {
   if (!databaseId) {
     throw new Error("Falta NOTION_DATABASE_ID");
@@ -548,6 +537,7 @@ async function syncRoomsFromNotion({
     const errors = [];
 
     for (const page of pages) {
+      if(skipPage(page)){skipped++;continue;}
       const room = getRoomFromNotionPage(page, date);
 
       try {

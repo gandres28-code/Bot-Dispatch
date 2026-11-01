@@ -55,7 +55,7 @@ async function backfillLegacy(pool){return transaction(pool,async c=>{
   await c.query('UPDATE rooms SET care_unit_id=$1 WHERE id=ANY($2::bigint[]) AND care_unit_id IS NULL',[unit.id,items.map(x=>x.id)]);
  }return {linked:rows.length};
 });}
-function createDirectoryRouter({pool,query,resolveUser}){
+function createDirectoryRouter({pool,query,resolveUser,sourceMode="app"}){
  const router=express.Router(),attempts=new Map();
  router.use(async(req,res,next)=>{
   res.set('Cache-Control','no-store');const now=Date.now();for(const [k,v]of attempts)if(v.until<now)attempts.delete(k);
@@ -64,13 +64,13 @@ function createDirectoryRouter({pool,query,resolveUser}){
    const code=String(req.get('X-Care-Code')||'').trim(),user=code&&code.length<=120?await resolveUser(code):null;
    if(!user?.active){const a=attempts.get(req.ip)||{count:0,until:now+60000};a.count++;attempts.set(req.ip,a);return res.status(401).json({ok:false,error:'Inicia sesión con tu código activo.'});}
    if(!canManage(user))return res.status(403).json({ok:false,error:'Solo administración puede gestionar clientes y localidades.'});
-   req.careUser=user;next();
+   if(sourceMode==='notion'&&!['GET','HEAD'].includes(req.method))return res.status(409).json({ok:false,error:'El catálogo se administra en Notion.'});req.careUser=user;next();
   }catch{res.status(503).json({ok:false,error:'No se pudo verificar el acceso.'});}
  });
  const route=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){if(!e.status)console.error('DIRECTORY:',e.message);const conflict=['23505','23503','23514'].includes(e.code);res.status(e.status||(conflict?409:503)).json({ok:false,error:e.status?e.message:conflict?'Registro duplicado o relación inválida. Revisa los datos.':'No se pudo completar la operación. Actualiza y vuelve a intentar.'});}};
  router.get('/',route(async(req,res)=>{
   const [clients,locations,units]=await Promise.all(['clients','locations','units'].map(k=>query(`SELECT * FROM care_${k} ORDER BY name,id`)));
-  res.json({ok:true,clients:clients.rows,locations:locations.rows,units:units.rows,scope:'directory',defaultLocationId:DEFAULT_LOCATION});
+  res.json({ok:true,sourceMode,clients:clients.rows,locations:locations.rows,units:units.rows,scope:'directory',defaultLocationId:DEFAULT_LOCATION});
  }));
  router.post('/review-legacy',route(async(req,res)=>res.json({ok:true,...await backfillLegacy(pool())})));
  for(const kind of ['clients','locations','units']){

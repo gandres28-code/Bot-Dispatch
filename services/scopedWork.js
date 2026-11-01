@@ -8,32 +8,37 @@ function checklist(value,type){const defs=type==='deep'?deep:regular,na=value?.n
  const all=[...checked,...na.map(x=>x.id)];if(all.length!==defs.items.length||new Set(all).size!==all.length||!defs.items.every(x=>all.includes(x.id)))S.fail('Completa todos los puntos del checklist.');
  return{version:defs.version,checked,notApplicable:na,items:defs.items,recordedAt:new Date().toISOString()};
 }
-function paymentRows(rows){return rows.filter(j=>j.finished_at&&j.status!=='cancelled').flatMap(j=>{
- const date=S.dateKey(j.work_date),base={date,workDate:date,unit:j.unit_name,unitId:j.unit_id,locationId:j.location_id,clientId:j.client_id,propertyName:`${j.client_name} / ${j.location_name}`,roomType:j.room_type,source:'care-work',payType:'unit',serviceId:j.id};
- const payments=[];const ids=j.cleaner_ids,names=j.cleaner_names,n=ids.length,total=j.cleaner_pay_cents;
- if(total!=null)ids.forEach((id,i)=>payments.push({...base,id:`care-work:${j.id}:cleaner:${id}`,cleaner:names[i],employee:names[i],employeeId:id,roleWorked:'Cleaner',amount:(Math.floor(total/n)+(i<total%n?1:0))/100}));
- if(j.ready_at&&j.inspector_id&&j.inspector_pay_cents!=null)payments.push({...base,id:`care-work:${j.id}:inspector:${j.inspector_id}`,cleaner:j.inspector_name,employee:j.inspector_name,employeeId:j.inspector_id,roleWorked:'Inspector',payType:'inspection',amount:j.inspector_pay_cents/100});return payments;
+function paymentRows(rows){return rows.filter(j=>j.status!=='cancelled').flatMap(j=>{
+ const date=S.dateKey(j.work_date),base={date,workDate:date,unit:j.unit_name,unitId:j.unit_id,locationId:j.location_id,clientId:j.client_id,propertyName:`${j.client_name} / ${j.location_name}`,roomType:j.room_type,source:'care-work',payType:'unit',serviceId:j.id},payments=[];
+ const complete=j.finished_at||['awaiting_inspection','inspecting','ready'].includes(j.status),ids=j.cleaner_ids,names=j.cleaner_names,n=ids.length,total=j.cleaner_pay_cents;
+ if(complete&&total!=null)ids.forEach((id,i)=>payments.push({...base,id:`care-work:${j.id}:cleaner:${id}`,cleaner:names[i],employee:names[i],employeeId:id,roleWorked:'Cleaner',amount:(j.pay_split_mode==='full_each'?total:Math.floor(total/n)+(i<total%n?1:0))/100}));
+ if((j.ready_at||j.status==='ready')&&j.inspector_id&&j.inspector_pay_cents!=null)payments.push({...base,id:`care-work:${j.id}:inspector:${j.inspector_id}`,cleaner:j.inspector_name,employee:j.inspector_name,employeeId:j.inspector_id,roleWorked:'Inspector',payType:'inspection',amount:j.inspector_pay_cents/100});
+ if(j.pre_inspection&&j.inspector_id&&j.pre_inspection_pay_cents!=null)payments.push({...base,id:`care-work:${j.id}:pre:${j.inspector_id}`,cleaner:j.inspector_name,employee:j.inspector_name,employeeId:j.inspector_id,roleWorked:'Pre-inspection',payType:'inspection',amount:j.pre_inspection_pay_cents/100});return payments;
 });}
 const joins=`FROM care_work_jobs j JOIN care_units u ON u.id=j.unit_id JOIN care_locations l ON l.id=u.location_id JOIN care_clients c ON c.id=l.client_id`;
 const selection=`j.*,u.name AS unit_name,u.room_type,l.id AS location_id,l.name AS location_name,l.address,l.instructions AS access_instructions,c.id AS client_id,c.name AS client_name`;
-async function payroll(query,start,end){const r=await query(`SELECT ${selection} ${joins} WHERE j.work_date BETWEEN $1::date AND $2::date`,[start,end]);const records=paymentRows(r.rows);records.warnings=r.rows.filter(j=>j.finished_at&&j.status!=='cancelled'&&(j.cleaner_pay_cents==null||(j.ready_at&&j.inspector_id&&j.inspector_pay_cents==null))).map(j=>`${j.client_name} / ${j.location_name} / ${j.unit_name}: falta definir pago.`);return records;}
-function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudinary,emit=()=>{}}){
+async function payroll(query,start,end){const r=await query(`SELECT ${selection} ${joins} WHERE j.work_date BETWEEN $1::date AND $2::date`,[start,end]);const records=paymentRows(r.rows);records.warnings=r.rows.filter(j=>j.status!=='cancelled'&&(((j.finished_at||['awaiting_inspection','inspecting','ready'].includes(j.status))&&j.cleaner_pay_cents==null)||((j.ready_at||j.status==='ready')&&j.inspector_id&&j.inspector_pay_cents==null)||(j.pre_inspection&&j.inspector_id&&j.pre_inspection_pay_cents==null)||j.needs_review)).map(j=>`${j.client_name} / ${j.location_name} / ${j.unit_name}: ${j.needs_review?'asignación pendiente de revisión.':'falta definir pago.'}`);return records;}
+function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudinary,emit=()=>{},sourceMode='app',notionSource=null,onChanged=()=>{}}){
  const router=express.Router();router.use(S.middleware(resolveUser));
  const mustManage=req=>{if(!S.manager(req.workUser))S.fail('Solo administración.',403);};
  async function getJob(id,user,c={query}){const j=(await c.query(`SELECT ${selection} ${joins} WHERE j.id=$1`,[S.uuid(id)])).rows[0];if(!j||!own(j,user))S.fail('Servicio no encontrado.',404);return j;}
- const safe=(j,u)=>{if(S.manager(u))return j;const {cleaner_pay_cents,inspector_pay_cents,sale_cents,rate_snapshot,applied_rate_id,...rest}=j;return rest;};
+ const safe=(j,u)=>{const syncPending=Number(j.notion_state_version)>Number(j.notion_mirrored_version);if(S.manager(u))return{...j,syncPending};const {cleaner_pay_cents,inspector_pay_cents,pre_inspection_pay_cents,sale_cents,rate_snapshot,applied_rate_id,notion_snapshot,notion_mirror_error,...rest}=j;return{...rest,syncPending};};
+ async function syncState(date,user){if(!notionSource)return null;const state=(await query('SELECT * FROM care_notion_sync WHERE work_date=$1',[date])).rows[0]||null;if(!state)return{pending:true};return S.manager(user)?state:{last_success_at:state.last_success_at,hasErrors:!!state.error_message||!!state.errors?.length};}
+ async function refresh(date,force,user){if(!notionSource||(!S.manager(user)&&date!==today()))return;const state=(await query('SELECT * FROM care_notion_sync WHERE work_date=$1',[date])).rows[0];if(force||!state?.last_success_at)await notionSource.syncDate(date,{force}).catch(()=>{});else setImmediate(()=>notionSource.syncDate(date).catch(()=>{}));}
+ const notionLink=id=>/^[a-f0-9]{32}$/i.test(String(id||'').replace(/-/g,''))?'https://www.notion.so/'+String(id).replace(/-/g,''):null;
+
  async function audit(c,req,action,id,detail){await c.query('INSERT INTO care_directory_audit(actor,action,entity_id,detail) VALUES($1,$2,$3,$4::jsonb)',[req.workUser.name,action,id,JSON.stringify(detail)]);}
  router.get('/bootstrap',S.route(async(req,res)=>{
   const user=req.workUser,manage=S.manager(user);let units=[],employees=[];
   if(manage){units=(await query('SELECT u.*,l.name AS location_name,l.client_id,c.name AS client_name FROM care_units u JOIN care_locations l ON l.id=u.location_id JOIN care_clients c ON c.id=l.client_id WHERE u.active AND l.active AND c.active AND NOT u.review_required ORDER BY c.name,l.name,u.name')).rows;employees=(await listEmployees()).filter(u=>u.active).map(u=>({id:u.id,name:u.name,role:u.role}));}
-  res.json({ok:true,today:today(),user:{id:user.id,name:user.name,role:user.role,language:user.language},canManage:manage,canFulfill:fulfiller(user),units,employees,checklists:{regular,deep}});
+  res.json({ok:true,sourceMode,notionUrl:notionLink(notionSource?.databaseId),today:today(),user:{id:user.id,name:user.name,role:user.role,language:user.language},canManage:manage,canFulfill:fulfiller(user),units,employees,checklists:{regular,deep}});
  }));
  router.get('/jobs',S.route(async(req,res)=>{
-  const date=S.day(req.query.date||today()),p=[date],condition=S.manager(req.workUser)?'':` AND (j.cleaner_ids ? $2 OR j.inspector_id=$2)`;if(condition)p.push(req.workUser.id);
-  const rows=(await query(`SELECT ${selection} ${joins} WHERE j.work_date=$1::date ${condition} ORDER BY c.name,l.name,u.name`,p)).rows;res.json({ok:true,jobs:rows.map(j=>safe(j,req.workUser))});
+  const date=S.day(req.query.date||today());await refresh(date,req.query.refresh==='1',req.workUser);const p=[date],condition=S.manager(req.workUser)?'':` AND (j.cleaner_ids ? $2 OR j.inspector_id=$2)`;if(condition)p.push(req.workUser.id);
+  const rows=(await query(`SELECT ${selection},(SELECT COUNT(*)::int FROM care_work_reports r WHERE r.job_id=j.id AND r.status='open' AND r.kind='issue') AS open_issue_count ${joins} WHERE j.work_date=$1::date ${condition} ORDER BY c.name,l.name,u.name`,p)).rows;res.json({ok:true,jobs:rows.map(j=>safe(j,req.workUser)),source:await syncState(date,req.workUser)});
  }));
  router.post('/jobs',S.route(async(req,res)=>{
-  mustManage(req);const b=req.body,id=S.uuid(b.id),unitId=S.uuid(b.unitId),date=S.day(b.date),type=b.serviceType;
+  mustManage(req);if(sourceMode==='notion')S.fail('Las asignaciones se preparan en Notion. Actualiza Mi trabajo para verlas.',409);const b=req.body,id=S.uuid(b.id),unitId=S.uuid(b.unitId),date=S.day(b.date),type=b.serviceType;
   if(!['regular','deep','touch_up'].includes(type))S.fail('Tipo de servicio inválido.');
   if(!Array.isArray(b.cleanerIds)||!b.cleanerIds.length||b.cleanerIds.length>10||new Set(b.cleanerIds).size!==b.cleanerIds.length)S.fail('Asigna entre 1 y 10 cleaners distintos.');
   const employees=(await listEmployees()).filter(e=>e.active),cleaners=b.cleanerIds.map(id=>employees.find(e=>e.id===id)),insp=b.inspectorId?employees.find(e=>e.id===b.inspectorId):null;
@@ -61,7 +66,7 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
   });res.status(201).json({ok:true,job});emit('care-work:updated',{date});
  }));
  router.patch('/jobs/:id/pay',S.route(async(req,res)=>{
-  mustManage(req);const note=S.text(req.body.note);if(!note)S.fail('Escribe el motivo del ajuste.');
+  mustManage(req);if(sourceMode==='notion')S.fail('Los importes se administran en Notion; los trabajos terminados conservan su historial.',409);const note=S.text(req.body.note);if(!note)S.fail('Escribe el motivo del ajuste.');
   const amount=v=>{if(v==null)return null;if(typeof v!=='number'||!Number.isFinite(v)||v<0||v>100000||Math.abs(v*100-Math.round(v*100))>0.00001)S.fail('Pago inválido.');return Math.round(v*100);};
   const cp=amount(req.body.cleanerPay),ip=amount(req.body.inspectorPay),job=await S.transaction(pool(),async c=>{
    await c.query('SELECT id FROM care_work_jobs WHERE id=$1 FOR UPDATE',[S.uuid(req.params.id)]);const old=await getJob(req.params.id,req.workUser,c);
@@ -79,18 +84,24 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
  }));
  router.post('/jobs/:id/action',S.route(async(req,res)=>{
   const jobId=S.uuid(req.params.id),request=S.uuid(req.body.requestId),action=req.body.action,user=req.workUser;
-  if(!['START','DONE','INSPECTION_START','READY_GUEST','CANCEL','REWORK'].includes(action))S.fail('Acción inválida.');
+  if(!['START','DONE','INSPECTION_START','READY_GUEST','CANCEL','REWORK','PRE_INSPECTION_START','PRE_INSPECTION_COMPLETE'].includes(action))S.fail('Acción inválida.');
   const result=await S.transaction(pool(),async c=>{
    await c.query('SELECT id FROM care_work_jobs WHERE id=$1 FOR UPDATE',[jobId]);const job=await getJob(jobId,user,c);
    const previous=(await c.query('SELECT * FROM care_work_events WHERE request_id=$1',[request])).rows[0];
    if(previous){if(previous.job_id!==jobId||previous.actor_id!==user.id||previous.action!==action)S.fail('Identificador usado en otra acción.',409);return{job,duplicate:true};}
+   if(job.needs_review)S.fail('La asignación necesita revisión en Notion antes de continuar.',409);
+   if(sourceMode==='notion'&&action==='CANCEL')S.fail('La cancelación se administra en Notion.',409);
    if(S.dateKey(job.work_date)!==today()&&!['CANCEL','REWORK'].includes(action))S.fail('Este servicio pertenece a otro día. Revisa la fecha con administración.',409);
    if(!Number.isInteger(req.body.version)||req.body.version!==job.version)S.fail('El servicio cambió. Actualiza antes de continuar.',409);
    if(['START','DONE'].includes(action)&&!job.cleaner_ids.includes(user.id))S.fail('Solo el cleaner asignado puede completar esta acción.',403);
-   if(['INSPECTION_START','READY_GUEST','REWORK'].includes(action)&&(!S.inspector(user)||(!S.manager(user)&&job.inspector_id!==user.id)))S.fail('Solo el inspector asignado o administración.',403);
+   if(['INSPECTION_START','READY_GUEST','REWORK','PRE_INSPECTION_START','PRE_INSPECTION_COMPLETE'].includes(action)&&(!S.inspector(user)||(!S.manager(user)&&job.inspector_id!==user.id)))S.fail('Solo el inspector asignado o administración.',403);
    if(action==='CANCEL'&&!S.manager(user))S.fail('Solo administración.',403);
    const transitions={START:['pending','cleaning','started_at'],DONE:['cleaning','awaiting_inspection','finished_at'],INSPECTION_START:['awaiting_inspection','inspecting','inspection_started_at'],READY_GUEST:['inspecting','ready','ready_at']};
-   let next,payload={};if(transitions[action]){const [from,to,stamp]=transitions[action];if(job.status!==from)S.fail('El estado actual no permite esta acción.',409);next=to;
+   let next,payload={};if(action.startsWith('PRE_INSPECTION_')){
+    if(['ready','cancelled'].includes(job.status)||!job.pre_inspection_required||!job.guest_out||job.pre_inspection)S.fail('La revisión inicial no está pendiente o falta confirmar Guest Out.',409);
+    if(action==='PRE_INSPECTION_START'){if(job.pre_inspection_started_at)S.fail('La revisión inicial ya comenzó.',409);await c.query('UPDATE care_work_jobs SET pre_inspection_started_at=NOW(),version=version+1,updated_at=NOW() WHERE id=$1',[job.id]);}
+    else{if(!job.pre_inspection_started_at)S.fail('Primero comienza la revisión inicial.',409);await c.query('UPDATE care_work_jobs SET pre_inspection=TRUE,pre_inspection_completed_at=NOW(),version=version+1,updated_at=NOW() WHERE id=$1',[job.id]);}
+   }else if(transitions[action]){const [from,to,stamp]=transitions[action];if(job.status!==from)S.fail('El estado actual no permite esta acción.',409);next=to;
     if(action==='DONE')payload.checklist=checklist(req.body.checklist,job.service_type);
     if(action==='READY_GUEST'&&(await c.query("SELECT 1 FROM care_work_reports WHERE job_id=$1 AND kind='issue' AND status='open' LIMIT 1",[job.id])).rows.length)S.fail('Resuelve los problemas abiertos antes de entregar la unidad.',409);
     await c.query(`UPDATE care_work_jobs SET status=$1,${stamp}=NOW(),version=version+1,updated_at=NOW()${action==='DONE'?',checklist=$3::jsonb':''} WHERE id=$2`,action==='DONE'?[next,job.id,JSON.stringify(payload.checklist)]:[next,job.id]);
@@ -100,8 +111,9 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
     else{if(!['inspecting','awaiting_inspection'].includes(job.status))S.fail('Solo se devuelve una unidad pendiente de aprobación.',409);next='cleaning';await c.query("UPDATE care_work_jobs SET status='cleaning',finished_at=NULL,inspection_started_at=NULL,checklist=NULL,version=version+1,updated_at=NOW() WHERE id=$1",[job.id]);}
    }
    await c.query('INSERT INTO care_work_events(request_id,job_id,action,actor_id,actor,payload) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[request,job.id,action,user.id,user.name,JSON.stringify(payload)]);
+   if(job.notion_page_id)await c.query('UPDATE care_work_jobs SET notion_state_version=notion_state_version+1,notion_next_retry_at=NOW() WHERE id=$1',[job.id]);
    return{job:await getJob(job.id,user,c),duplicate:false};
-  });res.json({ok:true,...result,job:safe(result.job,user)});emit('care-work:updated',{});
+  });res.json({ok:true,...result,job:safe(result.job,user)});emit('care-work:updated',{});setImmediate(()=>Promise.resolve(onChanged()).catch(()=>{}));
  }));
  router.post('/jobs/:id/reports',S.route(async(req,res)=>{
   const job=await getJob(req.params.id,req.workUser),id=S.uuid(req.body.id),kind=req.body.kind,note=S.text(req.body.note);if(!['issue','supplies'].includes(kind)||!note)S.fail('Selecciona el tipo y escribe el reporte.');
@@ -109,8 +121,9 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
    await c.query('SELECT id FROM care_work_jobs WHERE id=$1 FOR UPDATE',[job.id]);
    const existing=(await c.query('SELECT * FROM care_work_reports WHERE id=$1',[id])).rows[0];if(existing){if(existing.job_id!==job.id||existing.actor_id!==req.workUser.id||existing.kind!==kind||existing.note!==note)S.fail('Identificador de otro reporte.',409);return existing;}
    const current=await getJob(job.id,req.workUser,c);if(['ready','cancelled'].includes(current.status))S.fail('El servicio está cerrado. Solicita un servicio nuevo a administración.',409);
-   return(await c.query('INSERT INTO care_work_reports(id,job_id,kind,note,actor_id,actor) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',[id,job.id,kind,note,req.workUser.id,req.workUser.name])).rows[0];
-  });res.status(201).json({ok:true,report:row});
+   const saved=(await c.query('INSERT INTO care_work_reports(id,job_id,kind,note,actor_id,actor) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',[id,job.id,kind,note,req.workUser.id,req.workUser.name])).rows[0];
+   await c.query('INSERT INTO care_work_events(request_id,job_id,action,actor_id,actor,payload) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[id,job.id,kind==='issue'?'ISSUE':'SUPPLIES',req.workUser.id,req.workUser.name,JSON.stringify({note})]);return saved;
+  });res.status(201).json({ok:true,report:row});setImmediate(()=>Promise.resolve(onChanged()).catch(()=>{}));
  }));
  router.get('/reports',S.route(async(req,res)=>{
   if(!fulfiller(req.workUser))S.fail('Solo operaciones o runner.',403);

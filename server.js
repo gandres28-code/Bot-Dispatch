@@ -501,6 +501,11 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.get(['/index.html','/inspector.html'],(req,res)=>res.redirect('/work'));
+app.get('/rates.html',(req,res)=>res.redirect('/rates'));
+app.get('/app.html',(req,res)=>res.redirect('/app'));
+app.post(['/action','/inspector-action'],(req,res)=>res.status(409).json({ok:false,error:'Abre Mi trabajo para continuar con la versión actual.'}));
+app.patch('/api/admin/rooms/:id',(req,res)=>res.status(409).json({ok:false,error:'Prepara las asignaciones en Notion.'}));
 app.use(express.static("public", { maxAge: process.env.NODE_ENV === "production" ? "1h" : 0, etag: true, setHeaders(res, filePath) { if (/\.(html|js|css)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache"); } }));
 
 // Diagnóstico seguro de PostgreSQL. No expone DATABASENEW_URL.
@@ -956,7 +961,7 @@ app.get("/launch", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "launch.html"));
 });
 app.get("/app", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "app.html"));
+  res.sendFile(path.join(__dirname, "public", "home.html"));
  }); 
 app.get("/employee-center", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "employee-center.html"));
@@ -968,11 +973,11 @@ app.get("/payroll", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "payroll.html"));
 });
 app.get("/", (req, res) => {
-res.sendFile(__dirname + "/public/index.html");
+res.redirect('/work');
 });
 // ■ Página inspectores
 app.get("/inspector", (req, res) => {
-res.sendFile(__dirname + "/public/inspector.html");
+res.redirect('/work');
 });
 app.get("/still-waters-quality", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "still-waters-quality.html"));
@@ -1381,7 +1386,7 @@ async function queryRoomsByDate(date, forceRefresh = false) {
         return legacyCached;
       }
 
-      const pages = await fetchRoomsFreshFromNotion(date);
+      const pages = (await fetchRoomsFreshFromNotion(date)).filter(require("./services/notionWorkValues").defaultHotel);
 
       setCache(legacyCacheKey, pages, ttlMs);
       ServerCache.set("rooms", date, pages);
@@ -2109,7 +2114,11 @@ async function getPayrollRecordsWithSource(
   { source = "central", allowFallback = false } = {}
 ) {
   validatePayrollRange(weekStart, weekEnd);
-  const records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
+  let records = await getPayrollRecordsFromNotion(weekStart, weekEnd);
+  if (postgresStatus.connected) {
+    const managed=await postgresQuery('SELECT notion_page_id,work_date FROM care_work_jobs WHERE notion_page_id IS NOT NULL AND work_date BETWEEN $1::date AND $2::date',[weekStart,weekEnd]);
+    records=require('./services/notionWorkValues').excludeManagedNotion(records,managed.rows);
+  }
   if (postgresStatus.connected) {
     const manualRecords = await listManualPayrollEntries(weekStart, weekEnd);
     records.push(...manualRecords.map((record) => ({
@@ -2132,6 +2141,8 @@ async function getPayrollRecordsWithSource(
   if (postgresStatus.connected) {
     const scoped = await require('./services/scopedWork').payroll(postgresQuery,weekStart,weekEnd);
     records.push(...scoped); workWarnings = scoped.warnings || [];
+    const syncIssues=await postgresQuery("SELECT work_date,error_message,errors FROM care_notion_sync WHERE work_date BETWEEN $1::date AND $2::date AND (error_message<>'' OR jsonb_array_length(errors)>0)",[weekStart,weekEnd]);
+    workWarnings.push(...syncIssues.rows.map(row=>'Notion '+require('./services/workSupport').dateKey(row.work_date)+': hay asignaciones pendientes de sincronizar o revisar.'));
   }
   return {
     records, warnings: workWarnings,
@@ -2468,7 +2479,9 @@ async function runRoomSync(reason = "manual", date = todayISO()) {
   roomSyncRunning = true;
 
   try {
+    await notionWorkSource.syncDate(date,{force:reason==='manual'}).catch(error=>console.error('Asignaciones Notion:',error.message));
     const result = await syncRoomsFromNotion({
+      skipPage: page=>!require('./services/notionWorkValues').defaultHotel(page),
       notion,
       databaseId: NOTION_DATABASE_ID,
       queryDatabase: (body) => notion.databases.query(body),
@@ -8216,7 +8229,7 @@ async function checkNotionAssignmentChanges() {
 
   try {
     const date = todayISO();
-    const pages = await fetchRoomsFreshFromNotion(date);
+    const pages = (await fetchRoomsFreshFromNotion(date)).filter(require("./services/notionWorkValues").defaultHotel);
     const nextSnapshot = buildAssignmentSnapshot(pages);
 
     if (!notionWatcherSnapshot) {
@@ -10851,7 +10864,7 @@ app.patch("/api/admin/rooms/:id", async (req, res) => {
 // Care Control Center: server-verified access, shared PostgreSQL records, audit trail.
 app.get("/control-center", (req, res) => res.sendFile(path.join(__dirname,"public","control-center.html")));
 app.use("/api/control-center", require("./services/controlCenter").createControlRouter({
-  query: postgresQuery, pool: getPool,
+  query: postgresQuery, pool: getPool, sourceMode:'notion',
   resolveUser: async code => { const page = await findEmployeeByCode(code); return page ? pageToUser(page) : null; },
   listRooms: listDataApiRooms, listEmployees: listDataApiEmployees, today: todayISO,
   emit: (event, payload) => io.emit(event, payload)
@@ -10860,7 +10873,7 @@ app.use("/api/control-center", require("./services/controlCenter").createControl
 // Client/location/unit directory: administrative foundation; legacy daily routes retain their scope.
 app.get("/clients", (req,res) => res.sendFile(path.join(__dirname,"public","clients.html")));
 app.use("/api/directory", require("./services/clientDirectory").createDirectoryRouter({
-  query: postgresQuery, pool: getPool,
+  query: postgresQuery, pool: getPool, sourceMode:'notion',
   resolveUser: async code => { const page=await findEmployeeByCode(code); return page ? pageToUser(page) : null; }
 }));
 
@@ -10868,6 +10881,8 @@ const workResolveUser = async code => {
   const page=await findEmployeeByCode(code);
   return page ? {...pageToUser(page),hourlyRate:Number(page.properties?.["Hourly Rate"]?.number||0),payMode:/^(unit|per unit|piece|por unidad|attendance|asistencia)$/i.test(readCentralPropertyText(page.properties?.["Pay Type"]||page.properties?.["Tipo de pago"]))?"attendance":"hourly"} : null;
 };
+const notionWorkSource=require('./services/notionWorkSource').createNotionWorkSource({notion,databaseId:NOTION_DATABASE_ID,rateDatabaseId:process.env.NOTION_RATES_DATABASE_ID||'',logDatabaseId:NOTION_LOG_DATABASE_ID,query:postgresQuery,pool:getPool,listEmployees:async()=>(await getEmployeesCached()).map(pageToUser),today:todayISO,legacyPay:({unit,roomType})=>{const pay=getUnitPay(unit);const amount=pay.error?ROOM_RATES[roomType]:pay.amount;return Number.isFinite(amount)?Math.round(amount*100):null;},emit:(e,p)=>io.emit(e,p)});
+const notionWorkMirror=require('./services/notionWorkMirror').createNotionWorkMirror(notionWorkSource);
 const workClockMirror = require('./services/workClockMirror').createClockMirror({notion,databaseId:NOTION_TIME_CLOCK_DATABASE_ID,query:postgresQuery,pool:getPool});
 const workClockRouter = require('./services/workClock').createClockRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,legacyActive:workClockMirror.legacyActive,listEmployees:async()=>(await getEmployeesCached()).map(pageToUser)});
 app.use('/api/clock',workClockRouter);
@@ -10875,10 +10890,10 @@ app.post('/api/payroll/hourly/manual',(req,res,next)=>{req.url='/manual';workClo
 // Old bookmarks/API clients must use the same durable writer; no second Notion-only path.
 app.post('/clock-in',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/in';workClockRouter(req,res,next);});
 app.post('/clock-out',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/out';workClockRouter(req,res,next);});
-app.get('/rates',(req,res)=>res.sendFile(path.join(__dirname,'public','rates.html')));
-app.use('/api/rates',require('./services/serviceRates').createRatesRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser}));
+app.get('/rates',(req,res)=>res.sendFile(path.join(__dirname,'public','notion-rates.html')));
+app.use('/api/rates',require('./services/serviceRates').createRatesRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,sourceMode:'notion'}));
 app.get('/work',(req,res)=>res.sendFile(path.join(__dirname,'public','work.html')));
-app.use('/api/work',require('./services/scopedWork').createScopedRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,listEmployees:async()=> (await getEmployeesCached()).map(pageToUser),today:todayISO,cloudinary,emit:(event,payload)=>io.emit(event,payload)}));
+app.use('/api/work',require('./services/scopedWork').createScopedRouter({sourceMode:'notion',notionSource:notionWorkSource,onChanged:()=>notionWorkMirror.flush(),query:postgresQuery,pool:getPool,resolveUser:workResolveUser,listEmployees:async()=> (await getEmployeesCached()).map(pageToUser),today:todayISO,cloudinary,emit:(event,payload)=>io.emit(event,payload)}));
 
 async function startServer() {
   // Bind HTTP before external imports. A slow Notion import must not prevent the UI/health endpoint from opening.
@@ -10888,6 +10903,7 @@ async function startServer() {
 
   if (databaseStatus.connected) {
     workClockMirror.start();
+    notionWorkMirror.start();
     startSyncQueueWorker();
 
     try {

@@ -7,8 +7,8 @@ async function quote(query,unitId,date,type){
  const rate=(await query(`SELECT * FROM care_service_rates WHERE active AND location_id=$1 AND (unit_id=$2 OR unit_id IS NULL AND (room_type='' OR room_type=$5)) AND service_type=$3 AND effective_from<=$4::date AND (effective_to IS NULL OR effective_to>=$4::date) ORDER BY (unit_id IS NOT NULL) DESC,(room_type<>'') DESC,effective_from DESC,id LIMIT 1`,[unit.location_id,unit.id,type,S.day(date),roomType(unit.room_type)])).rows[0]||null;
  return rate?{id:rate.id,version:rate.version,salePrice:rate.sale_cents/100,cleanerPay:rate.cleaner_pay_cents/100,inspectorPay:rate.inspector_pay_cents/100,unitSpecific:!!rate.unit_id,roomType:rate.room_type,effectiveFrom:S.dateKey(rate.effective_from)}:null;
 }
-function createRatesRouter({query,pool,resolveUser}){
- const router=express.Router();router.use(S.middleware(resolveUser));router.use((req,res,next)=>{if(!S.manager(req.workUser))return res.status(403).json({ok:false,error:'Solo administración puede gestionar tarifas.'});next();});
+function createRatesRouter({query,pool,resolveUser,sourceMode="app"}){
+ const router=express.Router();router.use(S.middleware(resolveUser));router.use((req,res,next)=>{if(sourceMode==='notion')return res.status(409).json({ok:false,error:'Las tarifas se consultan y actualizan en Notion. Los pagos confirmados se muestran en Mi trabajo y Nómina.'});next();});router.use((req,res,next)=>{if(!S.manager(req.workUser))return res.status(403).json({ok:false,error:'Solo administración puede gestionar tarifas.'});next();});
  router.get('/context',S.route(async(req,res)=>{
   const [locations,units]=await Promise.all([query('SELECT l.id,l.name,c.id AS client_id,c.name AS client_name FROM care_locations l JOIN care_clients c ON c.id=l.client_id WHERE l.active AND c.active ORDER BY c.name,l.name'),query('SELECT id,location_id,name,room_type FROM care_units WHERE active AND NOT review_required ORDER BY name')]);res.json({ok:true,locations:locations.rows,units:units.rows,roomTypes:[...new Set(['MOTEL','STUDIO','1BR','2BR','3BR','HOUSE',...units.rows.map(u=>roomType(u.room_type))].filter(Boolean))]});
  }));
