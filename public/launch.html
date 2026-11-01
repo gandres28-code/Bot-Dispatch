@@ -57,7 +57,7 @@
     </div>
 
     <div id="status" class="status"></div>
-    <div class="small">Limpieza · Inspecciones · Solicitudes · Clock</div>
+    <div class="small"><a href="/work" style="color:#cbd5e1">Mis localidades / My locations</a> · <a href="/time-clock" style="color:#cbd5e1">Time Clock</a></div>
   </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -151,7 +151,12 @@ async function fetchJson(url, options = {}){
   }
 }
 
-function goCleaning(){
+async function openLocationWorkIfAssigned(){
+  try{const r=await fetch('/api/work/jobs',{headers:{'X-Care-Code':localStorage.getItem('employeeCode')||''},signal:AbortSignal.timeout(5000)});if(r.ok&&(await r.json()).jobs?.length){window.location.replace('/work');return true;}}catch{}
+  return false;
+}
+async function goCleaning(){
+  if(await openLocationWorkIfAssigned())return;
   if(currentUser && currentUser.name){
     localStorage.setItem("cleanerName", currentUser.name);
   }
@@ -159,7 +164,8 @@ function goCleaning(){
   openOS("cleaning", "/");
 }
 
-function goInspection(){
+async function goInspection(){
+  if(await openLocationWorkIfAssigned())return;
   openOS("inspection", "/inspector");
 }
 

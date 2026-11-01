@@ -162,6 +162,7 @@
   }
 
   async function fetchJson(url, options = {}) {
+    options = {...options,headers:{...options.headers,"X-Care-Code":localStorage.getItem("employeeCode")||""}};
     const response = await fetch(url, options);
     const data = await response.json().catch(() => ({}));
     if (!response.ok && response.status !== 409) {
