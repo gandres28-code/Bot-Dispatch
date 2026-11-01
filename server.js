@@ -10869,11 +10869,14 @@ const workResolveUser = async code => {
   return page ? {...pageToUser(page),hourlyRate:Number(page.properties?.["Hourly Rate"]?.number||0),payMode:/^(unit|per unit|piece|por unidad|attendance|asistencia)$/i.test(readCentralPropertyText(page.properties?.["Pay Type"]||page.properties?.["Tipo de pago"]))?"attendance":"hourly"} : null;
 };
 const workClockMirror = require('./services/workClockMirror').createClockMirror({notion,databaseId:NOTION_TIME_CLOCK_DATABASE_ID,query:postgresQuery,pool:getPool});
-const workClockRouter = require('./services/workClock').createClockRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,legacyActive:workClockMirror.legacyActive});
+const workClockRouter = require('./services/workClock').createClockRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,legacyActive:workClockMirror.legacyActive,listEmployees:async()=>(await getEmployeesCached()).map(pageToUser)});
 app.use('/api/clock',workClockRouter);
+app.post('/api/payroll/hourly/manual',(req,res,next)=>{req.url='/manual';workClockRouter(req,res,next);});
 // Old bookmarks/API clients must use the same durable writer; no second Notion-only path.
 app.post('/clock-in',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/in';workClockRouter(req,res,next);});
 app.post('/clock-out',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/out';workClockRouter(req,res,next);});
+app.get('/rates',(req,res)=>res.sendFile(path.join(__dirname,'public','rates.html')));
+app.use('/api/rates',require('./services/serviceRates').createRatesRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser}));
 app.get('/work',(req,res)=>res.sendFile(path.join(__dirname,'public','work.html')));
 app.use('/api/work',require('./services/scopedWork').createScopedRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,listEmployees:async()=> (await getEmployeesCached()).map(pageToUser),today:todayISO,cloudinary,emit:(event,payload)=>io.emit(event,payload)}));
 

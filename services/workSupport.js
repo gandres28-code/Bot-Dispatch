@@ -26,6 +26,13 @@ function middleware(resolveUser){const attempts=new Map();return async(req,res,n
 };}
 const route=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){if(!e.status)console.error('CARE WORK:',e.message);res.status(e.status||(e.code==='23505'?409:503)).json({ok:false,error:e.status?e.message:e.code==='23505'?'El registro ya existe. Actualiza antes de continuar.':'No se confirmó el guardado. Actualiza y reintenta con el mismo identificador.'});}};
 const dateKey=v=>v instanceof Date?v.toISOString().slice(0,10):String(v).slice(0,10);
+function chicagoTime(date,time){
+ day(date);if(!/^\d{2}:\d{2}$/.test(time||''))fail('Hora inválida.');
+ const target=date+' '+time,naive=Date.parse(date+'T'+time+':00Z');
+ const format=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+ const candidates=[300,360].map(offset=>new Date(naive+offset*60000)).filter(v=>Number.isFinite(v.getTime())&&format.format(v)===target);
+ if(candidates.length!==1)fail('Esa hora coincide con un cambio de horario o no existe. Solicita revisión de la fecha y hora.');return candidates[0];
+}
 function payrollSnapshot(unitRead,hourly){
  const records=unitRead.records||[],warnings=[...(unitRead.warnings||[]),...(hourly.warnings||[])];
  if(hourly.incomplete)warnings.push('Historial de horas incompleto.');
@@ -35,4 +42,4 @@ function payrollSnapshot(unitRead,hourly){
  const names=new Set([...records.map(r=>r.cleaner),...hourly.map(r=>r.employee)]);
  return{valid:warnings.length===0,errors:warnings,summary:{records:records.length+hourly.length,employees:names.size,total:([...records.map(r=>Number(r.amount)),...hourly.map(r=>Number(r.total))].reduce((s,v)=>s+Math.round(v*100),0))/100},unitRecords:records,hourlyRecords:hourly};
 }
-module.exports={payrollSnapshot,dateKey,fail,uuid,text,day,localDay,manager,inspector,transaction,distance,gps,inside,middleware,route};
+module.exports={chicagoTime,payrollSnapshot,dateKey,fail,uuid,text,day,localDay,manager,inspector,transaction,distance,gps,inside,middleware,route};

@@ -21,7 +21,7 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
  const router=express.Router();router.use(S.middleware(resolveUser));
  const mustManage=req=>{if(!S.manager(req.workUser))S.fail('Solo administración.',403);};
  async function getJob(id,user,c={query}){const j=(await c.query(`SELECT ${selection} ${joins} WHERE j.id=$1`,[S.uuid(id)])).rows[0];if(!j||!own(j,user))S.fail('Servicio no encontrado.',404);return j;}
- const safe=(j,u)=>{if(S.manager(u))return j;const {cleaner_pay_cents,inspector_pay_cents,...rest}=j;return rest;};
+ const safe=(j,u)=>{if(S.manager(u))return j;const {cleaner_pay_cents,inspector_pay_cents,sale_cents,rate_snapshot,applied_rate_id,...rest}=j;return rest;};
  async function audit(c,req,action,id,detail){await c.query('INSERT INTO care_directory_audit(actor,action,entity_id,detail) VALUES($1,$2,$3,$4::jsonb)',[req.workUser.name,action,id,JSON.stringify(detail)]);}
  router.get('/bootstrap',S.route(async(req,res)=>{
   const user=req.workUser,manage=S.manager(user);let units=[],employees=[];
@@ -42,13 +42,22 @@ function createScopedRouter({query,pool,resolveUser,listEmployees,today,cloudina
   const pay=v=>{if(v===''||v==null)return null;if(typeof v!=='number'||!Number.isFinite(v)||v<0||v>100000||Math.abs(v*100-Math.round(v*100))>0.00001)S.fail('Pago inválido. Usa dólares y centavos.');return Math.round(v*100);};
   const values=[id,unitId,date,type,JSON.stringify(b.cleanerIds),JSON.stringify(cleaners.map(e=>e.name)),insp.id,insp.name,S.text(b.instructions),pay(b.cleanerPay),pay(b.inspectorPay),req.workUser.name];
   const job=await S.transaction(pool(),async c=>{
-   const previous=(await c.query('SELECT * FROM care_work_jobs WHERE id=$1',[id])).rows[0];if(previous){if(previous.unit_id!==unitId||S.dateKey(previous.work_date)!==date||previous.service_type!==type||JSON.stringify(previous.cleaner_ids)!==JSON.stringify(b.cleanerIds)||previous.inspector_id!==insp.id||previous.cleaner_pay_cents!==values[9]||previous.inspector_pay_cents!==values[10]||previous.instructions!==values[8])S.fail('La solicitud ya corresponde a otro servicio.',409);return previous;}
+   const previous=(await c.query('SELECT * FROM care_work_jobs WHERE id=$1',[id])).rows[0];if(previous){if(previous.unit_id!==unitId||S.dateKey(previous.work_date)!==date||previous.service_type!==type||JSON.stringify(previous.cleaner_ids)!==JSON.stringify(b.cleanerIds)||previous.inspector_id!==insp.id||previous.cleaner_pay_cents!==(values[9]??(previous.rate_snapshot?Math.round(previous.rate_snapshot.cleanerPay*100):null))||previous.inspector_pay_cents!==(values[10]??(previous.rate_snapshot?Math.round(previous.rate_snapshot.inspectorPay*100):null))||b.salePrice!=null&&previous.sale_cents!==Math.round(b.salePrice*100)||previous.instructions!==values[8])S.fail('La solicitud ya corresponde a otro servicio.',409);return previous;}
    const unit=(await c.query('SELECT u.*,l.active AS location_active,c.active AS client_active FROM care_units u JOIN care_locations l ON l.id=u.location_id JOIN care_clients c ON c.id=l.client_id WHERE u.id=$1 FOR UPDATE OF u,l,c',[unitId])).rows[0];
    if(!unit?.active||!unit.location_active||!unit.client_active||unit.review_required)S.fail('Revisa la unidad y su localidad antes de asignarla.');
    // Legacy hotel jobs remain in their existing workflow and cannot be double-booked/paid.
    if(unit.legacy_key||unit.location_id==='00000000-0000-4000-8000-000000000002')S.fail('Esta unidad tiene historial en Rooms. Continúa su operación en el panel del hotel hasta migrar ese historial.');
+   const rate=await require('./serviceRates').quote(c.query.bind(c),unitId,date,type);
+   if(b.rateId&&(rate?.id!==b.rateId||rate?.version!==b.rateVersion))S.fail('La tarifa cambió. Actualiza el precio antes de guardar.',409);
+   const sale=b.salePrice==null?rate?.salePrice??null:b.salePrice;
+   if(b.cleanerPay==null&&rate)values[9]=Math.round(rate.cleanerPay*100);
+   if(b.inspectorPay==null&&rate)values[10]=Math.round(rate.inspectorPay*100);
+   const saleCents=sale==null?null:require('./serviceRates').cents(sale,'Precio al cliente');
+   if(rate&&((saleCents!==Math.round(rate.salePrice*100))||(values[9]!==Math.round(rate.cleanerPay*100))||(values[10]!==Math.round(rate.inspectorPay*100)))&&!S.text(b.priceNote))S.fail('Escribe por qué estás ajustando los importes de la tarifa.');
    const r=(await c.query(`INSERT INTO care_work_jobs(id,unit_id,work_date,service_type,cleaner_ids,cleaner_names,inspector_id,inspector_name,instructions,cleaner_pay_cents,inspector_pay_cents,created_by) VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12) RETURNING *`,values)).rows[0];
-   await audit(c,req,'work_scheduled',id,{after:r});return r;
+   const snapshot=rate?{...rate,priceNote:S.text(b.priceNote)}:null;
+   const saved=(await c.query('UPDATE care_work_jobs SET sale_cents=$1,applied_rate_id=$2,rate_snapshot=$3::jsonb WHERE id=$4 RETURNING *',[saleCents,rate?.id||null,JSON.stringify(snapshot),id])).rows[0];
+   await audit(c,req,'work_scheduled',id,{after:saved});return saved;
   });res.status(201).json({ok:true,job});emit('care-work:updated',{date});
  }));
  router.patch('/jobs/:id/pay',S.route(async(req,res)=>{

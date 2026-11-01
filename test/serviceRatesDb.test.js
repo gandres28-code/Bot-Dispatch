@@ -1,0 +1,25 @@
+'use strict';
+const assert=require('node:assert/strict'),express=require('express'),fs=require('fs'),path=require('path'),{randomUUID}=require('crypto');
+const {PGlite}=require(process.env.CARE_PGLITE_MODULE||'@electric-sql/pglite');
+const {createRatesRouter}=require('../services/serviceRates'),{createScopedRouter}=require('../services/scopedWork');
+async function main(){const db=new PGlite(),query=(...a)=>db.query(...a),pool={connect:async()=>({query,release(){}})},users={admin:{id:randomUUID(),name:'Andres',role:'admin',active:true},cleaner:{id:randomUUID(),name:'Ana',role:'cleaner',active:true},inspector:{id:randomUUID(),name:'Inspector',role:'inspector',active:true}};let server;
+try{const base=path.resolve(__dirname,'..');for(const f of ['db/schema.sql','db/migrations/014_client_directory.sql','db/migrations/015_scoped_work.sql','db/migrations/016_service_rates.sql','db/migrations/016_service_rates.sql'])await db.exec(fs.readFileSync(path.join(base,f),'utf8'));
+ const client=randomUUID(),a=randomUUID(),b=randomUUID(),ua=randomUUID(),ub=randomUUID();await query('INSERT INTO care_clients(id,name) VALUES($1,$2)',[client,'New Client']);for(const[id,name]of [[a,'Property A'],[b,'Property B']])await query('INSERT INTO care_locations(id,client_id,name) VALUES($1,$2,$3)',[id,client,name]);for(const[id,loc]of [[ua,a],[ub,b]])await query("INSERT INTO care_units(id,location_id,name,unit_key,room_type) VALUES($1,$2,$3,$3,'Studio')",[id,loc,'101']);
+ const app=express();app.use(express.json());app.use('/api/rates',createRatesRouter({query,pool:()=>pool,resolveUser:async code=>users[code]}));app.use('/api/work',createScopedRouter({query,pool:()=>pool,resolveUser:async code=>users[code],listEmployees:async()=>Object.values(users),today:()=> '2026-10-31'}));server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+ const call=async(url,method='GET',body,user='admin')=>{const r=await fetch(`http://127.0.0.1:${server.address().port}/api${url}`,{method,headers:{'Content-Type':'application/json','X-Care-Code':user},...(body?{body:JSON.stringify(body)}:{})});return{status:r.status,data:await r.json()};};
+ assert.equal((await call('/rates','GET',null,'cleaner')).status,403);const rate={id:randomUUID(),locationId:a,unitId:null,serviceType:'regular',salePrice:100,cleanerPay:55.01,inspectorPay:10,effectiveFrom:'2026-10-01'};
+ assert.equal((await call('/rates','POST',rate)).status,201);assert.equal((await call('/rates','POST',rate)).status,201);assert.equal((await call('/rates','POST',{...rate,id:randomUUID(),effectiveFrom:'2026-10-31'})).status,409);
+ assert.equal((await call('/rates','POST',{...rate,id:randomUUID(),locationId:b,unitId:ua})).status,400,'foreign unit must not be priced at another property');
+ const q=async unit=>(await call(`/rates/quote?unitId=${unit}&date=2026-10-31&type=regular`)).data.rate;assert.equal((await q(ua)).salePrice,100);assert.equal(await q(ub),null,'same room number in other property must not inherit a rate');
+ const byType={...rate,id:randomUUID(),roomType:'STUDIO',salePrice:110,cleanerPay:58};assert.equal((await call('/rates','POST',byType)).status,201);assert.equal((await q(ua)).salePrice,110,'room type rate overrides property default');
+ const specific={...rate,id:randomUUID(),unitId:ua,salePrice:120,cleanerPay:60,inspectorPay:15};assert.equal((await call('/rates','POST',specific)).status,201);assert.equal((await q(ua)).salePrice,120);
+ const job={id:randomUUID(),unitId:ua,date:'2026-10-31',serviceType:'regular',cleanerIds:[users.cleaner.id],inspectorId:users.inspector.id};let created=await call('/work/jobs','POST',job);assert.equal(created.status,201,JSON.stringify(created.data));assert.equal(created.data.job.sale_cents,12000);assert.equal(created.data.job.cleaner_pay_cents,6000);assert.equal((await call('/work/jobs','POST',job)).status,201,'retry keeps automatic price snapshot');
+ assert.equal((await call('/rates/'+specific.id,'PUT',{...specific,version:1,salePrice:130,note:'Updated price'})).status,200);
+ assert.equal((await call('/work/jobs/'+job.id)).data.job.sale_cents,12000,'rate edits must not reprice scheduled work');
+ assert.equal((await call('/rates/'+specific.id,'PUT',{...specific,version:1,salePrice:140,note:'Stale browser'})).status,409);
+ const second={...job,id:randomUUID(),date:'2026-11-01',rateId:specific.id,rateVersion:1};assert.equal((await call('/work/jobs','POST',second)).status,409,'stale quote rejected');
+ assert.equal((await call('/rates','POST',{...rate,id:randomUUID(),serviceType:'deep',salePrice:1})).status,400,'below-cost price needs a reason');
+ assert.equal((await call('/rates','POST',{...rate,id:randomUUID(),serviceType:'deep',salePrice:1,note:'Approved promotion'})).status,201);
+ console.log('Rates PostgreSQL: property isolation, date overlap, unit override, retry safety, effective quote, immutable scheduled prices, stale edits and below-cost confirmation passed.');
+}finally{if(server)await new Promise(r=>server.close(r));await db.close();}}
+main().catch(e=>{console.error(e);process.exitCode=1});

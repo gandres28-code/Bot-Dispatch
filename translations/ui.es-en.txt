@@ -1057,3 +1057,15 @@ Idioma de la app · Notion:|App language · Notion:
 Se cambia en Notion Employees, campo Idioma.|Change it in Notion Employees, in the Idioma field.
 El idioma se administra en Notion Employees, campo Idioma.|Language is managed in Notion Employees, in the Idioma field.
 Inglés|English
+
+Suministros|Supplies
+Azul claro · Limpiando|Light blue · Cleaning
+Avisos|Alerts
+Trabajo del día|Daily work
+Revisa las horas y unidades de la semana, comprueba los importes y descarga la nómina.|Review weekly hours and units, check the amounts and download payroll.
+Total a pagar|Total pay
+Información parcial: revisar|Partial information: review required
+Entradas, salidas y horas adicionales del período.|Clock entries, exits and additional hours for this period.
+Las horas se guardarán y se sumarán a la nómina de la semana. La fecha y las horas corresponden a Branson (Chicago).|Hours will be saved and included in weekly payroll. The date and times use Branson (Chicago) time.
+El movimiento aparecerá en el total de la semana y en el Excel.|The adjustment will appear in the weekly total and Excel file.
+Tarifas · Cobros y pagos|Rates · Charges and pay

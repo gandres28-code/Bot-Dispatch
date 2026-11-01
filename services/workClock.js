@@ -24,10 +24,23 @@ function legacyLocation(name){
  if(!['Chateau','Office','Laundry','Other'].includes(name))S.fail('Selecciona un lugar de trabajo.');return{id:null,name,geofence_required:false};
 }
 function publicSession(r){if(!r)return null;return{id:r.id,employee:r.employee,clockIn:r.clock_in,clockOut:r.clock_out,locationId:r.location_id,workLocation:r.work_location,hourlyRate:r.rate_cents/100,payMode:r.pay_mode,needsRate:r.pay_mode!=='attendance'&&r.rate_cents<=0,version:r.version,mirrorPending:r.mirror_version<r.version,mirrorError:r.mirror_error?'La copia en Notion está pendiente. El registro de horas está guardado.':''};}
-function createClockRouter({query,pool,resolveUser,legacyActive=async()=>null,now=()=>new Date()}){
+function createClockRouter({query,pool,resolveUser,legacyActive=async()=>null,listEmployees=async()=>[],now=()=>new Date()}){
  const router=express.Router();router.use(S.middleware(resolveUser));
  async function location(c,b){if(b.locationId){const l=(await c.query('SELECT l.*,c.name AS client_name FROM care_locations l JOIN care_clients c ON c.id=l.client_id WHERE l.id=$1 AND l.active AND c.active',[S.uuid(b.locationId)])).rows[0];if(!l)S.fail('Localidad no disponible.');return l;}const l=legacyLocation(b.workLocation);if(l.name==='Other'){l.name=S.text(b.locationNote,120);if(!l.name)S.fail('Escribe el lugar de trabajo.');}return l;}
  async function active(user){return(await query('SELECT * FROM care_clock_sessions WHERE employee_id=$1 AND clock_out IS NULL',[user.id])).rows[0]||null;}
+ router.post('/manual',S.route(async(req,res)=>{
+  if(!S.manager(req.workUser))S.fail('Solo administración.',403);const b=req.body,request=S.uuid(b.requestId),note=S.text(b.reason);if(!note)S.fail('Escribe el motivo de las horas.');
+  const employees=(await listEmployees()).filter(e=>e.active&&e.name.trim().toLowerCase()===S.text(b.employee,160).toLowerCase());if(employees.length!==1)S.fail('Escribe el nombre exacto de un empleado activo y sin duplicados.');
+  const user=employees[0],start=S.chicagoTime(b.date,b.clockIn),end=S.chicagoTime(b.date,b.clockOut),rate=Number(b.hourlyRate);if(end<=start||end>now()||!Number.isFinite(rate)||rate<=0||rate>100000||Math.abs(rate*100-Math.round(rate*100))>0.00001)S.fail('Revisa las horas de entrada/salida y la tarifa.');
+  const row=await S.transaction(pool(),async c=>{
+   await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['care-clock:'+user.id]);
+   const known=(await c.query('SELECT * FROM care_clock_sessions WHERE in_request=$1',[request])).rows[0];if(known){if(known.employee_id!==user.id||new Date(known.clock_in).getTime()!==start.getTime()||new Date(known.clock_out).getTime()!==end.getTime()||known.rate_cents!==Math.round(rate*100))S.fail('El intento ya corresponde a otras horas.',409);return known;}
+   if((await c.query("SELECT 1 FROM payroll_weeks WHERE status='closed' AND $1::date BETWEEN week_start AND week_end",[b.date])).rows.length)S.fail('Reabre la semana antes de agregar horas.',409);
+   if((await c.query('SELECT 1 FROM care_clock_sessions WHERE employee_id=$1 AND clock_in<$3 AND (clock_out IS NULL OR clock_out>$2)',[user.id,start.toISOString(),end.toISOString()])).rows.length)S.fail('Estas horas se cruzan con otro turno. Revisa el horario.',409);
+   const r=(await c.query(`INSERT INTO care_clock_sessions(id,employee_id,employee,employee_code,role,work_location,clock_in,clock_out,rate_cents,in_gps,out_gps,in_request,out_request,rate_note) VALUES($1,$2,$3,$4,$5,'Manual',$6,$7,$8,$9::jsonb,$9::jsonb,$10,$11,$12) RETURNING *`,[randomUUID(),user.id,user.name,user.code||'',S.text(b.role,120)||user.role,start.toISOString(),end.toISOString(),Math.round(rate*100),JSON.stringify({manual:true,note,actor:req.workUser.name}),request,randomUUID(),note])).rows[0];
+   await c.query("INSERT INTO care_directory_audit(actor,action,entity_id,detail) VALUES($1,'clock_manual_hours',$2,$3::jsonb)",[req.workUser.name,r.id,JSON.stringify({note,employeeId:user.id,start:start.toISOString(),end:end.toISOString()})]);return r;
+  });res.json({ok:true,session:publicSession(row),hours:splitClock(row).reduce((s,r)=>s+r.hours,0),total:splitClock(row).reduce((s,r)=>s+r.total,0)});
+ }));
  router.get('/status',S.route(async(req,res)=>{const r=await active(req.workUser);const old=r?null:await legacyActive(req.workUser);res.json({ok:true,user:{name:req.workUser.name,language:req.workUser.language},active:publicSession(r),legacyActive:old?{clockIn:old.clockIn,workLocation:old.workLocation}:null});}));
  router.get('/locations',S.route(async(req,res)=>res.json({ok:true,locations:(await query('SELECT l.id,l.name,l.address,l.geofence_required,c.name AS client_name FROM care_locations l JOIN care_clients c ON c.id=l.client_id WHERE l.active AND c.active ORDER BY c.name,l.name')).rows})));
  router.post('/in',S.route(async(req,res)=>{

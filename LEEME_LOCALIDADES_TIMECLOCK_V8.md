@@ -1,3 +1,5 @@
+> Para esta versión consulta primero **LEEME_V9.md** y **GUIA_RAPIDA_CARE.md**. Este archivo conserva los detalles de la base v8.
+
 # Care OS v8 — Operación por localidad, Time Clock y ubicación del turno
 
 ## Qué cambia

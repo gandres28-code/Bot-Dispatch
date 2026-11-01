@@ -15,7 +15,8 @@
     "test:directory": "node test/clientDirectory.test.js",
     "test:directory:db": "node test/clientDirectoryDb.test.js",
     "test:work": "node test/workClockMirror.test.js",
-    "test:work:db": "node test/scopedWorkDb.test.js"
+    "test:work:db": "node test/scopedWorkDb.test.js",
+    "test:rates:db": "node test/serviceRatesDb.test.js"
   },
   "author": "Andres Garcia",
   "license": "ISC",
