@@ -13,6 +13,7 @@
  ['/work','Hoy','Today','Unidades, inspecciones y solicitudes del día.','Today’s units, inspections and requests.','work','blue'],
  ['/employee-center','Equipo','Team','Consulta empleados y sus datos.','View employees and their details.','team','purple'],
  ['/clients','Propiedades','Properties','Clientes, localidades y unidades.','Clients, locations and units.','home','amber'],
+ ['/access','Personas y dispositivos','People and devices','Aperturas, autorizaciones y bloqueos. Solo el propietario.','App opens, approvals and blocks. Owner only.','team','blue'],
  ['/payroll','Pagos','Payments','Revisa servicios y horas antes de aprobar.','Review services and hours before approval.','pay','green']]:
  [['/work','Mi trabajo','My work','Tus unidades y el siguiente paso.','Your units and next step.','work','blue'],
  ['/time-clock','Mi horario','My hours','Registra entrada, salida y revisa tus horas.','Clock in, clock out and review hours.','clock','green'],

@@ -22,7 +22,7 @@ bar.querySelector('[data-design-nav=home]').textContent=word('Inicio','Home');ba
   const nav=document.getElementById('navigation');if(nav){const label=document.createElement('label');label.className='care-mobile-views';const title=document.createElement('span');title.textContent=word('Ver sección','View section');const select=document.createElement('select');for(const button of nav.querySelectorAll('[data-view]')){const option=new Option(button.textContent.trim(),button.dataset.view);select.append(option);}select.addEventListener('change',()=>nav.querySelector('[data-view="'+select.value+'"]')?.click());label.append(title,select);nav.before(label);}
  }
  const mobile=document.createElement('nav');mobile.className='care-mobile-nav';mobile.setAttribute('aria-label','Care OS');
- const destinations=[['/work','Mi trabajo','My work','work'],['/time-clock','Mi horario','My hours','clock'],['/notifications','Avisos','Alerts','bell']];
+ const destinations=[['/work','Mi trabajo','My work','work'],['/time-clock','Mi horario','My hours','clock'],['/access','Mi acceso','My access','bell']];
  function updateMobile(){mobile.replaceChildren();for(const [href,es,en,icon]of destinations){const a=document.createElement('a');a.href=href;a.innerHTML=window.CareIcons?window.CareIcons[icon]:'';const span=document.createElement('span');span.textContent=word(es,en);a.append(span);if(location.pathname.replace('.html','')===href)a.setAttribute('aria-current','page');mobile.append(a);}}
  updateMobile();if(!document.body.classList.contains('care-embedded')&&path!=='launch'){document.body.append(mobile);document.body.classList.add('care-has-mobile-nav');}
  new MutationObserver(updateMobile).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
@@ -30,4 +30,22 @@ bar.querySelector('[data-design-nav=home]').textContent=word('Inicio','Home');ba
  function decorateTables(){for(const table of document.querySelectorAll('table.detail-table,#payrollTable table')){table.classList.add('care-mobile-stack');const headers=[...table.querySelectorAll('thead th')].map(h=>h.textContent.trim());for(const row of table.querySelectorAll('tbody tr'))[...row.children].forEach((td,i)=>{if(!td.hasAttribute('colspan'))td.dataset.label=headers[i]||'';});}}
  let tableFrame=0;new MutationObserver(()=>{if(!tableFrame)tableFrame=requestAnimationFrame(()=>{tableFrame=0;decorateTables();});}).observe(document.body,{childList:true,subtree:true});decorateTables();
  new MutationObserver(translate).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+})();
+
+// Record foreground returns separately from page loads (logged by the server).
+(()=>{
+ if(window.self!==window.top)return;
+ let hiddenAt=0,lastSent=0;
+ async function resumed(){
+  if(Date.now()-lastSent<30000)return;lastSent=Date.now();
+  try{
+   const r=await fetch('/access/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'resume',path:location.pathname}),cache:'no-store'});
+   if(r.status===401||r.status===403)location.replace('/access');
+  }catch{/* Network loss does not create a successful activity record. */}
+ }
+ document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)hiddenAt=Date.now();
+  else if(hiddenAt&&Date.now()-hiddenAt>=30000){hiddenAt=0;resumed();}
+ });
+ window.addEventListener('pageshow',e=>{if(e.persisted)resumed();});
 })();
