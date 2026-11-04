@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Care · Personas y dispositivos</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px system-ui;color:#142b4c;background:#f3f6fb}header{padding:22px 6%;background:#142b4c;color:white;letter-spacing:4px}main{max-width:1120px;margin:36px auto;padding:0 20px}.card{background:white;border:1px solid #dfe6ef;border-radius:20px;padding:28px;margin:18px 0;box-shadow:0 8px 30px #142b4c08}h1{font-size:30px;margin:0 0 12px}h2{margin-top:0}p{line-height:1.6;color:#58677d}label{display:block;font-weight:600;margin:16px 0 8px}input,select,button{font:inherit;border:1px solid #ccd6e5;border-radius:10px;padding:13px;max-width:100%}input{width:100%}button{background:#2358d5;color:white;border:0;cursor:pointer;margin:10px 8px 0 0;min-height:46px}button.secondary{background:#eaf0f8;color:#142b4c}button.danger{background:#a92235}button:disabled{opacity:.5}a{color:#2358d5}.message{padding:16px 0;line-height:1.5;white-space:pre-line}article{border-top:1px solid #dfe6ef;padding:20px 0}small{display:block;color:#58677d;overflow-wrap:anywhere;line-height:1.6}.badge{font-size:13px;background:#eaf0f8;padding:6px 10px;border-radius:8px;display:inline-block;margin:8px 0}.badge.approved{color:#146542;background:#e7f5ed}.badge.pending{color:#805413;background:#fff2d7}.badge.revoked{color:#9d2638;background:#fbe9ed}form{max-width:480px}details{margin-top:20px}summary{cursor:pointer}[hidden]{display:none!important}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}.stat{background:#f3f6fb;padding:18px;border-radius:14px}.stat b{display:block;font-size:28px}.toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.toolbar label{flex:1;min-width:180px;margin:0}.toolbar select{width:100%;margin-top:8px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:14px 10px;border-bottom:1px solid #e4eaf2;vertical-align:top}th{color:#58677d}.split{display:flex;justify-content:space-between;gap:12px;align-items:start}.section-note{font-size:14px}.device-title{font-size:18px}.hint{border-left:3px solid #2358d5;padding-left:14px}.muted{color:#58677d}#loading{font-size:13px}
+@media(max-width:650px){main{margin:20px auto;padding:0 12px}.card{padding:20px}h1{font-size:25px}button{width:100%;margin-right:0}.summary{gap:6px}.stat{padding:12px}.stat b{font-size:24px}.stat small{font-size:11px}.split{display:block}.toolbar{display:block}.toolbar label{display:block;margin-top:12px}}
+</style></head><body>
+<header><b>CARE</b><small style="color:#cbd6e6;letter-spacing:2px">LUXURY CLEANING · OS</small></header>
+<main>
+<section class="card" id="entry"><h1>El acceso está en tus manos.</h1><p>Verifica tu código personal y solicita autorización para este navegador.</p>
+<form id="request"><label for="code">Código personal</label><input id="code" type="password" autocomplete="off" required maxlength="120"><label for="label">Nombre del dispositivo</label><input id="label" placeholder="Ejemplo: teléfono de Ana" required maxlength="80"><button>Solicitar acceso</button></form>
+<div id="message" class="message" role="status" aria-live="polite"></div>
+<button id="check" class="secondary">Comprobar autorización</button><button id="logout" class="secondary">Cerrar y retirar este acceso</button>
+<details id="ownerEntry"><summary>Acceso del propietario</summary><form id="owner"><label for="secret">Clave privada del propietario</label><input id="secret" type="password" autocomplete="current-password" required><button>Abrir administración</button></form></details>
+<p class="section-note">Care registra aperturas, regresos a la app y cambios de autorización, junto con el sistema y navegador reportados. Estos datos se usan para controlar el acceso.</p>
+</section>
+<section id="admin" class="card" hidden>
+<div class="split"><div><h1>Personas y dispositivos</h1><p>Revisa quién tiene acceso y cuándo abrió Care OS.</p></div><a href="/app">Abrir Care OS</a></div>
+<div id="adminMessage" class="message" role="status" aria-live="polite"></div>
+<div class="summary"><div class="stat"><b id="totalPeople">—</b><small>Personas activas en Employees</small></div><div class="stat"><b id="allowed">—</b><small>Accesos autorizados del equipo</small></div><div class="stat"><b id="pending">—</b><small>Solicitudes pendientes del equipo</small></div></div>
+<p class="hint section-note">Horas de Branson, Missouri. La información del navegador es aproximada; el nombre del dispositivo lo declara la persona. No es una identificación física del equipo.</p>
+<div class="toolbar"><label>Persona<select id="person"><option value="">Todas las personas</option></select></label><button id="refresh" class="secondary">Actualizar</button><small id="loading" aria-live="polite"></small></div>
+<details open><summary><b>Personas del equipo</b></summary><div class="table-wrap"><table><thead><tr><th>Persona</th><th>Accesos autorizados</th><th>Última apertura</th><th></th></tr></thead><tbody id="people"></tbody></table></div></details>
+<h2 style="margin-top:30px">Dispositivos y navegadores registrados</h2>
+<p class="section-note">Coteja el identificador con la persona antes de autorizar. Bloquear impide nuevas consultas con esa credencial; las conexiones en vivo se cierran en hasta 10 segundos.</p>
+<div id="devices"></div><button id="moreDevices" class="secondary" hidden>Ver más dispositivos</button>
+<h2 style="margin-top:30px">Historial de aperturas y accesos</h2>
+<label for="eventDevice">Dispositivo del historial</label><select id="eventDevice"><option value="">Todos los dispositivos</option></select>
+<div id="events"></div><button id="moreEvents" class="secondary" hidden>Ver más historial</button>
+<p class="section-note">Una apertura confirma una petición recibida por el servidor, no cuánto tiempo trabajó la persona. Los accesos anteriores a esta actualización y las aperturas sin conexión no aparecen. Un visitante sin registro no se puede identificar.</p>
+</section></main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const formatter=new Intl.DateTimeFormat('es-MX',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'medium'});
+const date=value=>value?formatter.format(new Date(value)):'Sin apertura registrada';
+const states={approved:'Autorizado',pending:'Pendiente',revoked:'Bloqueado',expired:'Vencido',unknown:'Sin registro',inactive:'Empleado inactivo'};
+const levels={owner:'Propietario',manager:'Administración',staff:'Mi trabajo y horario'};
+const kinds={app_open:'Abrió la app',app_resume:'Regresó a la app',access_request:'Solicitó acceso',owner_login:'Entró como propietario',approved:'Acceso autorizado',revoked:'Dispositivo bloqueado',logout:'Cerró y retiró el acceso',blocked_open:'Intentó abrir sin autorización vigente'};
+let currentId='',deviceOffset=null,eventOffset=null,busy=false,allDeviceOptions=new Map(),expanded=false,rosterState=new Map();
+async function api(path,body){
+ const r=await fetch('/access/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});
+ const b=await r.json();if(!r.ok)throw Error(b.error||'No se pudo completar.');return b;
+}
+function message(t){$('message').textContent=t;}
+function feedback(t){$('adminMessage').textContent=t;}
+function text(tag,value,parent){const el=document.createElement(tag);el.textContent=value;parent.append(el);return el;}
+function client(info={}){return[info.kind,info.os,info.browser].filter(Boolean).join(' · ')||'Equipo no identificado';}
+function effective(d){return new Date(d.expires_at)<=Date.now()&&d.status!=='revoked'?'expired':d.status;}
+async function status(){
+ const b=await api('status');currentId=b.id;$('admin').hidden=b.level!=='owner';
+ if(b.status==='approved'){
+  message('Acceso autorizado.');$('request').hidden=true;
+  if(b.level==='owner'){$('ownerEntry').hidden=true;$('check').hidden=true;await refresh();}
+  else location.assign('/launch');
+ }else message(b.status==='pending'?'Solicitud pendiente. Comparte este identificador con Andrés:\n'+b.id:b.status==='revoked'?'Este acceso fue bloqueado.':b.status==='inactive'?'Tu empleado está inactivo. Contacta a administración.':'Solicita autorización para este navegador.');
+}
+$('request').onsubmit=async e=>{
+ e.preventDefault();const btn=e.submitter;btn.disabled=true;
+ try{const b=await api('request',{code:$('code').value,label:$('label').value});$('code').value='';message('Solicitud enviada. Comparte este identificador con Andrés:\n'+b.id);}catch(e){message(e.message);}finally{btn.disabled=false;}
+};
+$('owner').onsubmit=async e=>{
+ e.preventDefault();const secret=$('secret').value;$('secret').value='';e.submitter.disabled=true;
+ try{await api('owner',{secret});await status();}catch(e){message(e.message);}finally{e.submitter.disabled=false;}
+};
+$('check').onclick=()=>status().catch(e=>message(e.message));
+$('logout').onclick=async()=>{try{await api('logout',{});location.reload();}catch(e){message(e.message);}};
+async function people(){
+ const b=await api('people'),selected=$('person').value;rosterState=new Map(b.people.map(p=>[p.id,p.active]));
+ $('people').replaceChildren();$('person').replaceChildren(new Option('Todas las personas',''));
+ $('totalPeople').textContent=b.people.filter(p=>p.active).length;
+ $('allowed').textContent=b.people.reduce((n,p)=>n+(p.active?Number(p.approved_count||0):0),0);
+ $('pending').textContent=b.people.reduce((n,p)=>n+Number(p.pending_count||0),0);
+ for(const p of b.people){
+  $('person').add(new Option(p.name+(p.active?'':' · inactivo'),p.id));
+  const row=document.createElement('tr'),name=text('td',p.name,row);text('small',p.active?p.role:'Inactivo o fuera de Employees',name);
+  text('td',String(p.active?p.approved_count||0:0)+(p.pending_count?' · '+p.pending_count+' pendientes':''),row);
+  text('td',date(p.last_open_at),row);
+  const action=text('td','',row),btn=text('button','Ver dispositivos',action);btn.className='secondary';btn.onclick=()=>{$('person').value=p.id;devices().catch(e=>feedback(e.message));};
+  $('people').append(row);
+ }
+ if([...$('person').options].some(o=>o.value===selected))$('person').value=selected;
+}
+async function devices(more=false){
+ const employee=encodeURIComponent($('person').value);
+ const b=await api('devices?employee='+employee+'&offset='+(more?deviceOffset||0:0));deviceOffset=b.nextOffset;
+ if(!more)$('devices').replaceChildren();
+ for(const d of b.devices){
+  allDeviceOptions.set(d.id,d.employee_name+' · '+d.label);
+  const row=document.createElement('article'),state=effective(d)==='approved'&&d.employee_id&&!rosterState.get(d.employee_id)?'inactive':effective(d);
+  text('b',d.employee_name+' · '+d.label,row).className='device-title';
+  text('small',client(d.client_info),row);
+  text('span',(states[state]||state)+' · '+(levels[d.access_level]||d.access_level)+(d.id===currentId?' · este navegador':''),row).className='badge '+state;
+  text('small','Última apertura: '+date(d.last_open_at),row);
+  text('small','Primera apertura: '+date(d.first_open_at),row);
+  text('small','Solicitud: '+date(d.created_at)+' · Vence: '+date(d.expires_at),row);
+  text('small','Identificador: '+d.id,row);
+  const history=text('button','Ver historial',row);history.className='secondary';history.onclick=()=>{$('eventDevice').value=d.id;events().catch(e=>feedback(e.message));$('events').scrollIntoView({behavior:'smooth',block:'start'});};
+  if(d.access_level!=='owner'&&state!=='expired'){
+   const sel=document.createElement('select');sel.setAttribute('aria-label','Permisos de '+d.label);
+   for(const [value,name]of [['staff','Mi trabajo y horario'],['manager','Administración']])sel.add(new Option(name,value));
+   sel.value=d.access_level;row.append(sel);
+   const approve=text('button',state==='approved'?'Guardar permisos':'Autorizar',row);
+   approve.onclick=async()=>{
+    approve.disabled=true;try{await api('review',{id:d.id,status:'approved',level:sel.value});feedback('Autorización actualizada.');await refresh();}catch(e){feedback(e.message);approve.disabled=false;}
+   };
+  }
+  if(d.id!==currentId&&d.status!=='revoked'){
+   const block=text('button','Bloquear dispositivo',row);block.className='danger';
+   block.onclick=async()=>{
+    block.disabled=true;try{await api('block',{id:d.id});feedback('Dispositivo bloqueado.');await refresh();}catch(e){feedback(e.message);block.disabled=false;}
+   };
+  }
+  $('devices').append(row);
+ }
+ if(!$('devices').children.length)text('p','No hay dispositivos registrados para esta selección.',$('devices'));
+ $('moreDevices').hidden=deviceOffset===null;
+ const selected=$('eventDevice').value;$('eventDevice').replaceChildren(new Option('Todos los dispositivos',''));
+ for(const [id,label]of allDeviceOptions)$('eventDevice').add(new Option(label,id));$('eventDevice').value=selected;
+}
+async function events(more=false){
+ const b=await api('events?device='+encodeURIComponent($('eventDevice').value)+'&offset='+(more?eventOffset||0:0));eventOffset=b.nextOffset;
+ if(!more)$('events').replaceChildren();
+ for(const e of b.events){
+  const row=document.createElement('article');text('b',kinds[e.event_type]||'Actividad de acceso',row);
+  text('small',date(e.occurred_at)+' · '+e.employee_name+' · '+e.label,row);
+  text('small',(['approved','revoked'].includes(e.event_type)?'Navegador de quien gestionó el acceso: ':'')+client(e.client_info),row);if(e.path)text('small','Sección: '+e.path,row);
+  if(e.actor_name)text('small','Autorización gestionada por: '+e.actor_name,row);
+  $('events').append(row);
+ }
+ if(!$('events').children.length)text('p','Todavía no hay actividad registrada.',$('events'));
+ $('moreEvents').hidden=eventOffset===null;
+}
+async function refresh(){
+ if(busy)return;busy=true;$('loading').textContent='Actualizando…';
+ try{await people();await devices();await events();$('loading').textContent='Actualizado: '+date(new Date());}
+ catch(e){feedback(e.message);$('loading').textContent='No se pudo actualizar.';}
+ finally{busy=false;}
+}
+$('person').onchange=()=>devices().catch(e=>feedback(e.message));
+$('eventDevice').onchange=()=>events().catch(e=>feedback(e.message));
+$('refresh').onclick=()=>{expanded=false;refresh();};$('moreDevices').onclick=()=>{expanded=true;devices(true).catch(e=>feedback(e.message));};$('moreEvents').onclick=()=>{expanded=true;events(true).catch(e=>feedback(e.message));};
+setInterval(()=>{if(!expanded&&!$('admin').hidden&&!document.hidden&&!document.activeElement?.matches('select,input'))refresh();},30000);
+status().catch(e=>message(e.message));
+</script></body></html>

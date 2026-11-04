@@ -86,6 +86,19 @@ const {
   sendPushToRole,
 } = require("./services/pushNotifications");
 
+// Protect every route, including routes declared early and static exports.
+const { createAccessGuard } = require("./services/accessGuard");
+const accessGuard = createAccessGuard({
+ query:postgresQuery,
+ listEmployees:async()=> (await getEmployeesCached()).map(pageToUser),
+ resolveEmployee:async({code,id})=>{
+  const page=id?(await getEmployeesCached()).find(p=>p.id===id):await findEmployeeByCode(code);
+  return page?pageToUser(page):null;
+ }
+});
+app.set("trust proxy",1); // Render has one trusted reverse-proxy hop.
+app.use(express.json({limit:"2mb"}));
+app.use(accessGuard.middleware);
 const server = http.createServer(app);
 
 // =========================================================
@@ -149,9 +162,14 @@ async function startPostgres() {
 }
 
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-  },
+ cors:{origin:process.env.CARE_PUBLIC_ORIGIN||false,credentials:true},
+ allowRequest:(req,done)=>accessGuard.allowSocket(req).then(ok=>done(null,ok),()=>done(null,false))
+});
+io.use((socket,next)=>accessGuard.allowSocket(socket.request).then(ok=>next(ok?undefined:new Error("Acceso no autorizado")),()=>next(new Error("Acceso no disponible"))));
+io.engine.use((req,res,next)=>accessGuard.allowSocket(req).then(ok=>{if(ok)return next();res.writeHead(403);res.end();},()=>{res.writeHead(503);res.end();}));
+io.on("connection",socket=>{
+ const timer=setInterval(()=>accessGuard.allowSocket(socket.request).then(ok=>{if(!ok)socket.disconnect(true);},()=>socket.disconnect(true)),10000);
+ timer.unref?.();socket.on("disconnect",()=>clearInterval(timer));
 });
 
 const OSCore = createOSCore({
@@ -491,7 +509,7 @@ const cors = require("cors");
 
 app.disable("x-powered-by");
 app.use(compression({ threshold: 1024 }));
-app.use(cors());
+app.use(cors({origin:process.env.CARE_PUBLIC_ORIGIN||false,credentials:true}));
 app.use(express.json({ limit: "2mb" }));
 app.use((req, res, next) => {
   req.requestId = String(req.get("x-request-id") || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
