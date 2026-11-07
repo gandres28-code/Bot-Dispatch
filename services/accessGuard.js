@@ -1,5 +1,6 @@
 'use strict';
 const crypto=require('node:crypto'), path=require('node:path');
+const TRUSTED_COOKIE_AGE=400*24*3600;
 const COOKIE='__Host-care_access';
 const digest=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 function clientInfo(req){
@@ -11,6 +12,7 @@ function clientInfo(req){
 const equal=(a,b)=>crypto.timingSafeEqual(Buffer.from(digest(a)),Buffer.from(digest(b)));
 function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=process.env,now=()=>Date.now()}){
  const origin=env.CARE_PUBLIC_ORIGIN,secret=env.CARE_OWNER_SECRET;
+ const autoAdmin=user=>user.permissions?.includes('all');
  const configured=()=>/^https:\/\//.test(origin||'')&&secret?.length>=32;
  let init;
  function ready(){return init||(init=query(`CREATE TABLE IF NOT EXISTS care_access_devices (
@@ -22,6 +24,8 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
  ALTER TABLE care_access_devices ADD COLUMN IF NOT EXISTS first_open_at timestamptz;
  ALTER TABLE care_access_devices ADD COLUMN IF NOT EXISTS last_open_at timestamptz;
  ALTER TABLE care_access_devices ADD COLUMN IF NOT EXISTS client_info jsonb NOT NULL DEFAULT '{}';
+ UPDATE care_access_devices SET expires_at='infinity'
+ WHERE status='approved' AND isfinite(expires_at);
  CREATE TABLE IF NOT EXISTS care_access_events (
  id uuid PRIMARY KEY, device_id uuid NOT NULL REFERENCES care_access_devices(id),
  event_type text NOT NULL, occurred_at timestamptz NOT NULL DEFAULT now(),
@@ -38,7 +42,7 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
   const info=JSON.stringify(clientInfo(req));
   // The timestamp comes from PostgreSQL, never the visitor's clock.
   await query('INSERT INTO care_access_events(id,device_id,event_type,path,client_info,actor_id) VALUES($1,$2,$3,$4,$5::jsonb,$6)',[crypto.randomUUID(),d.id,type,String(pathname).split('?')[0].slice(0,160),info,actor]);
-  if(['app_open','app_resume','access_request','owner_login','blocked_open'].includes(type))
+  if(['app_open','app_resume','access_request','owner_login','admin_login','blocked_open'].includes(type))
    await query(`UPDATE care_access_devices SET last_seen_at=now(),client_info=$2::jsonb,
     first_open_at=CASE WHEN $3 IN ('app_open','app_resume') THEN COALESCE(first_open_at,now()) ELSE first_open_at END,
     last_open_at=CASE WHEN $3 IN ('app_open','app_resume') THEN now() ELSE last_open_at END WHERE id=$1`,[d.id,info,type]);
@@ -49,9 +53,9 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
  const token=req=>{const match=String(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(COOKIE+'='));return match?.slice(COOKIE.length+1)||'';};
  const cookie=(res,t,age)=>res.setHeader('Set-Cookie',`${COOKIE}=${t}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${age}`);
  async function record(req,includeExpired=false){const t=token(req);if(!/^[a-f0-9]{64}$/.test(t))return null;await ready();return(await query('SELECT * FROM care_access_devices WHERE token_hash=$1'+(includeExpired?'':' AND expires_at>now()'),[digest(t)])).rows[0]||null;}
- async function active(req){const d=await record(req);if(!d||d.status!=='approved')return null;if(d.employee_id){const u=await resolveEmployee({id:d.employee_id});if(!u?.active||u.id!==d.employee_id)return null;d.user=u;}return d;}
+ async function active(req){const d=await record(req);if(!d||d.status!=='approved')return null;if(d.employee_id){const u=await resolveEmployee({id:d.employee_id});if(!u?.active||u.id!==d.employee_id||(d.access_level==='auto_admin'&&!autoAdmin(u)))return null;d.user=u;}return d;}
  function sameOrigin(req){return req.headers.origin===origin;}
- async function create(req,res,user,level,status,hours){await ready();const t=crypto.randomBytes(32).toString('hex'),id=crypto.randomUUID();await query('INSERT INTO care_access_devices(id,token_hash,employee_id,employee_name,label,access_level,status,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,digest(t),user?.id||null,user?.name||'Propietario',String(req.body.label||'Mi dispositivo').trim().slice(0,80),level,status,new Date(now()+hours*3600000)]);cookie(res,t,hours*3600);await event(req,{id},level==='owner'?'owner_login':'access_request','/access');return id;}
+ async function create(req,res,user,level,status,hours){await ready();const t=crypto.randomBytes(32).toString('hex'),id=crypto.randomUUID();await query('INSERT INTO care_access_devices(id,token_hash,employee_id,employee_name,label,access_level,status,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,digest(t),user?.id||null,user?.name||'Propietario',String(req.body.label||'Mi dispositivo').trim().slice(0,80),level,status,hours?new Date(now()+hours*3600000):'infinity']);cookie(res,t,TRUSTED_COOKIE_AGE);await event(req,{id},level==='owner'?'owner_login':status==='approved'?'admin_login':'access_request','/access');return id;}
  async function middleware(req,res,next){
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','SAMEORIGIN');
   try{
@@ -69,6 +73,14 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
      if(!user?.active||!code||!equal(code,user.code))return res.status(401).json({ok:false,error:'No se pudo verificar el acceso.'});
      const existing=await record(req,true);
      if(existing?.status==='revoked')return res.status(403).json({ok:false,error:'Este acceso está bloqueado. Contacta al propietario.'});
+     if(existing?.employee_id===user.id&&existing.status==='approved'&&(!autoAdmin(user)||existing.access_level!=='staff')&&await active(req)){
+      cookie(res,token(req),TRUSTED_COOKIE_AGE);
+      return res.json({ok:true,id:existing.id,status:'approved'});
+     }
+     if(autoAdmin(user)){
+      const id=await create(req,res,user,'auto_admin','approved');
+      return res.json({ok:true,id,status:'approved'});
+     }
      if(existing?.employee_id===user.id&&existing.status==='pending'&&new Date(existing.expires_at)>now())
       return res.status(202).json({ok:true,id:existing.id,status:'pending'});
      const id=await create(req,res,user,'staff','pending',24*7);return res.status(202).json({ok:true,id,status:'pending'});
@@ -76,15 +88,16 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
     if(req.path==='/access/owner'&&req.method==='POST'){
      if(limited('owner:'+(req.ip||req.socket.remoteAddress)))return res.status(429).json({ok:false,error:'Demasiados intentos. Espera 15 minutos.'});
      if(!equal(req.body.secret||'',secret))return res.status(401).json({ok:false,error:'No se pudo verificar el acceso.'});
-     await create(req,res,null,'owner','approved',8);return res.json({ok:true});
+     await create(req,res,null,'owner','approved');return res.json({ok:true});
     }
-    if(req.path==='/access/status'&&req.method==='GET'){const d=await record(req),valid=d?.status==='approved'?await active(req):null;return res.json({ok:true,status:d?.status==='approved'&&!valid?'inactive':d?.status||'unknown',level:valid?d.access_level:null,id:d?.id||null});}
+    if(req.path==='/access/status'&&req.method==='GET'){const d=await record(req),valid=d?.status==='approved'?await active(req):null;if(valid)cookie(res,token(req),TRUSTED_COOKIE_AGE);return res.json({ok:true,status:d?.status==='approved'&&!valid?'inactive':d?.status||'unknown',level:valid?d.access_level:null,id:d?.id||null});}
     if(req.path==='/access/visit'&&req.method==='POST'){
      const d=await record(req,true);
      if(!d)return res.status(401).json({ok:false,error:'No hay un acceso registrado.'});
      if(!allowVisit(d.id))return res.status(429).json({ok:false,error:'Demasiadas actualizaciones.'});
      if(req.body.kind!=='resume'||!/^\/[a-z0-9/_-]*(?:\.html)?$/i.test(String(req.body.path||'')))return res.status(400).json({ok:false,error:'Actividad inválida.'});
      const valid=await active(req);
+     if(valid)cookie(res,token(req),TRUSTED_COOKIE_AGE);
      await event(req,d,valid?'app_resume':'blocked_open',req.body.path);
      return res.status(valid?200:401).json({ok:!!valid});
     }
@@ -112,7 +125,7 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
      const offset=Number(req.query.offset||0);
      if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)return res.status(400).json({ok:false,error:'Página inválida.'});
      const employee=String(req.query.employee||'').slice(0,120);
-     const rows=(await query(`SELECT id,employee_id,employee_name,label,access_level,status,created_at,expires_at,last_seen_at,first_open_at,last_open_at,client_info
+     const rows=(await query(`SELECT id,employee_id,employee_name,label,access_level,status,created_at,CASE WHEN isfinite(expires_at) THEN expires_at END AS expires_at,last_seen_at,first_open_at,last_open_at,client_info
       FROM care_access_devices WHERE ($1='' OR employee_id=$1) ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2`,[employee,offset])).rows;
      return res.json({ok:true,devices:rows.slice(0,100),nextOffset:rows.length>100?offset+100:null});
     }
@@ -128,7 +141,7 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
     }
     if(req.path==='/access/review'&&req.method==='POST'){
      const {id,status,level}=req.body;if(!/^[a-f0-9-]{36}$/i.test(id||'')||!['approved','revoked'].includes(status)||!['staff','manager'].includes(level))return res.status(400).json({ok:false,error:'Solicitud inválida.'});
-     const result=await query("UPDATE care_access_devices SET status=$2,access_level=$3,reviewed_at=now(),reviewer_id=$4 WHERE id=$1 AND access_level<>'owner' AND expires_at>now() RETURNING id",[id,status,level,owner.id]);if(!result.rows.length)return res.status(404).json({ok:false,error:'Solicitud no disponible.'});await event(req,{id},status==='approved'?'approved':'revoked','/access',owner.id);return res.json({ok:true});
+     const result=await query("UPDATE care_access_devices SET status=$2,access_level=$3,expires_at=CASE WHEN $2='approved' THEN 'infinity'::timestamptz ELSE expires_at END,reviewed_at=now(),reviewer_id=$4 WHERE id=$1 AND access_level<>'owner' AND expires_at>now() RETURNING id",[id,status,level,owner.id]);if(!result.rows.length)return res.status(404).json({ok:false,error:'Solicitud no disponible.'});await event(req,{id},status==='approved'?'approved':'revoked','/access',owner.id);return res.json({ok:true});
     }
     return res.status(404).json({ok:false,error:'Ruta no disponible.'});
    }
@@ -139,6 +152,7 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
    const supplied=String(req.get('X-Care-Code')||req.query.code||req.body?.code||'').trim();
    if(d.user&&supplied&&!equal(supplied,d.user.code))return res.status(403).json({ok:false,error:'Usa únicamente tu código personal.'});
    if(d.user&&req.path==='/login-role')return res.json({ok:true,...d.user});
+   if(documentVisit(req))cookie(res,token(req),TRUSTED_COOKIE_AGE);
    if(d.access_level==='staff'){
     const safe=/^\/(?:api\/(?:work|clock)(?:\/|$)|(?:work|time-clock|launch)(?:\.html)?$|js\/|css\/|icons\/|images\/|fonts\/|manifest\.webmanifest$|favicon\.ico$|firebase-messaging-sw\.js$)/.test(req.path);
     if(!safe){if(req.method==='GET'&&['/','/app','/APP','/app.html'].includes(req.path))return res.redirect('/work');return res.status(403).json({ok:false,error:'Esta sección requiere autorización de administración.'});}
@@ -147,7 +161,7 @@ function createAccessGuard({query,resolveEmployee,listEmployees=async()=>[],env=
    return next();
   }catch(e){console.error('CARE ACCESS unavailable:',e.code||'verification_failed');return res.status(503).json({ok:false,error:'No se pudo verificar el acceso. Intenta nuevamente.'});}
  }
- async function allowSocket(req){if(!configured())return false;const d=await active(req);return !!d&&['manager','owner'].includes(d.access_level)&&req.headers.origin===origin;}
+ async function allowSocket(req){if(!configured())return false;const d=await active(req);return !!d&&['manager','auto_admin','owner'].includes(d.access_level)&&req.headers.origin===origin;}
  return{middleware,allowSocket,record,active};
 }
 module.exports={createAccessGuard,digest,equal,clientInfo};

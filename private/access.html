@@ -6,8 +6,8 @@
 </style></head><body>
 <header><b>CARE</b><small style="color:#cbd6e6;letter-spacing:2px">LUXURY CLEANING · OS</small></header>
 <main>
-<section class="card" id="entry"><h1>El acceso está en tus manos.</h1><p>Verifica tu código personal y solicita autorización para este navegador.</p>
-<form id="request"><label for="code">Código personal</label><input id="code" type="password" autocomplete="off" required maxlength="120"><label for="label">Nombre del dispositivo</label><input id="label" placeholder="Ejemplo: teléfono de Ana" required maxlength="80"><button>Solicitar acceso</button></form>
+<section class="card" id="entry"><h1>El acceso está en tus manos.</h1><p>Ingresa tu código personal. Si eres administrador podrás entrar directamente. Los demás dispositivos necesitan autorización una sola vez.</p>
+<form id="request"><label for="code">Código personal</label><input id="code" type="password" autocomplete="off" required maxlength="120"><label for="label">Nombre del dispositivo</label><input id="label" placeholder="Ejemplo: teléfono de Ana" maxlength="80"><button>Continuar</button></form>
 <div id="message" class="message" role="status" aria-live="polite"></div>
 <button id="check" class="secondary">Comprobar autorización</button><button id="logout" class="secondary">Cerrar y retirar este acceso</button>
 <details id="ownerEntry"><summary>Acceso del propietario</summary><form id="owner"><label for="secret">Clave privada del propietario</label><input id="secret" type="password" autocomplete="current-password" required><button>Abrir administración</button></form></details>
@@ -34,8 +34,8 @@ const $=id=>document.getElementById(id);
 const formatter=new Intl.DateTimeFormat('es-MX',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'medium'});
 const date=value=>value?formatter.format(new Date(value)):'Sin apertura registrada';
 const states={approved:'Autorizado',pending:'Pendiente',revoked:'Bloqueado',expired:'Vencido',unknown:'Sin registro',inactive:'Empleado inactivo'};
-const levels={owner:'Propietario',manager:'Administración',staff:'Mi trabajo y horario'};
-const kinds={app_open:'Abrió la app',app_resume:'Regresó a la app',access_request:'Solicitó acceso',owner_login:'Entró como propietario',approved:'Acceso autorizado',revoked:'Dispositivo bloqueado',logout:'Cerró y retiró el acceso',blocked_open:'Intentó abrir sin autorización vigente'};
+const levels={auto_admin:'Administración automática',owner:'Propietario',manager:'Administración',staff:'Mi trabajo y horario'};
+const kinds={app_open:'Abrió la app',app_resume:'Regresó a la app',access_request:'Solicitó acceso',owner_login:'Entró como propietario',admin_login:'Entró con código de administrador',approved:'Acceso autorizado',revoked:'Dispositivo bloqueado',logout:'Cerró y retiró el acceso',blocked_open:'Intentó abrir sin autorización vigente'};
 let currentId='',deviceOffset=null,eventOffset=null,busy=false,allDeviceOptions=new Map(),expanded=false,rosterState=new Map();
 async function api(path,body){
  const r=await fetch('/access/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});
@@ -45,18 +45,18 @@ function message(t){$('message').textContent=t;}
 function feedback(t){$('adminMessage').textContent=t;}
 function text(tag,value,parent){const el=document.createElement(tag);el.textContent=value;parent.append(el);return el;}
 function client(info={}){return[info.kind,info.os,info.browser].filter(Boolean).join(' · ')||'Equipo no identificado';}
-function effective(d){return new Date(d.expires_at)<=Date.now()&&d.status!=='revoked'?'expired':d.status;}
+function effective(d){return d.expires_at!=null&&new Date(d.expires_at)<=Date.now()&&d.status!=='revoked'?'expired':d.status;}
 async function status(){
  const b=await api('status');currentId=b.id;$('admin').hidden=b.level!=='owner';
  if(b.status==='approved'){
   message('Acceso autorizado.');$('request').hidden=true;
   if(b.level==='owner'){$('ownerEntry').hidden=true;$('check').hidden=true;await refresh();}
   else location.assign('/launch');
- }else message(b.status==='pending'?'Solicitud pendiente. Comparte este identificador con Andrés:\n'+b.id:b.status==='revoked'?'Este acceso fue bloqueado.':b.status==='inactive'?'Tu empleado está inactivo. Contacta a administración.':'Solicita autorización para este navegador.');
+ }else message(b.status==='pending'?'Solicitud pendiente. Comparte este identificador con Andrés:\n'+b.id:b.status==='revoked'?'Este acceso fue bloqueado.':b.status==='inactive'?'Tu acceso ya no está activo. Contacta a administración.':'Solicita autorización para este navegador.');
 }
 $('request').onsubmit=async e=>{
  e.preventDefault();const btn=e.submitter;btn.disabled=true;
- try{const b=await api('request',{code:$('code').value,label:$('label').value});$('code').value='';message('Solicitud enviada. Comparte este identificador con Andrés:\n'+b.id);}catch(e){message(e.message);}finally{btn.disabled=false;}
+ try{const b=await api('request',{code:$('code').value,label:$('label').value});$('code').value='';if(b.status==='approved'){await status();return;}message('Solicitud enviada. Comparte este identificador con Andrés:\n'+b.id);}catch(e){message(e.message);}finally{btn.disabled=false;}
 };
 $('owner').onsubmit=async e=>{
  e.preventDefault();const secret=$('secret').value;$('secret').value='';e.submitter.disabled=true;
@@ -92,10 +92,10 @@ async function devices(more=false){
   text('span',(states[state]||state)+' · '+(levels[d.access_level]||d.access_level)+(d.id===currentId?' · este navegador':''),row).className='badge '+state;
   text('small','Última apertura: '+date(d.last_open_at),row);
   text('small','Primera apertura: '+date(d.first_open_at),row);
-  text('small','Solicitud: '+date(d.created_at)+' · Vence: '+date(d.expires_at),row);
+  text('small','Solicitud: '+date(d.created_at)+' · Vence: '+(d.expires_at==null?'Sin vencimiento':date(d.expires_at)),row);
   text('small','Identificador: '+d.id,row);
   const history=text('button','Ver historial',row);history.className='secondary';history.onclick=()=>{$('eventDevice').value=d.id;events().catch(e=>feedback(e.message));$('events').scrollIntoView({behavior:'smooth',block:'start'});};
-  if(d.access_level!=='owner'&&state!=='expired'){
+  if(!['owner','auto_admin'].includes(d.access_level)&&state!=='expired'){
    const sel=document.createElement('select');sel.setAttribute('aria-label','Permisos de '+d.label);
    for(const [value,name]of [['staff','Mi trabajo y horario'],['manager','Administración']])sel.add(new Option(name,value));
    sel.value=d.access_level;row.append(sel);

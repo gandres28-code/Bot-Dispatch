@@ -5,12 +5,17 @@ const origin='https://care.example',env={CARE_PUBLIC_ORIGIN:origin,CARE_OWNER_SE
 const clean=d=>{const {token_hash,user,...safe}=d;return safe;};
 async function query(sql,p=[]){
  if(!online)throw Error('db');
- if(sql.startsWith('CREATE'))return{rows:[]};
+ if(sql.startsWith('CREATE')){
+  if(sql.includes("UPDATE care_access_devices SET expires_at='infinity'")){
+   for(const device of devices)if(device.status==='approved')device.expires_at=Infinity;
+  }
+  return{rows:[]};
+ }
  if(sql.startsWith('INSERT INTO care_access_events')){
   events.push({id:p[0],device_id:p[1],event_type:p[2],path:p[3],client_info:JSON.parse(p[4]),actor_id:p[5],occurred_at:new Date()});return{rows:[]};
  }
  if(sql.startsWith('INSERT INTO care_access_devices')){
-  devices.push({id:p[0],token_hash:p[1],employee_id:p[2],employee_name:p[3],label:p[4],access_level:p[5],status:p[6],expires_at:p[7],created_at:new Date()});return{rows:[]};
+  devices.push({id:p[0],token_hash:p[1],employee_id:p[2],employee_name:p[3],label:p[4],access_level:p[5],status:p[6],expires_at:p[7]==='infinity'?Infinity:p[7],created_at:new Date()});return{rows:[]};
  }
  if(sql.startsWith('SELECT *'))return{rows:devices.filter(d=>d.token_hash===p[0]&&(!sql.includes('expires_at>now()')||d.expires_at>Date.now()))};
  if(sql.startsWith('SELECT employee_id,'))return{rows:[{employee_id:employee.id,employee_name:employee.name,device_count:devices.filter(d=>d.employee_id===employee.id).length,approved_count:devices.filter(d=>d.employee_id===employee.id&&d.status==='approved').length}]};
@@ -22,7 +27,7 @@ async function query(sql,p=[]){
  }
  if(sql.includes('RETURNING id')){
   const d=devices.find(d=>d.id===p[0]&&(!sql.includes("access_level<>'owner'")||d.access_level!=='owner'));
-  if(d){d.status=sql.includes("status='revoked'")?'revoked':p[1];if(!sql.includes("status='revoked'"))d.access_level=p[2];}return{rows:d?[{id:d.id}]:[]};
+  if(d){d.status=sql.includes("status='revoked'")?'revoked':p[1];if(!sql.includes("status='revoked'")){d.access_level=p[2];if(p[1]==='approved'&&sql.includes("'infinity'::timestamptz"))d.expires_at=Infinity;}}return{rows:d?[{id:d.id}]:[]};
  }
  if(sql.startsWith('UPDATE')){devices.find(d=>d.id===p[0]).status='revoked';return{rows:[]};}
  throw Error(sql);
@@ -51,6 +56,8 @@ async function call(path,method='GET',body={},cookie='',headers={},search={}){
  const owner=await call('/access/owner','POST',{secret:env.CARE_OWNER_SECRET}),ownerCookie=owner.headers['Set-Cookie'].split(';')[0],ownerId=devices[1].id;
  assert.equal((await call('/access/review','POST',{id:devices[0].id,status:'approved',level:'staff'},staffCookie)).statusCode,403);
  assert.equal((await call('/access/review','POST',{id:devices[0].id,status:'approved',level:'staff'},ownerCookie)).statusCode,200);
+ assert.equal(devices[0].expires_at,Infinity);
+ assert.match((await call('/access/status','GET',{},staffCookie)).headers['Set-Cookie'],/Max-Age=34560000/);
  assert.equal(events.at(-1).event_type,'approved');assert.equal(events.at(-1).actor_id,ownerId);
  assert.equal((await call('/api/work/bootstrap','GET',{},staffCookie)).next,true);
  assert.equal((await call('/api/payroll','GET',{},staffCookie)).statusCode,403);
@@ -95,8 +102,30 @@ async function call(path,method='GET',body={},cookie='',headers={},search={}){
  assert.equal(firstEvents.events.length,100);assert.equal(firstEvents.nextOffset,100);
  assert.ok((await call('/access/events','GET',{},ownerCookie,{}, {offset:'100'})).body.events.length>0);
  devices=originalDevices;events=originalEvents;
- devices[1].expires_at=new Date(0);assert.equal((await call('/api/payroll','GET',{},ownerCookie)).statusCode,401);
+ assert.equal(devices[1].expires_at,Infinity);
+ assert.match((await call('/access/status','GET',{},ownerCookie)).headers['Set-Cookie'],/Max-Age=34560000/);
  const closed=createAccessGuard({query,resolveEmployee:async()=>employee,env:{}});let status;await closed.middleware({path:'/api/test'}, {setHeader(){},status(n){status=n;return this},json(){}},()=>assert.fail());assert.equal(status,503);
+ employee.permissions=['all'];
+ const admin=await call('/access/request','POST',{code:'1234'});
+ assert.equal(admin.body.status,'approved');
+ assert.equal(events.at(-1).event_type,'admin_login');
+ const adminCookie=admin.headers['Set-Cookie'].split(';')[0];
+ assert.equal((await call('/api/payroll','GET',{},adminCookie)).next,true);
+ assert.equal((await call('/access/devices','GET',{},adminCookie)).statusCode,403);
+ employee.permissions=[];
+ assert.equal((await call('/api/payroll','GET',{},adminCookie)).statusCode,401);
+ assert.equal(await guard.allowSocket({headers:{cookie:adminCookie,origin}}),false);
+ const migrationGuard=createAccessGuard({query,env,resolveEmployee:async()=>employee});
+ devices[0].expires_at=new Date(0);
+ devices[1].expires_at=new Date(0);
+ devices[2].status='pending';devices[2].expires_at=new Date(0);
+ assert.equal(await migrationGuard.active({headers:{cookie:ownerCookie}})!=null,true,'approved owner survives earlier expiration');
+ assert.equal(devices[0].status,'revoked','migration must preserve blocks');
+ assert.equal(devices[0].expires_at.getTime(),0,'migration must not extend revoked access');
+ assert.equal(devices[2].expires_at.getTime(),0,'migration must not extend pending access');
+ employee.active=false;
+ assert.equal(await migrationGuard.active({headers:{cookie:adminCookie}}),null,'inactive admin must lose access');
+ employee.active=true;
  online=false;assert.equal((await call('/api/payroll','GET',{},staffCookie)).statusCode,503);
  assert.equal(clientInfo({headers:{'user-agent':'x'.repeat(2000)}}).userAgent.length,500);
  console.log('Access guard: authorization, audit, timestamps, privacy, revocation, owner blocking and foreground activity checks passed (mock persistence).');
