@@ -295,9 +295,26 @@ document.getElementById("loginForm").addEventListener("submit", event => {
   login();
 });
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   const savedUser = loadSavedUser();
-  if(!savedUser) return;
+  if(!savedUser){
+    const button = document.getElementById("loginBtn");
+    button.disabled = true;
+    setStatus("Verificando dispositivo...", true);
+    try{
+      const data = await fetchJson("/login-role");
+      if(data.ok && data.code){
+        saveUser(data);
+        routeUser();
+        return;
+      }
+      setStatus("Ingresa tu código personal.");
+    }catch(error){
+      setStatus("Ingresa tu código personal.");
+    }
+    button.disabled = false;
+    return;
+  }
 
   currentUser = savedUser;
   document.getElementById("code").value = savedUser.code;
