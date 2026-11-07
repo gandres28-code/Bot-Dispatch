@@ -10,7 +10,7 @@ try{const root=path.resolve(__dirname,'..');await db.exec(fs.readFileSync(root+'
  const client={id:randomUUID(),properties:{Name:title('Cliente Dos')}},location={id:randomUUID(),properties:{Name:title('Casa Norte'),Client:rel(client.id)}},unit={id:randomUUID(),properties:{Name:title('101'),Location:rel(location.id)}};
  const make=(name='101 (S)')=>({id:randomUUID(),properties:{Name:title(name),Date:date('2026-10-31'),'Assigned Cleaner':rel(employees[0].id),'Assigned Inspector':rel(employees[1].id),'Cleaning Status':text('Pending'),'Cleaner Pay':num(55.01),'Inspector Pay':num(23.5),'Pre Inspection Required':check(false)}});
  const hotel=make(),foreign=make('Casa 101');foreign.properties.Unit=rel(unit.id);let assignments=[hotel,foreign],offline=false,updates=0;
- const pages=new Map([client,location,unit,hotel,foreign].map(p=>[V.pageId(p.id),p]));const defs={Name:{type:'title'},Date:{type:'date'},'Cleaning Status':{type:'rich_text'},'Pre Inspection':{type:'checkbox'}};
+ const pages=new Map([client,location,unit,hotel,foreign].map(p=>[V.pageId(p.id),p]));const defs={Name:{type:'title'},Date:{type:'date'},'Cleaning Status':{type:'select',select:{options:['Not Started','In Progress','Started','Waiting for inspection','Cleaned - Awaiting Inspection','Ready for Guest'].map(name=>({name}))}},'Pre Inspection':{type:'checkbox'}};
  const notion={databases:{retrieve:async()=>({properties:defs}),query:async({filter})=>{if(offline)throw Error('offline');return{results:assignments.filter(p=>p.properties.Date.date.start===filter.date.equals),has_more:false};}},pages:{retrieve:async({page_id})=>structuredClone(pages.get(V.pageId(page_id))),update:async({page_id,properties})=>{updates++;const p=pages.get(V.pageId(page_id));Object.assign(p.properties,properties);return p;}}};
  const source=createNotionWorkSource({notion,databaseId:randomUUID(),query,pool:()=>pool,listEmployees:async()=>employees,today:()=> '2026-10-31',legacyPay:()=>2000}),mirror=createNotionWorkMirror(source);
  let result=await source.syncDate('2026-10-31',{force:true});assert.deepEqual(result.errors,[],JSON.stringify(result));assert.equal(result.count,2);const initialVersions=(await query('SELECT id,version FROM care_work_jobs ORDER BY id')).rows;
@@ -22,7 +22,7 @@ try{const root=path.resolve(__dirname,'..');await db.exec(fs.readFileSync(root+'
  assert.equal((await api('/jobs','POST',{},'Admin')).status,409);let job=(await api('/jobs/'+id)).body.job;assert.equal(job.notion_snapshot,undefined);assert.equal(job.cleaner_pay_cents,undefined);
  const requestId=randomUUID();assert.equal((await api('/jobs/'+id+'/action','POST',{requestId,action:'START',version:job.version})).status,200);assert.equal((await api('/jobs/'+id+'/action','POST',{requestId,action:'START',version:job.version})).body.duplicate,true);
  await source.syncDate('2026-10-31',{force:true});assert.equal((await api('/jobs/'+id)).body.job.status,'cleaning','stale Notion cannot erase local START');
- await mirror.flush();assert.equal(updates,1);job=(await query('SELECT * FROM care_work_jobs WHERE id=$1',[id])).rows[0];assert.equal(job.notion_mirrored_version,1);
+ await mirror.flush();assert.equal(updates,1);assert.equal(foreign.properties['Cleaning Status'].select.name,'In Progress','reuse existing Select state');job=(await query('SELECT * FROM care_work_jobs WHERE id=$1',[id])).rows[0];assert.equal(job.notion_mirrored_version,1);
  foreign.properties.Unit=rel(randomUUID());await mirror.flush();foreign.properties.Unit=rel(unit.id);
  offline=true;await assert.rejects(source.syncDate('2026-10-31',{force:true}));assert.equal((await query('SELECT COUNT(*)::int AS n FROM care_work_jobs')).rows[0].n,2);offline=false;
  await query("UPDATE care_work_jobs SET status='ready',finished_at=NOW(),ready_at=NOW() WHERE id=$1",[id]);const pay=await payroll(query,'2026-10-31','2026-10-31');assert.equal(pay.length,2);assert.equal(pay.reduce((n,p)=>n+Math.round(p.amount*100),0),7851);
@@ -32,6 +32,24 @@ try{const root=path.resolve(__dirname,'..');await db.exec(fs.readFileSync(root+'
  await query("INSERT INTO payroll_weeks(week_start,week_end,status) VALUES('2026-10-26','2026-11-01','closed')");result=await source.syncDate('2026-10-31',{force:true});assert.equal(result.errors.length,0,'unchanged completed snapshots survive closed week');await query('DELETE FROM payroll_weeks');
  foreign.properties.Date=date('2026-11-01');foreign.properties['Cleaning Status']=text('Pending');result=await source.syncDate('2026-11-01',{force:true});assert.equal(result.errors.length,0,JSON.stringify(result));assert.equal((await query('SELECT COUNT(*)::int AS n FROM care_work_jobs WHERE notion_page_id=$1',[V.pageId(foreign.id)])).rows[0].n,2,'reused Notion page retains dated history');assert.equal((await payroll(query,'2026-10-31','2026-10-31')).length,2);
  assert.throws(()=>V.employeeIds({'Assigned Cleaner':text('Ana')},['Assigned Cleaner'],[employees[0],{...employees[0],id:randomUUID()}]));
+ // Regression: assign an inspector after cleaning is finished.
+ const jose={id:randomUUID(),name:'Jose',role:'manager / inspector',active:true};employees.push(jose);
+ const late=make('900 (S)');late.properties['Cleaning Status']=text('Cleaned - Awaiting Inspection');
+ pages.set(V.pageId(late.id),late);assignments.push(late);await source.importPage(late,employees);
+ const lateId=(await query('SELECT id FROM care_work_jobs WHERE notion_page_id=$1',[V.pageId(late.id)])).rows[0].id;
+ await query(`UPDATE care_work_jobs SET started_at=NOW()-INTERVAL '1 hour',finished_at=NOW() WHERE id=$1`,[lateId]);
+ late.properties['Assigned Inspector']=rel(jose.id);await source.importPage(late,employees);
+ let lateJob=(await api('/jobs/'+lateId,'GET',null,'Jose')).body.job;
+ assert.equal(lateJob.inspector_id,jose.id);assert.equal(lateJob.status,'awaiting_inspection');assert.equal(lateJob.needs_review,false);
+ assert.ok(lateJob.finished_at,'reassignment keeps cleaning finish timestamp');
+ assert.equal((await api('/bootstrap','GET',null,'Jose')).body.canManage,true);
+ assert.ok((await api('/jobs','GET',null,'Jose')).body.jobs.some(j=>j.id===lateId),'manager sees all daily work');
+ assert.equal((await api('/jobs/'+lateId+'/action','POST',{requestId:randomUUID(),action:'INSPECTION_START',version:lateJob.version},'Jose')).status,200);
+ late.properties['Assigned Inspector']=rel(employees[1].id);
+ await assert.rejects(source.importPage(late,employees),/inspección ya comenzó/);
+ assert.equal((await query('SELECT inspector_id FROM care_work_jobs WHERE id=$1',[lateId])).rows[0].inspector_id,jose.id);
+ for(const [label,expected] of [['Not Started','pending'],['Started','cleaning'],['In Progress','cleaning'],['Waiting for inspection','awaiting_inspection'],['Cleaned - Awaiting Inspection','awaiting_inspection'],['Ready for Guest','ready'],['Re doit','cleaning']])assert.equal(V.status(label),expected,label);
+ console.log('Inspector reassignment, preserved timestamps, inspection lock, manager visibility and current status labels passed.');
  console.log('Notion unified work: migrations, two properties, permissions, idempotent actions/imports, outage retention, mirror, exact-cent pay, completed-job protection, duplicates and daily history passed.');
 }finally{if(server)await new Promise(r=>server.close(r));await db.close();}}
 main().catch(e=>{console.error(e);process.exitCode=1});

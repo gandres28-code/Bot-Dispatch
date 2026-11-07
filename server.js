@@ -10910,6 +10910,7 @@ app.post('/clock-in',(req,res,next)=>{req.headers['x-care-code']=String(req.body
 app.post('/clock-out',(req,res,next)=>{req.headers['x-care-code']=String(req.body.code||'');req.url='/out';workClockRouter(req,res,next);});
 app.get('/rates',(req,res)=>res.sendFile(path.join(__dirname,'public','notion-rates.html')));
 app.use('/api/rates',require('./services/serviceRates').createRatesRouter({query:postgresQuery,pool:getPool,resolveUser:workResolveUser,sourceMode:'notion'}));
+app.get('/shift-manager',(req,res)=>res.redirect('/work'));
 app.get('/work',(req,res)=>res.sendFile(path.join(__dirname,'public','work.html')));
 app.use('/api/work',require('./services/scopedWork').createScopedRouter({sourceMode:'notion',notionSource:notionWorkSource,onChanged:()=>notionWorkMirror.flush(),query:postgresQuery,pool:getPool,resolveUser:workResolveUser,listEmployees:async()=> (await getEmployeesCached()).map(pageToUser),today:todayISO,cloudinary,emit:(event,payload)=>io.emit(event,payload)}));
 
