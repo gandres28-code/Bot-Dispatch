@@ -6798,7 +6798,8 @@ app.get("/inspector-assignments", async (req, res) => {
               status: props["Cleaning Status"]?.status?.name || "",
               priority: props.Priority?.select?.name || "Normal",
               assignedInspector,
-              arrival: !!props.Arrival?.checkbox,
+              arrival: readCheckboxProp(page, ["Arrival", "arrival"]),
+              urgent: isNotionRoomUrgent(page),
               guestOut: flags.guestOut,
               guestOutAt: flags.guestOutAt,
               preInspection: flags.preInspection,
@@ -6881,7 +6882,8 @@ app.get("/cleaner-assignments", async (req, res) => {
               unit: readRoomTextProperty(props, ["Room Number", "Unit", "Room"]),
               status: readRoomTextProperty(props, ["Cleaning Status", "Status"]),
               assignedCleaner,
-              arrival: !!props.Arrival?.checkbox,
+              arrival: readCheckboxProp(page, ["Arrival", "arrival"]),
+              urgent: isNotionRoomUrgent(page),
               guestOut: flags.guestOut,
               guestOutAt: flags.guestOutAt,
               preInspection: flags.preInspection,
@@ -7113,7 +7115,8 @@ app.post("/mobile-cleaner-login", async (req, res) => {
           unit: props["Room Number"]?.title?.map((t) => t.plain_text).join("") || "",
           status: props["Cleaning Status"]?.status?.name || "",
           assignedCleaner,
-          arrival: !!props.Arrival?.checkbox,
+          arrival: readCheckboxProp(page, ["Arrival", "arrival"]),
+          urgent: isNotionRoomUrgent(page),
           guestOut: flags.guestOut,
           guestOutAt: flags.guestOutAt,
           preInspection: flags.preInspection,
@@ -7305,6 +7308,14 @@ function dashboardBuildingFromUnit(unit) {
   return finalLetter ? finalLetter[1] : "OTHER";
 }
 
+function isNotionRoomUrgent(page) {
+  const props = page.properties || {};
+  return cleanEmployeeText(readRoomTextProperty(props, ["Priority"])).includes("urgent") ||
+      readCheckboxProp(page, ["Urgent", "urgent"]) ||
+      cleanEmployeeText(readRoomTextProperty(props, ["Room Number", "Unit", "Room"])).includes("urgente") ||
+      cleanEmployeeText(readRoomTextProperty(props, ["Room Number", "Unit", "Room"])).includes("urgent");
+}
+
 function pageToDashboardUnit(page) {
   const props = page?.properties || {};
   const flags = getRoomOpsFlags(page);
@@ -7318,11 +7329,7 @@ function pageToDashboardUnit(page) {
     status: readRoomTextProperty(props, ["Cleaning Status", "Status"]),
     arrival: readCheckboxProp(page, ["Arrival", "arrival"]),
     stayover: readCheckboxProp(page, ["Stayover", "Stay Over", "stayover"]),
-    urgent:
-      cleanEmployeeText(readRoomTextProperty(props, ["Priority"])).includes("urgent") ||
-      readCheckboxProp(page, ["Urgent", "urgent"]) ||
-      cleanEmployeeText(readRoomTextProperty(props, ["Room Number", "Unit", "Room"])).includes("urgente") ||
-      cleanEmployeeText(readRoomTextProperty(props, ["Room Number", "Unit", "Room"])).includes("urgent"),
+    urgent: isNotionRoomUrgent(page),
     priority: readRoomTextProperty(props, ["Priority"]) || "Normal",
     startedAt: readDateProp(page, ["Started At", "Cleaning Started At"]),
     finishedAt: readDateProp(page, ["Finished At", "Cleaning Finished At"]),

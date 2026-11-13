@@ -1069,3 +1069,8 @@ Entradas, salidas y horas adicionales del período.|Clock entries, exits and add
 Las horas se guardarán y se sumarán a la nómina de la semana. La fecha y las horas corresponden a Branson (Chicago).|Hours will be saved and included in weekly payroll. The date and times use Branson (Chicago) time.
 El movimiento aparecerá en el total de la semana y en el Excel.|The adjustment will appear in the weekly total and Excel file.
 Tarifas · Cobros y pagos|Rates · Charges and pay
+
+Huésped dentro|Guest In
+Llegada hoy|Arrival Today
+Sin llegada hoy|No Arrival Today
+Prioridad normal|Normal Priority
