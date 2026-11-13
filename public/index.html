@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<script src="/js/care-i18n.js?v=languages-v6"></script>
+<script src="/js/care-i18n.js?v=languages-v7"></script>
   <title>Care OS | Limpieza</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -335,6 +335,10 @@
       margin-bottom:16px;
     }
 
+    .room-flags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+    .room-flag{padding:4px 8px;border-radius:999px;background:#f2f4f7;color:#344054;font-size:11px;font-weight:800}
+    .room-flag.arrival{background:#dbeafe;color:#1e40af}
+    .room-flag.urgent{background:#fee2e2;color:#991b1b}
     .room-meta-grid{
       display:grid;
       grid-template-columns:1fr 1fr;
@@ -2286,8 +2290,8 @@ function renderCleanerAssignments(units){
     const preInspected = isPreInspected(item);
 
     const guestText = guestOut ? "Guest Out" : "Guest In";
+    const urgent = truthy(item.urgent) || /^urgente?$/i.test(String(item.priority || "").trim());
     const preText = preInspected ? "Pre-Inspected" : "";
-    const footerRight = preInspected ? "Pre-Inspected" : (item.arrival ? "Arrival" : "");
 
     const panelAction = state.key === "done"
       ? ""
@@ -2304,6 +2308,11 @@ function renderCleanerAssignments(units){
         <div class="room-layout">
           <div class="room-content">
             <div class="room-title">${escapeHtml(item.unit)}</div>
+
+            <div class="room-flags">
+              <span class="room-flag ${item.arrival ? "arrival" : ""}">${item.arrival ? "Arrival Today" : "No Arrival Today"}</span>
+              <span class="room-flag ${urgent ? "urgent" : ""}">${urgent ? "Urgent" : "Normal Priority"}</span>
+            </div>
 
             <div class="room-meta-grid">
               <div class="meta-block">
@@ -2339,10 +2348,6 @@ function renderCleanerAssignments(units){
           <span>${escapeHtml(state.detail)}</span>
 
           <div class="footer-right">
-            <strong class="${preInspected ? "easy-tag" : (item.arrival ? "arrival-tag" : "")}">
-              ${escapeHtml(footerRight)}
-            </strong>
-
             <button class="inline-voice unit-supply-button" title="Pedir artículos" aria-label="Pedir artículos para ${escapeHtml(item.unit)}" onclick="event.stopPropagation();CareSupplyPicker.open({unit:'${safeJsString(item.unit)}'})">Suministros</button>
 
             <button

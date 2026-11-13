@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<script src="/js/care-i18n.js?v=languages-v6"></script>
+<script src="/js/care-i18n.js?v=languages-v7"></script>
   <title>Care OS | Inspecciones</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -188,7 +188,10 @@
       cursor:default;
     }
 
-  #bigStatus.pending{background:#80551d}</style>
+  #bigStatus.pending{background:#80551d}
+  .meta-pill.arrival{background:#dbeafe;color:#1e40af}
+  .meta-pill.priority-urgent{background:#fee2e2;color:#991b1b}
+</style>
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#111827">
 <link rel="stylesheet" href="/css/responsive-pages.css?v=full-page-v1">
@@ -778,7 +781,7 @@ function renderAssignments(){const c=document.getElementById("assignments");if(!
 
   return group===activeTab;
 });
-if(!visible.length){c.innerHTML="<div class='empty'>No hay unidades en esta sección.</div>";return}const groups={};visible.forEach(i=>{const b=getBuildingName(i.unit);if(!groups[b])groups[b]=[];groups[b].push(i)});let html="";Object.keys(groups).sort().forEach(building=>{const closed=collapsedBuildings[building]===true,units=groups[building];html+=`<div class="building-group ${closed?"closed":""}"><div class="building-header" onclick="toggleBuilding('${safeJsString(building)}')"><strong>${escapeHtml(building)}</strong><span>${units.length} units</span></div><div class="building-body">`;units.forEach(item=>{const st=getUnitState(item),id=String(item.unit||"").replace(/[^a-zA-Z0-9]/g,""),guest=isGuestOut(item),pre=isPreInspected(item),urgent=String(item.priority||"").toLowerCase()==="urgent",cls=`${st.cardClass} ${urgent?"urgent":""}`;html+=`<div class="inspection-card ${cls}" id="card-${id}" onclick="selectAssignment('${safeJsString(item.unit)}')"><div class="inspection-layout"><div class="inspection-content"><div class="room-title">${escapeHtml(item.unit)}</div><div class="meta-row">${guest?`<span class="meta-pill guest">Guest Out</span>`:""}${pre?`<span class="meta-pill pre">Pre-Inspected</span>`:""}${st.cardClass==="ready"?`<span class="meta-pill ready">Ready</span>`:""}${urgent?`<span class="meta-pill" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">Urgent</span>`:""}</div></div><div class="action-panel" onclick="quickInspectionAction(event,'${st.actionType||""}','${safeJsString(item.unit)}')"><span class="action-circle ${st.circle}">
+if(!visible.length){c.innerHTML="<div class='empty'>No hay unidades en esta sección.</div>";return}const groups={};visible.forEach(i=>{const b=getBuildingName(i.unit);if(!groups[b])groups[b]=[];groups[b].push(i)});let html="";Object.keys(groups).sort().forEach(building=>{const closed=collapsedBuildings[building]===true,units=groups[building];html+=`<div class="building-group ${closed?"closed":""}"><div class="building-header" onclick="toggleBuilding('${safeJsString(building)}')"><strong>${escapeHtml(building)}</strong><span>${units.length} units</span></div><div class="building-body">`;units.forEach(item=>{const st=getUnitState(item),id=String(item.unit||"").replace(/[^a-zA-Z0-9]/g,""),guest=isGuestOut(item),pre=isPreInspected(item),urgent=truthy(item.urgent)||/^urgente?$/i.test(String(item.priority||"").trim()),cls=`${st.cardClass} ${urgent?"urgent":""}`;html+=`<div class="inspection-card ${cls}" id="card-${id}" onclick="selectAssignment('${safeJsString(item.unit)}')"><div class="inspection-layout"><div class="inspection-content"><div class="room-title">${escapeHtml(item.unit)}</div><div class="meta-row"><span class="meta-pill ${guest?"guest":""}">${guest?"Guest Out":"Guest In"}</span><span class="meta-pill ${item.arrival?"arrival":""}">${item.arrival?"Arrival Today":"No Arrival Today"}</span><span class="meta-pill ${urgent?"priority-urgent":""}">${urgent?"Urgent":"Normal Priority"}</span>${pre?`<span class="meta-pill pre">Pre-Inspected</span>`:""}${st.cardClass==="ready"?`<span class="meta-pill ready">Ready</span>`:""}</div></div><div class="action-panel" onclick="quickInspectionAction(event,'${st.actionType||""}','${safeJsString(item.unit)}')"><span class="action-circle ${st.circle}">
   <svg viewBox="0 0 48 48" aria-hidden="true">
     <circle class="ring-track" cx="24" cy="24" r="18" pathLength="100"></circle>
     <circle class="ring-value" cx="24" cy="24" r="18" pathLength="100"></circle>
