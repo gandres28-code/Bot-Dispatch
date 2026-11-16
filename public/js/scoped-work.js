@@ -19,8 +19,12 @@ function renderShift(rows){const box=$('shiftSummary');box.hidden=!boot.canManag
 function roomFlags(job){
  const badges=[];
  if(job.arrival)badges.push('<span class="room-flag arrival" data-i18n-ignore>ARRIVAL</span>');
+ const guestOut=job.guest_out===true;
+ const occupancy=guestOut?t('Disponible','Vacant'):t('Ocupada','Occupied');
+ const occupancyHint=guestOut?t('El huésped ya salió','Guest has checked out'):t('Salida del huésped sin confirmar','Guest checkout is unconfirmed');
+ badges.push('<span class="room-flag '+(guestOut?'vacant':'occupied')+'" title="'+esc(occupancyHint)+'" data-i18n-ignore>'+occupancy+'</span>');
  if(job.urgent)badges.push('<span class="room-flag urgent" data-i18n-ignore>'+t('URGENTE','URGENT')+'</span>');
- return badges.length?'<div class="room-flags">'+badges.join('')+'</div>':'';
+ return '<div class="room-flags">'+badges.join('')+'</div>';
 }
 function renderJobs(){const loc=$('locationFilter').value,scoped=jobs.filter(j=>!loc||j.location_id===loc),match=(j,k)=>k==='all'||(k==='pre'&&j.pre_inspection_required&&!j.pre_inspection&&!['ready','cancelled'].includes(j.status))||(k==='pending'&&j.status==='pending')||(k==='cleaning'&&j.status==='cleaning')||(k==='inspect'&&['awaiting_inspection','inspecting'].includes(j.status))||(k==='issues'&&(j.needs_review||j.open_issue_count>0))||(k==='done'&&j.status==='ready');
  renderShift(scoped);let progress=$('dayProgress');if(!progress){progress=document.createElement('section');progress.id='dayProgress';progress.className='care-day-progress';$('todayFilters').before(progress);}
